@@ -1,0 +1,26 @@
+#include <winver.h>
+
+1 VERSIONINFO
+FILEVERSION             1,0,2,0
+PRODUCTVERSION        	1,0,2,0
+FILEFLAGSMASK           VS_FFI_FILEFLAGSMASK
+FILETYPE                VFT_DLL
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+        VALUE "Comments",         "Chroma noise reducer."
+        VALUE "FileDescription",  "Cnr2 for AviSynth 2.6 / AviSynth+."
+        VALUE "FileVersion",      "1.0.2"
+        VALUE "InternalName",     "vsCnr2"
+        VALUE "OriginalFilename", "vsCnr2.dll"
+        VALUE "ProductName",      "vsCnr2"
+        VALUE "ProductVersion",   "1.0.2"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

@@ -65,6 +65,19 @@ struct Cnr3Data {
     double scdthr = 10.0;
 
     bool scene_chroma = false;
+
+    /*
+        Recursive streaming state.
+
+        Initial Policy A:
+            CNR3 recursive mode requires strictly increasing frame requests:
+                0, 1, 2, 3, ...
+
+        Later Policy C may add seek-safe recomputation or checkpoints.
+    */
+    VSFrame *previous_output_frame = nullptr;
+    int previous_output_frame_number = -1;
+
     bool debug = false;
 };
 
@@ -399,8 +412,33 @@ static void VS_CC cnr3_free(
             d->node = nullptr;
         }
 
+        if (d->previous_output_frame != nullptr) {
+            vsapi->freeFrame(d->previous_output_frame);
+            d->previous_output_frame = nullptr;
+        }
+
         delete d;
     }
+}
+
+static void replace_previous_output_frame(
+    Cnr3Data *d,
+    const VSFrame *new_previous_frame,
+    int frame_number,
+    const VSAPI *vsapi
+) {
+    if (d->previous_output_frame != nullptr) {
+        vsapi->freeFrame(d->previous_output_frame);
+        d->previous_output_frame = nullptr;
+    }
+
+    /*
+        cloneFrame() keeps a reference to the frame. It does not deep-copy
+        pixel data. That is fine here because VapourSynth frames are immutable
+        after being returned.
+    */
+    d->previous_output_frame = vsapi->cloneFrame(new_previous_frame);
+    d->previous_output_frame_number = frame_number;
 }
 
 static const VSFrame *VS_CC cnr3_get_frame(
@@ -430,6 +468,34 @@ static const VSFrame *VS_CC cnr3_get_frame(
             return nullptr;
         }
 
+        /*
+            Initial recursive Policy A.
+
+            The real recursive algorithm uses previous_output_frame when producing
+            frame n. To keep behaviour deterministic during initial development,
+            require strictly increasing frame requests.
+
+            Later, this can be replaced by a seek-safe Policy C using recomputation
+            or checkpoints.
+        */
+        if (d->previous_output_frame_number == -1) {
+            if (n != 0) {
+                vsapi->freeFrame(src);
+                vsapi->setFilterError(
+                    "CNR3: recursive streaming mode currently requires the first requested frame to be frame 0.",
+                    frameCtx
+                );
+                return nullptr;
+            }
+        } else if (n != d->previous_output_frame_number + 1) {
+            vsapi->freeFrame(src);
+            vsapi->setFilterError(
+                "CNR3: recursive streaming mode currently requires strictly increasing frame requests.",
+                frameCtx
+            );
+            return nullptr;
+        }
+
         VSFrame *dst = vsapi->newVideoFrame(
             &d->vi->format,
             d->vi->width,
@@ -453,11 +519,17 @@ static const VSFrame *VS_CC cnr3_get_frame(
             vsapi
         );
 
+        replace_previous_output_frame(
+            d,
+            dst,
+            n,
+            vsapi
+        );
+
         vsapi->freeFrame(src);
 
         return dst;
     }
-
     return nullptr;
 }
 

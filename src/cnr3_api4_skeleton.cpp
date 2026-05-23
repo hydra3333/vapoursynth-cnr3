@@ -82,8 +82,23 @@ static bool validate_cnr3_format(
         return false;
     }
 
-    if (!isConstantVideoFormat(vi)) {
+    /*
+        API4 note:
+        Do not rely on helper functions such as isConstantVideoFormat()
+        being available in every vendored header set. Check the fields
+        directly instead.
+
+        In VapourSynth, variable/unknown format clips have cfUndefined.
+        Variable/unknown dimensions are represented by non-positive
+        width/height.
+    */
+    if (vi->format.colorFamily == cfUndefined) {
         vsapi->mapSetError(out, "CNR3: only constant-format video clips are supported.");
+        return false;
+    }
+
+    if (vi->width <= 0 || vi->height <= 0) {
+        vsapi->mapSetError(out, "CNR3: only constant-dimension video clips are supported.");
         return false;
     }
 

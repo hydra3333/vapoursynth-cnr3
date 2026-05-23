@@ -465,6 +465,10 @@ static void VS_CC cnr3_create(
     }
 
     if (local.debug) {
+        const int y_mid = (local.ln_scaled + local.lm_scaled) / 2;
+        const int u_mid = (local.un_scaled + local.um_scaled) / 2;
+        const int v_mid = (local.vn_scaled + local.vm_scaled) / 2;
+
         std::fprintf(
             stderr,
             "CNR3 debug: format=%d-bit YUV, peak=%d, "
@@ -489,6 +493,37 @@ static void VS_CC cnr3_create(
             local.mode.c_str(),
             local.scdthr,
             local.scene_chroma ? 1 : 0
+        );
+
+        std::fprintf(
+            stderr,
+            "CNR3 debug: table samples: "
+            "Y[0]=%d, Y[%d]=%d, Y[%d]=%d, Y[%d]=%d; "
+            "U[0]=%d, U[%d]=%d, U[%d]=%d, U[%d]=%d; "
+            "V[0]=%d, V[%d]=%d, V[%d]=%d, V[%d]=%d\n",
+            local.table_y[0],
+            local.ln_scaled,
+            local.table_y[static_cast<size_t>(local.ln_scaled)],
+            y_mid,
+            local.table_y[static_cast<size_t>(y_mid)],
+            local.lm_scaled,
+            local.table_y[static_cast<size_t>(local.lm_scaled)],
+
+            local.table_u[0],
+            local.un_scaled,
+            local.table_u[static_cast<size_t>(local.un_scaled)],
+            u_mid,
+            local.table_u[static_cast<size_t>(u_mid)],
+            local.um_scaled,
+            local.table_u[static_cast<size_t>(local.um_scaled)],
+
+            local.table_v[0],
+            local.vn_scaled,
+            local.table_v[static_cast<size_t>(local.vn_scaled)],
+            v_mid,
+            local.table_v[static_cast<size_t>(v_mid)],
+            local.vm_scaled,
+            local.table_v[static_cast<size_t>(local.vm_scaled)]
         );
     }
 

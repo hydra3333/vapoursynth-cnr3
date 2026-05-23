@@ -13,6 +13,8 @@
 #include <cstring>
 #include <string>
 #include <cstdio>
+#include <cmath>
+#include <vector>
 
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
@@ -43,6 +45,22 @@ struct Cnr3Data {
     int um_scaled = 255;
     int vn_scaled = 47;
     int vm_scaled = 255;
+
+    /*
+        Lookup tables used by the Cnr2/vscnr2-style weighting logic.
+
+        The public parameters are 8-bit-domain values. These tables are built
+        after those values have been scaled to the actual integer bit depth.
+
+        Table index:
+            absolute sample difference, from 0 to sample_peak.
+
+        Table value:
+            0..256 weighting value.
+    */
+    std::vector<int> table_y;
+    std::vector<int> table_u;
+    std::vector<int> table_v;
 
     double scdthr = 10.0;
 
@@ -171,6 +189,162 @@ static int scale_8bit_parameter_to_bit_depth(
     );
 }
 
+static int clamp_int(
+    int value,
+    int low,
+    int high
+) {
+    if (value < low) {
+        return low;
+    }
+
+    if (value > high) {
+        return high;
+    }
+
+    return value;
+}
+
+static void build_cnr3_weight_table(
+    std::vector<int> &table,
+    int sample_peak,
+    int threshold_low,
+    int threshold_high,
+    bool enabled
+) {
+    /*
+        Build a soft threshold table for one guard plane.
+
+        This is intentionally simple and explicit at this stage.
+
+        If the guard is disabled by mode:
+            every difference gets full weight.
+
+        If enabled:
+            abs(diff) <= threshold_low:
+                full weight, 256
+
+            abs(diff) >= threshold_high:
+                zero weight, 0
+
+            threshold_low < abs(diff) < threshold_high:
+                raised-cosine fade from 256 down to 0
+
+        This preserves the core Cnr2/vscnr2 idea: small differences are safe
+        for chroma stabilisation, large differences are not, and the transition
+        should be gradual rather than a hard binary cutoff.
+    */
+
+    table.assign(static_cast<size_t>(sample_peak) + 1U, 0);
+
+    if (!enabled) {
+        std::fill(table.begin(), table.end(), 256);
+        return;
+    }
+
+    threshold_low = clamp_int(threshold_low, 0, sample_peak);
+    threshold_high = clamp_int(threshold_high, 0, sample_peak);
+
+    if (threshold_high < threshold_low) {
+        std::swap(threshold_high, threshold_low);
+    }
+
+    if (threshold_high == threshold_low) {
+        for (int diff = 0; diff <= sample_peak; ++diff) {
+            table[static_cast<size_t>(diff)] = (diff <= threshold_low) ? 256 : 0;
+        }
+
+        return;
+    }
+
+    constexpr double pi = 3.141592653589793238462643383279502884;
+
+    for (int diff = 0; diff <= sample_peak; ++diff) {
+        if (diff <= threshold_low) {
+            table[static_cast<size_t>(diff)] = 256;
+        } else if (diff >= threshold_high) {
+            table[static_cast<size_t>(diff)] = 0;
+        } else {
+            const double position =
+                static_cast<double>(diff - threshold_low) /
+                static_cast<double>(threshold_high - threshold_low);
+
+            /*
+                Raised cosine:
+                    position 0.0 -> 256
+                    position 1.0 -> 0
+            */
+            const double weight = 0.5 * (1.0 + std::cos(position * pi));
+            table[static_cast<size_t>(diff)] =
+                clamp_int(static_cast<int>(weight * 256.0 + 0.5), 0, 256);
+        }
+    }
+}
+
+static bool build_cnr3_lookup_tables(
+    Cnr3Data &d,
+    VSMap *out,
+    const VSAPI *vsapi
+) {
+    /*
+        mode is a 3-character string:
+            mode[0] controls the luma/Y guard
+            mode[1] controls the U/chroma guard
+            mode[2] controls the V/chroma guard
+
+        For now:
+            'o' means enabled
+            'x' means disabled
+
+        This follows the public Cnr2/vscnr2-style mode convention but keeps
+        the implementation explicit for maintainability.
+    */
+
+    if (d.mode.size() != 3) {
+        vsapi->mapSetError(out, "CNR3: internal error: mode must contain exactly 3 characters.");
+        return false;
+    }
+
+    const bool enable_y = (d.mode[0] == 'o');
+    const bool enable_u = (d.mode[1] == 'o');
+    const bool enable_v = (d.mode[2] == 'o');
+
+    build_cnr3_weight_table(
+        d.table_y,
+        d.sample_peak,
+        d.ln_scaled,
+        d.lm_scaled,
+        enable_y
+    );
+
+    build_cnr3_weight_table(
+        d.table_u,
+        d.sample_peak,
+        d.un_scaled,
+        d.um_scaled,
+        enable_u
+    );
+
+    build_cnr3_weight_table(
+        d.table_v,
+        d.sample_peak,
+        d.vn_scaled,
+        d.vm_scaled,
+        enable_v
+    );
+
+    if (
+        d.table_y.size() != static_cast<size_t>(d.sample_peak) + 1U ||
+        d.table_u.size() != static_cast<size_t>(d.sample_peak) + 1U ||
+        d.table_v.size() != static_cast<size_t>(d.sample_peak) + 1U
+    ) {
+        vsapi->mapSetError(out, "CNR3: internal error: lookup-table size mismatch.");
+        return false;
+    }
+
+    return true;
+}
+
 static void VS_CC cnr3_free(
     void *instanceData,
     VSCore *core,
@@ -284,6 +458,11 @@ static void VS_CC cnr3_create(
     local.um_scaled = scale_8bit_parameter_to_bit_depth(local.um, local.bits_per_sample);
     local.vn_scaled = scale_8bit_parameter_to_bit_depth(local.vn, local.bits_per_sample);
     local.vm_scaled = scale_8bit_parameter_to_bit_depth(local.vm, local.bits_per_sample);
+
+    if (!build_cnr3_lookup_tables(local, out, vsapi)) {
+        vsapi->freeNode(local.node);
+        return;
+    }
 
     if (local.debug) {
         std::fprintf(

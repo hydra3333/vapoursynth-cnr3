@@ -72,6 +72,54 @@ static std::string get_optional_data_string(
     return std::string(value);
 }
 
+static bool validate_cnr3_format(
+    const VSVideoInfo *vi,
+    VSMap *out,
+    const VSAPI *vsapi
+) {
+    if (vi == nullptr) {
+        vsapi->mapSetError(out, "CNR3: internal error: video info is null.");
+        return false;
+    }
+
+    if (!isConstantVideoFormat(vi)) {
+        vsapi->mapSetError(out, "CNR3: only constant-format video clips are supported.");
+        return false;
+    }
+
+    if (vi->format.colorFamily != cfYUV) {
+        vsapi->mapSetError(out, "CNR3: only YUV clips are supported.");
+        return false;
+    }
+
+    if (vi->format.sampleType != stInteger) {
+        vsapi->mapSetError(out, "CNR3: only integer sample clips are supported.");
+        return false;
+    }
+
+    if (vi->format.bitsPerSample < 8 || vi->format.bitsPerSample > 16) {
+        vsapi->mapSetError(out, "CNR3: only 8-bit to 16-bit integer clips are supported.");
+        return false;
+    }
+
+    if (vi->format.numPlanes != 3) {
+        vsapi->mapSetError(out, "CNR3: only 3-plane YUV clips are supported.");
+        return false;
+    }
+
+    if (vi->format.subSamplingW < 0 || vi->format.subSamplingW > 1) {
+        vsapi->mapSetError(out, "CNR3: unsupported horizontal chroma subsampling.");
+        return false;
+    }
+
+    if (vi->format.subSamplingH < 0 || vi->format.subSamplingH > 1) {
+        vsapi->mapSetError(out, "CNR3: unsupported vertical chroma subsampling.");
+        return false;
+    }
+
+    return true;
+}
+
 static void VS_CC cnr3_free(
     void *instanceData,
     VSCore *core,
@@ -154,6 +202,11 @@ static void VS_CC cnr3_create(
     if (local.vi == nullptr) {
         vsapi->freeNode(local.node);
         vsapi->mapSetError(out, "CNR3: failed to get video info.");
+        return;
+    }
+
+    if (!validate_cnr3_format(local.vi, out, vsapi)) {
+        vsapi->freeNode(local.node);
         return;
     }
 

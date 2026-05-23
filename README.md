@@ -1,23 +1,44 @@
 ## Description
 
-Cnr2 is a temporal denoiser designed to denoise only the chroma.
+vapoursynth-cnr3 is an experimental VapourSynth API4 chroma denoiser derived from the
+Cnr2 family of filters.
 
+It is specifically targetted at vapoursynth scripts for "fire and forget"
+chroma cleanup and conversion of noisy VHS/VHS-C analogue capture files.
 According to the original author, this filter is suited for stationary rainbows or noisy analog captures.
 
-Due to the way it works, Cnr2 is forced to run in a single thread. Cnr2 will also bottleneck the entire script, preventing it from using all the available CPU cores. One way to work around this issue is splitting the video into two or three chunks at scene changes, and filtering them in parallel with two or three instances of vspipe.
+Due to the way it works, vapoursynth-cnr3 is forced to run in a single thread.
+Cnr3 will also bottleneck the entire script, preventing it from using all the available CPU cores
+and crushing frame random access speed. For serial VHS denoising conversions "fire and forget"
+this may not be an issue.
 
-This is [a port of the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2).
+A possible way to work around the serial issue is splitting the video into
+chunks at scene changes, and filtering them in parallel with two or three
+instances of vspipe. Or not.
+
+The initial implementation intentionally preserves the recursive 
+temporal model, where each output frame depends on the previous filtered output
+frame rather than the previous frame itself. This is expected to be force serial
+and that issue is accepted as a quality-first design choice for a VHS/VHS-C 
+analogue chroma cleanup and conversion.
+
+This project is distributed under the GNU Affero General Public License v3.0 or later,
+being compatible with GPL-2.0-or-later.
+
+This is [a port/upgrade of the avisynth plugin vsCnr2](https://github.com/Asd-g/AviSynth-vsCnr2) which is
+itself be [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2),
+and appears to be more recently updated version.
 
 ### Requirements:
 
-- AviSynth 2.60 / AviSynth+ 3.4 or later
+- Vapoursynth R76+ with pythin 3.13+ (possibly portable versions).
 
-- Microsoft VisualC++ Redistributable Package 2022 (can be downloaded from [here](https://github.com/abbodi1406/vcredist/releases))
+- Microsoft VisualC++ Redistributable Package 2026.
 
 ### Usage:
 
 ```
-vsCnr2 (clip input, string "mode", float "scdthr", int "ln", int "lm", int "un", int "um", int "vn", int "vm", bool "sceneChroma")
+Cnr3 (clip input, string "mode", float "scdthr", int "ln", int "lm", int "un", int "um", int "vn", int "vm", bool "sceneChroma")
 ```
 
 ### Parameters:
@@ -53,19 +74,3 @@ vsCnr2 (clip input, string "mode", float "scdthr", int "ln", int "lm", int "un",
 - sceneChroma<br>
     If True, the chroma is considered in the scene change detection.<br>
     Default: False.
-
-### Building:
-
-```
-Requirements:
-- Git
-- C++17 compiler
-- CMake >= 3.25
-- Ninja
-```
-```
-git clone https://github.com/Asd-g/AviSynth-vsCnr2
-cd AviSynth-vsCnr2
-cmake -B build -G Ninja
-ninja -C build
-```

@@ -94,7 +94,7 @@ static void VS_CC cnr3_free(
 static const VSFrame *VS_CC cnr3_get_frame(
     int n,
     int activationReason,
-    void **instanceData,
+    void *instanceData,
     void **frameData,
     VSFrameContext *frameCtx,
     VSCore *core,
@@ -103,7 +103,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
     (void)frameData;
     (void)core;
 
-    Cnr3Data *d = static_cast<Cnr3Data *>(*instanceData);
+    Cnr3Data *d = static_cast<Cnr3Data *>(instanceData);
 
     if (activationReason == arInitial) {
         vsapi->requestFrameFilter(n, d->node, frameCtx);

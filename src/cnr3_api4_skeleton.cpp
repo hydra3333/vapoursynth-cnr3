@@ -345,6 +345,45 @@ static bool build_cnr3_lookup_tables(
     return true;
 }
 
+static void copy_plane_bytes(
+    const VSFrame *src,
+    VSFrame *dst,
+    int plane,
+    int bytes_per_sample,
+    const VSAPI *vsapi
+) {
+    const uint8_t *srcp = vsapi->getReadPtr(src, plane);
+    uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+
+    const int src_stride = vsapi->getStride(src, plane);
+    const int dst_stride = vsapi->getStride(dst, plane);
+
+    const int plane_width = vsapi->getFrameWidth(src, plane);
+    const int plane_height = vsapi->getFrameHeight(src, plane);
+
+    const size_t row_bytes =
+        static_cast<size_t>(plane_width) *
+        static_cast<size_t>(bytes_per_sample);
+
+    for (int y = 0; y < plane_height; ++y) {
+        std::memcpy(dstp, srcp, row_bytes);
+
+        srcp += src_stride;
+        dstp += dst_stride;
+    }
+}
+
+static void copy_all_planes_unchanged(
+    const VSFrame *src,
+    VSFrame *dst,
+    int bytes_per_sample,
+    const VSAPI *vsapi
+) {
+    copy_plane_bytes(src, dst, 0, bytes_per_sample, vsapi);
+    copy_plane_bytes(src, dst, 1, bytes_per_sample, vsapi);
+    copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
+}
+
 static void VS_CC cnr3_free(
     void *instanceData,
     VSCore *core,
@@ -391,13 +430,32 @@ static const VSFrame *VS_CC cnr3_get_frame(
             return nullptr;
         }
 
-        /*
-            Pass-through skeleton.
+        VSFrame *dst = vsapi->newVideoFrame(
+            &d->vi->format,
+            d->vi->width,
+            d->vi->height,
+            src,
+            core
+        );
 
-            Returning this frame reference transfers it to VapourSynth.
-            Do not free it here.
-        */
-        return src;
+        if (dst == nullptr) {
+            vsapi->freeFrame(src);
+            vsapi->setFilterError("CNR3: failed to allocate destination frame.", frameCtx);
+            return nullptr;
+        }
+
+        const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
+
+        copy_all_planes_unchanged(
+            src,
+            dst,
+            bytes_per_sample,
+            vsapi
+        );
+
+        vsapi->freeFrame(src);
+
+        return dst;
     }
 
     return nullptr;

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <cstdio>
 
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
@@ -22,12 +23,26 @@ struct Cnr3Data {
 
     std::string mode = "oxx";
 
+    /*
+        Public threshold parameters are always interpreted in 8-bit Cnr2/vscnr2-compatible units. 
+        For clips above 8-bit depth, CNR3 scales these values internally to the actual sample depth.
+    */
     int ln = 35;
     int lm = 192;
     int un = 47;
     int um = 255;
     int vn = 47;
     int vm = 255;
+
+    int bits_per_sample = 8;
+    int sample_peak = 255;
+
+    int ln_scaled = 35;
+    int lm_scaled = 192;
+    int un_scaled = 47;
+    int um_scaled = 255;
+    int vn_scaled = 47;
+    int vm_scaled = 255;
 
     double scdthr = 10.0;
 
@@ -135,6 +150,27 @@ static bool validate_cnr3_format(
     return true;
 }
 
+static int scale_8bit_parameter_to_bit_depth(
+    int value_8bit,
+    int bits_per_sample
+) {
+    /*
+        Public CNR3 threshold parameters use the historical 8-bit Cnr2/vscnr2
+        scale. Internally, integer clips above 8-bit use proportionally scaled
+        thresholds.
+
+        Examples:
+            8-bit:   35 -> 35
+            10-bit:  35 -> approximately 140
+            16-bit:  35 -> approximately 8995
+    */
+    const int peak = (1 << bits_per_sample) - 1;
+
+    return static_cast<int>(
+        (static_cast<int64_t>(value_8bit) * peak + 127) / 255
+    );
+}
+
 static void VS_CC cnr3_free(
     void *instanceData,
     VSCore *core,
@@ -238,6 +274,44 @@ static void VS_CC cnr3_create(
 
     local.scene_chroma = get_optional_int(in, vsapi, "scene_chroma", 0) != 0;
     local.debug = get_optional_int(in, vsapi, "debug", 0) != 0;
+
+    local.bits_per_sample = local.vi->format.bitsPerSample;
+    local.sample_peak = (1 << local.bits_per_sample) - 1;
+
+    local.ln_scaled = scale_8bit_parameter_to_bit_depth(local.ln, local.bits_per_sample);
+    local.lm_scaled = scale_8bit_parameter_to_bit_depth(local.lm, local.bits_per_sample);
+    local.un_scaled = scale_8bit_parameter_to_bit_depth(local.un, local.bits_per_sample);
+    local.um_scaled = scale_8bit_parameter_to_bit_depth(local.um, local.bits_per_sample);
+    local.vn_scaled = scale_8bit_parameter_to_bit_depth(local.vn, local.bits_per_sample);
+    local.vm_scaled = scale_8bit_parameter_to_bit_depth(local.vm, local.bits_per_sample);
+
+    if (local.debug) {
+        std::fprintf(
+            stderr,
+            "CNR3 debug: format=%d-bit YUV, peak=%d, "
+            "ln=%d->%d, lm=%d->%d, "
+            "un=%d->%d, um=%d->%d, "
+            "vn=%d->%d, vm=%d->%d, "
+            "mode=%s, scdthr=%.6f, scene_chroma=%d\n",
+            local.bits_per_sample,
+            local.sample_peak,
+            local.ln,
+            local.ln_scaled,
+            local.lm,
+            local.lm_scaled,
+            local.un,
+            local.un_scaled,
+            local.um,
+            local.um_scaled,
+            local.vn,
+            local.vn_scaled,
+            local.vm,
+            local.vm_scaled,
+            local.mode.c_str(),
+            local.scdthr,
+            local.scene_chroma ? 1 : 0
+        );
+    }
 
     if (local.mode.size() != 3) {
         vsapi->freeNode(local.node);

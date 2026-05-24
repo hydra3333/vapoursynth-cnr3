@@ -549,6 +549,48 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
+static void process_cnr3_frame_passthrough_for_now(
+    const Cnr3Data *d,
+    int frame_number,
+    const VSFrame *src,
+    VSFrame *dst,
+    const VSAPI *vsapi
+) {
+    /*
+        Temporary processing function.
+
+        Current behaviour:
+            copy Y/U/V unchanged.
+
+        Purpose:
+            establish the stable call site where the real recursive CNR3
+            chroma processing will be inserted.
+
+        Intended future behaviour:
+            frame 0:
+                copy unchanged and initialise recursive state.
+
+            frame N > 0:
+                use d->cache.prev_output as output[N - 1], then create
+                output[N] from source[N] and the previous filtered output.
+
+        d and frame_number are intentionally passed now even though the current
+        pass-through implementation does not yet need them. They will be needed
+        when the actual recursive chroma algorithm is connected.
+    */
+    (void)d;
+    (void)frame_number;
+
+    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
+
+    copy_all_planes_unchanged(
+        src,
+        dst,
+        bytes_per_sample,
+        vsapi
+    );
+}
+
 // -----------------------------------------------------------------------------
 // CNR3 cache manager
 // -----------------------------------------------------------------------------

@@ -10,15 +10,39 @@ jobs:
   build-windows-x64:
     name: Build Windows x64 DLL
     runs-on: windows-2025-vs2026
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Configure MSVC developer command prompt
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Check for legacy VapourSynth API usage
+        shell: pwsh
+        run: |
+          $patterns = @(
+            'VapourSynth\.h',
+            'VSHelper\.h',
+            'VSNodeRef',
+            'VSFrameRef',
+            'VSFuncRef',
+            'cloneFrameRef',
+            'cloneFrame\(',
+            'freeFrameRef',
+            'createFilter\('
+          )
+          $files = Get-ChildItem -Path src -Recurse -Include *.c,*.cc,*.cpp,*.h,*.hpp
+          foreach ($pattern in $patterns) {
+              $matches = $files | Select-String -Pattern $pattern
+              if ($matches) {
+                  Write-Error "Legacy VapourSynth API pattern found: $pattern"
+                  $matches | ForEach-Object {
+                      Write-Host "$($_.Path):$($_.LineNumber): $($_.Line)"
+                  }
+                  exit 1
+              }
+          }
+          Write-Host "No obvious legacy VapourSynth API usage found."
 
       - name: Build cnr3.dll
         shell: cmd

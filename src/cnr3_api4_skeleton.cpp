@@ -110,25 +110,6 @@ static void cnr3_debug_printf(
 //     cnr3_cache.cpp
 // -----------------------------------------------------------------------------
 
-static void cnr3_debug_print_cache_state(
-    const Cnr3Data *d,
-    const char *where,
-    int requested_frame
-) {
-    if (d == nullptr || !d->debug) {
-        return;
-    }
-
-    cnr3_debug_printf(
-        d->debug,
-        "CNR3 debug: %s: requested=%d, next_needed=%d, prev_output=%s\n",
-        where,
-        requested_frame,
-        d->cache.next_needed,
-        d->cache.prev_output != nullptr ? "yes" : "no"
-    );
-}
-
 struct Cnr3CacheManager {
     /*
         Minimal cache/state manager.
@@ -214,6 +195,25 @@ struct Cnr3Data {
 
     bool debug = false;
 };
+
+static void cnr3_debug_print_cache_state(
+    const Cnr3Data *d,
+    const char *where,
+    int requested_frame
+) {
+    if (d == nullptr || !d->debug) {
+        return;
+    }
+
+    cnr3_debug_printf(
+        d->debug,
+        "CNR3 debug: %s: requested=%d, next_needed=%d, prev_output=%s\n",
+        where,
+        requested_frame,
+        d->cache.next_needed,
+        d->cache.prev_output != nullptr ? "yes" : "no"
+    );
+}
 
 static int64_t get_optional_int(
     const VSMap *in,

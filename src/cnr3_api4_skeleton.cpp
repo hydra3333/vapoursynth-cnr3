@@ -15,6 +15,7 @@
 */
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -38,6 +39,15 @@
 #ifndef VS_EXTERNAL_API
 #error "CNR3 requires VapourSynth API4-compatible headers. VS_EXTERNAL_API is not defined."
 #endif
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Help identify and track instances.
+// i.e. which source stream is being processed and thus which cache to use.
+// Interlaced sources are usually have fields separated and processed separately
+// before re-interlacing or deinterlacing - which means 2 instances of this plugin.
+//
+static std::atomic<int> g_cnr3_next_instance_id{1};
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------

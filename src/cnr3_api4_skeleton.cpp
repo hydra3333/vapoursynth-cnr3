@@ -782,12 +782,11 @@ static const VSFrame *VS_CC cnr3_get_frame(
             return nullptr;
         }
 
-        const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
-
-        copy_all_planes_unchanged(
+        process_cnr3_frame_passthrough_for_now(
+            d,
+            n,
             src,
             dst,
-            bytes_per_sample,
             vsapi
         );
 

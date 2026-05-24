@@ -702,15 +702,55 @@ static bool process_cnr3_chroma_plane(
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
 
-    copy_plane_bytes(
-        src,
-        dst,
-        plane,
-        bytes_per_sample,
-        vsapi
-    );
+    /*
+        Scaffold stage only.
 
-    return true;
+        At this point, CNR3 intentionally still writes pass-through chroma.
+        The purpose of using per-sample loops now is to prove the exact loop
+        structure that the real recursive blend will later use.
+
+        Future algorithm notes:
+            - frame 0 will initialise from current source chroma
+            - frame N > 0 will read prev_output chroma from output[N - 1]
+            - Y/U/V guard tables will decide how much previous filtered chroma
+              may be reused
+            - mode characters 'x' and 'o' must be treated as narrow and wide
+              guard response curves, not as disabled and enabled switches
+
+        Why the historical default mode="oxx" can still make sense:
+            - Y uses the wider response, so luma structure does not block
+              chroma stabilisation too eagerly
+            - U and V use narrower responses, so chroma changes are treated
+              more conservatively
+            - this can give useful chroma shimmer reduction while reducing the
+              risk of chroma lag, smearing, or ghosting around real motion
+
+        The current lookup-table builder is still provisional and will be
+        corrected in a later step before real blending is connected.
+    */
+    if (bytes_per_sample == 1) {
+        process_cnr3_chroma_plane_passthrough_u8(
+            src,
+            dst,
+            plane,
+            vsapi
+        );
+
+        return true;
+    }
+
+    if (bytes_per_sample == 2) {
+        process_cnr3_chroma_plane_passthrough_u16(
+            src,
+            dst,
+            plane,
+            vsapi
+        );
+
+        return true;
+    }
+
+    return false;
 }
 
 static bool process_cnr3_frame_passthrough_for_now(

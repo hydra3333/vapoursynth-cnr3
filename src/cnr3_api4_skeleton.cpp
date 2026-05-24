@@ -605,8 +605,8 @@ static const VSFrame *VS_CC cnr3_get_frame(
         );
 
         if (d->debug) {
-            std::fprintf(
-                stderr,
+            cnr3_debug_printf(
+                local.debug,
                 "CNR3 debug: processed frame %d, next_needed=%d\n",
                 n,
                 d->cache.next_needed
@@ -715,8 +715,8 @@ static void VS_CC cnr3_create(
             local.scene_chroma ? 1 : 0
         );
 
-        std::fprintf(
-            stderr,
+        cnr3_debug_printf(
+            local.debug,
             "CNR3 debug: table samples: "
             "Y[0]=%d, Y[%d]=%d, Y[%d]=%d, Y[%d]=%d; "
             "U[0]=%d, U[%d]=%d, U[%d]=%d, U[%d]=%d; "

@@ -223,7 +223,8 @@ static void cnr3_debug_print_cache_state(
 
     cnr3_debug_printf(
         d->debug,
-        "CNR3 debug: %s: requested=%d, next_needed=%d, gap=%d, prev_output=%s\n",
+        "CNR3 debug: instance=%d, %s: requested=%d, next_needed=%d, gap=%d, prev_output=%s\n",
+        d->instance_id,
         where,
         requested_frame,
         next_needed,
@@ -665,7 +666,8 @@ static const VSFrame *VS_CC cnr3_get_frame(
 
             cnr3_debug_printf(
                 d->debug,
-                "CNR3 debug: out-of-order frame request: requested=%d, next_needed=%d, gap=%d, prev_output=%s\n",
+                "CNR3 debug: instance=%d, out-of-order frame request: requested=%d, next_needed=%d, gap=%d, prev_output=%s\n",
+                d->instance_id,
                 requested_frame,
                 next_needed,
                 gap,

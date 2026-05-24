@@ -559,14 +559,23 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
     const VSAPI *vsapi
 ) {
     /*
-        Temporary chroma-plane processing function.
+        Temporary chroma-plane recursive-read proof.
 
-        Current behaviour:
-            copy the requested chroma plane unchanged.
+        Current test behaviour:
+            frame 0:
+                copy the requested chroma plane from source frame 0.
+
+            frame N > 0:
+                copy the requested chroma plane from output[N - 1], which is
+                stored in prev_output.
 
         Purpose:
-            establish the stable call site where the real recursive CNR3
-            chroma stabilisation will be inserted.
+            prove that the recursive previous-output frame is valid and can be
+            read safely before implementing the real weighted chroma blend.
+
+        Expected visual effect:
+            luma remains current because the frame-level function copies Y from
+            source[N], but chroma lags by one processed frame.
 
         Future behaviour:
             for each chroma sample in source frame N:
@@ -574,10 +583,6 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
                 read previous filtered chroma from output[N - 1]
                 use Y/U/V guard tables to decide blend strength
                 write stabilised chroma to output[N]
-
-        prev_output is intentionally passed now even though this temporary
-        pass-through implementation does not read from it yet. It will become
-        the previous filtered frame used by the real recursive algorithm.
 
         Plane convention:
             plane 1 = U
@@ -591,14 +596,26 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
         return false;
     }
 
-    if (frame_number > 0 && prev_output == nullptr) {
+    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
+
+    if (frame_number == 0) {
+        copy_plane_bytes(
+            src,
+            dst,
+            plane,
+            bytes_per_sample,
+            vsapi
+        );
+
+        return true;
+    }
+
+    if (prev_output == nullptr) {
         return false;
     }
 
-    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
-
     copy_plane_bytes(
-        src,
+        prev_output,
         dst,
         plane,
         bytes_per_sample,

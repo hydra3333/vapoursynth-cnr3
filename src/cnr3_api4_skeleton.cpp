@@ -923,6 +923,8 @@ static void process_cnr3_chroma_plane_passthrough_u8(
     const std::vector<int> &chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
 
+    Cnr3ResponseDebugStats response_stats;
+
     for (int y = 0; y < plane_height; ++y) {
         const uint8_t *src_row = srcp;
         uint8_t *dst_row = dstp;
@@ -975,21 +977,25 @@ static void process_cnr3_chroma_plane_passthrough_u8(
                     d->table_offset,
                     y_signed_diff
                 );
+
+                cnr3_update_response_debug_stats(
+                    response_stats,
+                    y_response,
+                    chroma_response
+                );
             }
 
             /*
-                Keep these calculated values alive and explicit even though the
-                scaffold still writes pass-through output.
+                Pass-through output is still intentional.
 
-                The next stage will use them to form the actual recursive
+                The response values are calculated and counted above, but they
+                are not yet allowed to influence the pixel. The next algorithm
+                step will use those response values to form the recursive
                 blend weight.
             */
-            (void)y_response;
-            (void)chroma_response;
-
             dst_row[x] = current_chroma;
         }
-
+        
         srcp += src_stride;
         dstp += dst_stride;
 

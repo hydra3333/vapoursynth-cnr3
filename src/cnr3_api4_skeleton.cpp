@@ -568,8 +568,8 @@ static const VSFrame *VS_CC cnr3_get_frame(
             vsapi
         );
 
-        replace_previous_output_frame(
-            d,
+        cnr3_cache_store_output_frame(
+            d->cache,
             dst,
             n,
             vsapi

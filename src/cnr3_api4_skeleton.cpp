@@ -715,14 +715,13 @@ static const VSFrame *VS_CC cnr3_get_frame(
             vsapi
         );
 
-        if (d->debug) {
-            cnr3_debug_printf(
-                d->debug,
-                "CNR3 debug: processed frame %d, next_needed=%d\n",
-                n,
-                d->cache.next_needed
-            );
-        }
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: processed frame: frame=%d, new_next_needed=%d, stored_prev_output=%s\n",
+            n,
+            d->cache.next_needed,
+            d->cache.prev_output != nullptr ? "yes" : "no"
+        );
         
         vsapi->freeFrame(src);
 

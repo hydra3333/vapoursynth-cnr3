@@ -1074,6 +1074,8 @@ static void process_cnr3_chroma_plane_passthrough_u16(
     const std::vector<int> &chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
 
+    Cnr3ResponseDebugStats response_stats;
+
     for (int y = 0; y < plane_height; ++y) {
         const uint16_t *src_row =
             reinterpret_cast<const uint16_t *>(srcp);

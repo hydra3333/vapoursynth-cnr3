@@ -645,11 +645,19 @@ static const VSFrame *VS_CC cnr3_get_frame(
     }
 
     if (activationReason == arAllFramesReady) {
+        /*
+            Normally too noisy for routine debugging.
+
+            Enable temporarily only when investigating VapourSynth scheduling
+            or unexpected frame request order.
+        */
+        /*
         cnr3_debug_print_cache_state(
             d,
             "arAllFramesReady/entry",
             n
         );
+        */
 
         const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
@@ -701,6 +709,13 @@ static const VSFrame *VS_CC cnr3_get_frame(
             return nullptr;
         }
 
+        /*
+            Normally too noisy for routine debugging.
+
+            The out-of-order debug above is more useful because it captures
+            the failure condition directly.
+        */
+        /*
         cnr3_debug_printf(
             d->debug,
             "CNR3 debug: instance=%d, in-order frame accepted: requested=%d, next_needed=%d, prev_output=%s\n",
@@ -709,6 +724,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
             d->cache.next_needed,
             d->cache.prev_output != nullptr ? "yes" : "no"
         );
+        */
 
         VSFrame *dst = vsapi->newVideoFrame(
             &d->vi->format,

@@ -127,9 +127,9 @@ struct Cnr3CacheManager {
         This is intentionally only the strict streaming subset of the future
         cache manager design.
 
-    Invariant:
-        prev_output holds a read-only reference to output[next_needed - 1],
-        or nullptr before frame 0 has been processed.
+        Invariant:
+            prev_output holds a read-only reference to output[next_needed - 1],
+            or nullptr before frame 0 has been processed.
 
         Initial Policy A:
             Only frame n == next_needed is accepted.
@@ -152,7 +152,7 @@ struct Cnr3Data {
     VSNode *node = nullptr;
     const VSVideoInfo *vi = nullptr;
 
-    // an ID identify and track instances
+    // Human-readable ID used to distinguish simultaneous CNR3 filter instances.
     int instance_id = 0;
 
     std::string mode = "oxx";

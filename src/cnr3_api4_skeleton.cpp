@@ -860,6 +860,7 @@ static void VS_CC cnr3_create(
             "un=%d->%d, um=%d->%d, "
             "vn=%d->%d, vm=%d->%d, "
             "mode=%s, scdthr=%.6f, scene_chroma=%d\n",
+            local.instance_id,
             local.bits_per_sample,
             local.sample_peak,
             local.ln,
@@ -881,10 +882,11 @@ static void VS_CC cnr3_create(
 
         cnr3_debug_printf(
             local.debug,
-            "CNR3 debug: table samples: "
+            "CNR3 debug: instance=%d, table samples: "
             "Y[0]=%d, Y[%d]=%d, Y[%d]=%d, Y[%d]=%d; "
             "U[0]=%d, U[%d]=%d, U[%d]=%d, U[%d]=%d; "
             "V[0]=%d, V[%d]=%d, V[%d]=%d, V[%d]=%d\n",
+            local.instance_id,
             local.table_y[0],
             local.ln_scaled,
             local.table_y[static_cast<size_t>(local.ln_scaled)],

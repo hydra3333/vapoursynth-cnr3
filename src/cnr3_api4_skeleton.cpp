@@ -152,6 +152,9 @@ struct Cnr3Data {
     VSNode *node = nullptr;
     const VSVideoInfo *vi = nullptr;
 
+    // ise an ID identify and track instances
+    int instance_id = 0;
+
     std::string mode = "oxx";
 
     /*

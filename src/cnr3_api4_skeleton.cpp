@@ -29,9 +29,7 @@
 // -----------------------------------------------------------------------------
 // HELPER functions
 // -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// Helper functions - diagnostics
-// -----------------------------------------------------------------------------
+
 static void cnr3_vfprintf_stderr(
     const char *format,
     va_list args
@@ -87,26 +85,6 @@ static void cnr3_debug_printf(
     va_end(args);
 }
 
-static void cnr3_stderr_printf(
-    const char *format,
-    ...
-) {
-    /*
-        Unconditional printf-style stderr helper.
-
-        Use this only for rare non-debug diagnostics that should always be
-        visible. Normal user-facing VapourSynth errors should still use
-        mapSetError() or setFilterError().
-    */
-    if (format == nullptr) {
-        return;
-    }
-
-    va_list args;
-    va_start(args, format);
-    cnr3_vfprintf_stderr(format, args);
-    va_end(args);
-}
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 

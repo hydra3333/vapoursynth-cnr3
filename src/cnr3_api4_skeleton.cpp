@@ -1347,37 +1347,85 @@ static void VS_CC cnr3_create(
 
         cnr3_debug_printf(
             local.debug,
-            "CNR3 debug: instance=%d, table samples: "
+            "CNR3 debug: instance=%d, table samples by signed diff: "
             "Y[0]=%d, Y[%d]=%d, Y[%d]=%d, Y[%d]=%d; "
             "U[0]=%d, U[%d]=%d, U[%d]=%d, U[%d]=%d; "
             "V[0]=%d, V[%d]=%d, V[%d]=%d, V[%d]=%d\n",
             local.instance_id,
-            local.table_y[0],
-            local.ln_scaled,
-            local.table_y[static_cast<size_t>(local.ln_scaled)],
+
+            get_cnr3_table_value_for_signed_diff(
+                local.table_y,
+                local.table_offset,
+                0
+            ),
             y_mid,
-            local.table_y[static_cast<size_t>(y_mid)],
-            local.lm_scaled,
-            local.table_y[static_cast<size_t>(local.lm_scaled)],
+            get_cnr3_table_value_for_signed_diff(
+                local.table_y,
+                local.table_offset,
+                y_mid
+            ),
+            local.ln_scaled,
+            get_cnr3_table_value_for_signed_diff(
+                local.table_y,
+                local.table_offset,
+                local.ln_scaled
+            ),
+            local.sample_peak,
+            get_cnr3_table_value_for_signed_diff(
+                local.table_y,
+                local.table_offset,
+                local.sample_peak
+            ),
 
-            local.table_u[0],
-            local.un_scaled,
-            local.table_u[static_cast<size_t>(local.un_scaled)],
+            get_cnr3_table_value_for_signed_diff(
+                local.table_u,
+                local.table_offset,
+                0
+            ),
             u_mid,
-            local.table_u[static_cast<size_t>(u_mid)],
-            local.um_scaled,
-            local.table_u[static_cast<size_t>(local.um_scaled)],
+            get_cnr3_table_value_for_signed_diff(
+                local.table_u,
+                local.table_offset,
+                u_mid
+            ),
+            local.un_scaled,
+            get_cnr3_table_value_for_signed_diff(
+                local.table_u,
+                local.table_offset,
+                local.un_scaled
+            ),
+            local.sample_peak,
+            get_cnr3_table_value_for_signed_diff(
+                local.table_u,
+                local.table_offset,
+                local.sample_peak
+            ),
 
-            local.table_v[0],
-            local.vn_scaled,
-            local.table_v[static_cast<size_t>(local.vn_scaled)],
+            get_cnr3_table_value_for_signed_diff(
+                local.table_v,
+                local.table_offset,
+                0
+            ),
             v_mid,
-            local.table_v[static_cast<size_t>(v_mid)],
-            local.vm_scaled,
-            local.table_v[static_cast<size_t>(local.vm_scaled)]
+            get_cnr3_table_value_for_signed_diff(
+                local.table_v,
+                local.table_offset,
+                v_mid
+            ),
+            local.vn_scaled,
+            get_cnr3_table_value_for_signed_diff(
+                local.table_v,
+                local.table_offset,
+                local.vn_scaled
+            ),
+            local.sample_peak,
+            get_cnr3_table_value_for_signed_diff(
+                local.table_v,
+                local.table_offset,
+                local.sample_peak
+            )
         );
     }
-
     Cnr3Data *data = new Cnr3Data(local);
 
     VSFilterDependency deps[] = {

@@ -673,8 +673,80 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
+static int cnr3_get_chroma_to_luma_x(
+    const Cnr3Data *d,
+    int chroma_x,
+    int luma_width
+) {
+    /*
+        Map one chroma sample coordinate to a representative luma coordinate.
+
+        This is intentionally simple for the scaffold stage.
+
+        For 4:4:4:
+            subSamplingW = 0, so luma_x = chroma_x
+
+        For 4:2:2 / 4:2:0:
+            subSamplingW = 1, so luma_x = chroma_x * 2
+
+        The result is clamped because the right edge can be awkward on unusual
+        frame sizes or future formats.
+    */
+    if (d == nullptr || luma_width <= 0) {
+        return 0;
+    }
+
+    const int luma_x = chroma_x << d->vi->format.subSamplingW;
+
+    return clamp_int(luma_x, 0, luma_width - 1);
+}
+
+static int cnr3_get_chroma_to_luma_y(
+    const Cnr3Data *d,
+    int chroma_y,
+    int luma_height
+) {
+    /*
+        Map one chroma sample coordinate to a representative luma coordinate.
+
+        For 4:4:4 / 4:2:2:
+            subSamplingH = 0, so luma_y = chroma_y
+
+        For 4:2:0:
+            subSamplingH = 1, so luma_y = chroma_y * 2
+
+        This is only the initial safe mapping. The real algorithm can later be
+        refined if vscnr2's exact chroma-to-luma relationship needs a different
+        representative luma sample.
+    */
+    if (d == nullptr || luma_height <= 0) {
+        return 0;
+    }
+
+    const int luma_y = chroma_y << d->vi->format.subSamplingH;
+
+    return clamp_int(luma_y, 0, luma_height - 1);
+}
+
+static const std::vector<int> &cnr3_get_table_for_chroma_plane(
+    const Cnr3Data *d,
+    int plane
+) {
+    /*
+        Plane convention:
+            plane 1 = U
+            plane 2 = V
+
+        The caller has already validated that plane is either 1 or 2.
+    */
+    return (plane == 1) ? d->table_u : d->table_v;
+}
+
 static void process_cnr3_chroma_plane_passthrough_u8(
+    const Cnr3Data *d,
+    int frame_number,
     const VSFrame *src,
+    const VSFrame *prev_output,
     VSFrame *dst,
     int plane,
     const VSAPI *vsapi

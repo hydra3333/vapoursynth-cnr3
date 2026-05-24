@@ -117,7 +117,7 @@ struct Cnr3CacheManager {
         cache manager design.
 
         Invariant:
-            prev_output holds output[next_needed - 1], or nullptr before
+            prev_output holds a read-only reference to output[next_needed - 1]
             frame 0 has been processed.
 
         Initial Policy A:

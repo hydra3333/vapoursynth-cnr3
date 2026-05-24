@@ -619,6 +619,12 @@ static const VSFrame *VS_CC cnr3_get_frame(
     }
 
     if (activationReason == arAllFramesReady) {
+        cnr3_debug_print_cache_state(
+            d,
+            "arAllFramesReady/entry",
+            n
+        );
+
         const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
         if (src == nullptr) {

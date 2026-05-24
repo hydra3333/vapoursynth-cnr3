@@ -117,9 +117,9 @@ struct Cnr3CacheManager {
         This is intentionally only the strict streaming subset of the future
         cache manager design.
 
-        Invariant:
-            prev_output holds a read-only reference to output[next_needed - 1]
-            frame 0 has been processed.
+    Invariant:
+        prev_output holds a read-only reference to output[next_needed - 1],
+        or nullptr before frame 0 has been processed.
 
         Initial Policy A:
             Only frame n == next_needed is accepted.

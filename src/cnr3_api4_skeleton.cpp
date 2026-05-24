@@ -668,7 +668,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
 
         if (d->debug) {
             cnr3_debug_printf(
-                local.debug,
+                d->debug,
                 "CNR3 debug: processed frame %d, next_needed=%d\n",
                 n,
                 d->cache.next_needed

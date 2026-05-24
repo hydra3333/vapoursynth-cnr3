@@ -1276,6 +1276,28 @@ static void VS_CC cnr3_create(
     local.bits_per_sample = local.vi->format.bitsPerSample;
     local.sample_peak = (1 << local.bits_per_sample) - 1;
 
+    /*
+        Signed-difference table geometry.
+
+        sample_peak:
+            maximum legal sample value, for example 255 or 65535.
+
+        table_offset:
+            one greater than sample_peak, used to map signed differences into
+            positive vector indexes.
+
+        table_size:
+            enough entries for all possible signed differences from
+            -sample_peak through +sample_peak, plus the offset slot.
+
+        Example for 8-bit:
+            sample_peak  = 255
+            table_offset = 256
+            table_size   = 513
+    */
+    local.table_offset = local.sample_peak + 1;
+    local.table_size = local.table_offset * 2 + 1;
+
     local.ln_scaled = scale_8bit_parameter_to_bit_depth(local.ln, local.bits_per_sample);
     local.lm_scaled = scale_8bit_parameter_to_bit_depth(local.lm, local.bits_per_sample);
     local.un_scaled = scale_8bit_parameter_to_bit_depth(local.un, local.bits_per_sample);

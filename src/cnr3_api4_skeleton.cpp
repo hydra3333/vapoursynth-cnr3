@@ -849,8 +849,9 @@ static bool process_cnr3_chroma_plane(
             - this can give useful chroma shimmer reduction while reducing the
               risk of chroma lag, smearing, or ghosting around real motion
 
-        The current lookup-table builder is still provisional and will be
-        corrected in a later step before real blending is connected.
+        The lookup-table builder now uses the historical narrow/wide response
+        meaning of mode characters. Real chroma blending is still not connected
+        in this scaffold step.
     */
     if (bytes_per_sample == 1) {
         process_cnr3_chroma_plane_passthrough_u8(

@@ -370,79 +370,156 @@ static int clamp_int(
     return value;
 }
 
-static void build_cnr3_weight_table(
-    std::vector<int> &table,
-    int sample_peak,
-    int threshold_low,
-    int threshold_high,
-    bool enabled
+static int get_cnr3_table_value_for_signed_diff(
+    const std::vector<int> &table,
+    int table_offset,
+    int signed_diff
 ) {
     /*
-        Build a soft threshold table for one guard plane.
+        Safe table lookup helper.
 
-        This is intentionally simple and explicit at this stage.
+        The real blend path will eventually use current-vs-previous signed
+        sample differences:
 
-        If the guard is disabled by mode:
-            every difference gets full weight.
+            signed_diff = current_sample - previous_sample
 
-        If enabled:
-            abs(diff) <= threshold_low:
-                full weight, 256
+        The table is stored with a positive offset so signed differences can be
+        used directly after adding table_offset.
+    */
+    const int index = signed_diff + table_offset;
 
-            abs(diff) >= threshold_high:
-                zero weight, 0
+    if (index < 0 || index >= static_cast<int>(table.size())) {
+        return 0;
+    }
 
-            threshold_low < abs(diff) < threshold_high:
-                raised-cosine fade from 256 down to 0
+    return table[static_cast<size_t>(index)];
+}
 
-        This preserves the core Cnr2/vscnr2 idea: small differences are safe
-        for chroma stabilisation, large differences are not, and the transition
-        should be gradual rather than a hard binary cutoff.
+static void build_cnr3_weight_table(
+    std::vector<int> &table,
+    int table_offset,
+    int table_size,
+    int sample_peak,
+    int threshold,
+    int strength,
+    bool wide_response
+) {
+    /*
+        Build one vscnr2-style signed-difference response table.
+
+        This replaces the earlier temporary enabled/disabled scaffold.
+
+        Important:
+            mode character 'x' means narrow response, not disabled.
+            mode character 'o' means wide response, not enabled.
+
+        A response value near strength means:
+            the current-vs-previous difference is small enough that the later
+            recursive chroma blend may strongly reuse previous filtered chroma.
+
+        A response value near zero means:
+            the difference is large enough that the later recursive chroma
+            blend should mostly or entirely keep current source chroma.
+
+        Narrow response:
+            The table falls away more quickly as abs(diff) increases.
+            This is safer and less aggressive.
+
+        Wide response:
+            The table stays higher for longer as abs(diff) increases.
+            This is stronger and more tolerant of chroma shimmer, but has more
+            risk of chroma lag, smearing, or ghosting around real motion.
+
+        Why default mode="oxx" can still make sense:
+            - Y uses wide response so luma structure does not block chroma
+              stabilisation too eagerly.
+            - U and V use narrow response so actual chroma changes are handled
+              more conservatively.
+            - This matches the historical default while still making all three
+              planes participate in the later blend decision.
+
+        Table storage:
+            table[signed_diff + table_offset]
+
+        Table value range:
+            0..sample_peak
+
+        The table is signed because the vscnr2-style formula uses signed
+        current-vs-previous differences when indexing the Y/U/V response
+        tables. For cosine response curves the result is symmetric, but keeping
+        signed indexing avoids a later structural change when the real blend is
+        connected.
     */
 
-    table.assign(static_cast<size_t>(sample_peak) + 1U, 0);
+    table.assign(static_cast<size_t>(table_size), 0);
 
-    if (!enabled) {
-        std::fill(table.begin(), table.end(), 256);
-        return;
-    }
+    threshold = clamp_int(threshold, 0, sample_peak);
+    strength = clamp_int(strength, 0, sample_peak);
 
-    threshold_low = clamp_int(threshold_low, 0, sample_peak);
-    threshold_high = clamp_int(threshold_high, 0, sample_peak);
-
-    if (threshold_high < threshold_low) {
-        std::swap(threshold_high, threshold_low);
-    }
-
-    if (threshold_high == threshold_low) {
-        for (int diff = 0; diff <= sample_peak; ++diff) {
-            table[static_cast<size_t>(diff)] = (diff <= threshold_low) ? 256 : 0;
-        }
-
+    if (threshold == 0) {
+        table[static_cast<size_t>(table_offset)] = strength;
         return;
     }
 
     constexpr double pi = 3.141592653589793238462643383279502884;
 
-    for (int diff = 0; diff <= sample_peak; ++diff) {
-        if (diff <= threshold_low) {
-            table[static_cast<size_t>(diff)] = 256;
-        } else if (diff >= threshold_high) {
-            table[static_cast<size_t>(diff)] = 0;
-        } else {
-            const double position =
-                static_cast<double>(diff - threshold_low) /
-                static_cast<double>(threshold_high - threshold_low);
+    const int first_diff = -threshold;
+    const int last_diff = threshold;
 
-            /*
-                Raised cosine:
-                    position 0.0 -> 256
-                    position 1.0 -> 0
-            */
-            const double weight = 0.5 * (1.0 + std::cos(position * pi));
-            table[static_cast<size_t>(diff)] =
-                clamp_int(static_cast<int>(weight * 256.0 + 0.5), 0, 256);
+    for (int signed_diff = first_diff; signed_diff <= last_diff; ++signed_diff) {
+        const int index = signed_diff + table_offset;
+
+        if (index < 0 || index >= table_size) {
+            continue;
         }
+
+        const int abs_diff = std::abs(signed_diff);
+
+        double angle = 0.0;
+
+        if (wide_response) {
+            /*
+                Wide response.
+
+                Squaring abs_diff keeps the curve higher for longer near zero,
+                then it falls toward zero near the threshold.
+            */
+            angle =
+                static_cast<double>(abs_diff) *
+                static_cast<double>(abs_diff) *
+                pi /
+                (
+                    static_cast<double>(threshold) *
+                    static_cast<double>(threshold)
+                );
+        } else {
+            /*
+                Narrow response.
+
+                Linear abs_diff makes the curve fall away sooner.
+            */
+            angle =
+                static_cast<double>(abs_diff) *
+                pi /
+                static_cast<double>(threshold);
+        }
+
+        /*
+            Use integer division by 2 before applying the cosine response.
+            This intentionally follows the vscnr2-style table shape closely,
+            including the fact that an odd maximum strength such as 255 gives
+            a peak table value of 254 rather than 255.
+        */
+        const double half_strength =
+            static_cast<double>(strength / 2);
+
+        const int value = clamp_int(
+            static_cast<int>(half_strength * (1.0 + std::cos(angle))),
+            0,
+            sample_peak
+        );
+
+        table[static_cast<size_t>(index)] = value;
     }
 }
 

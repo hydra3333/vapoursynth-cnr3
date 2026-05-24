@@ -20,7 +20,7 @@
 #include "VSHelper4.h"
 
 // -----------------------------------------------------------------------------
-// CNR3 Start cache manager
+// CNR3 cache manager
 //
 // This section is intentionally self-contained so it can later move to:
 //     cnr3_cache.h

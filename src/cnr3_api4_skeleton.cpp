@@ -734,7 +734,8 @@ static const VSFrame *VS_CC cnr3_get_frame(
 
         cnr3_debug_printf(
             d->debug,
-            "CNR3 debug: processed frame: frame=%d, new_next_needed=%d, stored_prev_output=%s\n",
+            "CNR3 debug: instance=%d, processed frame: frame=%d, new_next_needed=%d, stored_prev_output=%s\n",
+            d->instance_id,
             n,
             d->cache.next_needed,
             d->cache.prev_output != nullptr ? "yes" : "no"

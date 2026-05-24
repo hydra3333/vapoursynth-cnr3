@@ -27,6 +27,20 @@
 #include "VSHelper4.h"
 
 // -----------------------------------------------------------------------------
+//  API policy:
+//      CNR3 is an API4-only VapourSynth plugin.
+//      Do not include legacy VapourSynth.h / VSHelper.h.
+//      Do not use API3-era types or functions.
+// -----------------------------------------------------------------------------
+#ifndef VAPOURSYNTH_API_VERSION
+#error "CNR3 requires VapourSynth API4 headers. VAPOURSYNTH_API_VERSION is not defined."
+#endif
+#ifndef VS_EXTERNAL_API
+#error "CNR3 requires VapourSynth API4-compatible headers. VS_EXTERNAL_API is not defined."
+#endif
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
 // HELPER functions
 // -----------------------------------------------------------------------------
 

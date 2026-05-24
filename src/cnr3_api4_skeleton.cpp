@@ -549,7 +549,7 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
-static bool process_cnr3_chroma_plane_passthrough_for_now(
+static bool process_cnr3_chroma_plane(
     const Cnr3Data *d,
     int frame_number,
     int plane,
@@ -559,18 +559,17 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
     const VSAPI *vsapi
 ) {
     /*
-        Temporary chroma-plane pass-through function.
+        Chroma-plane processing function.
 
         Current behaviour:
             copy the requested chroma plane from the current source frame.
 
         Purpose:
-            confirm that the split frame-processing structure still produces
-            visually identical output before the real recursive chroma blend is
-            added.
+            this is now the stable call site for the real recursive CNR3 chroma
+            stabilisation algorithm.
 
         Important note:
-            Do not copy chroma from prev_output here as a proof test. Since
+            Do not simply copy chroma from prev_output as a proof test. Since
             prev_output is the previous filtered output, copying U/V from it
             recursively causes chroma to remain effectively stuck at frame 0:
 
@@ -578,10 +577,10 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
                 output[2].UV = output[1].UV
                 output[3].UV = output[2].UV
 
-            That is useful as a crude proof that prev_output is readable, but it
-            is not a simple one-frame lag and it badly distorts colour.
+            That test proved prev_output was readable, but it badly distorted
+            colour and was reverted.
 
-        Future behaviour:
+        Intended future behaviour:
             for each chroma sample in source frame N:
                 read current source chroma from source[N]
                 read previous filtered chroma from output[N - 1]
@@ -601,9 +600,10 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
     }
 
     /*
-        Keep this validation even though pass-through does not read prev_output.
-        The real recursive algorithm will need it, and the frame-level function
-        has already established this as part of the recursive precondition.
+        Keep this validation even though the current pass-through path does not
+        read prev_output. The real recursive algorithm will need it, and the
+        frame-level function has already established this as part of the
+        recursive precondition.
     */
     if (frame_number > 0 && prev_output == nullptr) {
         return false;
@@ -713,7 +713,7 @@ static bool process_cnr3_frame_passthrough_for_now(
         vsapi
     );
 
-    if (!process_cnr3_chroma_plane_passthrough_for_now(
+    if (!process_cnr3_chroma_plane(
         d,
         frame_number,
         1,
@@ -726,7 +726,7 @@ static bool process_cnr3_frame_passthrough_for_now(
         return false;
     }
 
-    if (!process_cnr3_chroma_plane_passthrough_for_now(
+    if (!process_cnr3_chroma_plane(
         d,
         frame_number,
         2,

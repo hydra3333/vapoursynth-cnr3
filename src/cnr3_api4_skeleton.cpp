@@ -530,16 +530,21 @@ static bool build_cnr3_lookup_tables(
 ) {
     /*
         mode is a 3-character string:
-            mode[0] controls the luma/Y guard
-            mode[1] controls the U/chroma guard
-            mode[2] controls the V/chroma guard
+            mode[0] controls the luma/Y response curve
+            mode[1] controls the U/chroma response curve
+            mode[2] controls the V/chroma response curve
 
-        For now:
-            'o' means enabled
-            'x' means disabled
+        Historical vscnr2/Cnr2-compatible meaning:
+            'x' = narrow response curve
+            'o' = wide response curve
 
-        This follows the public Cnr2/vscnr2-style mode convention but keeps
-        the implementation explicit for maintainability.
+        Very important:
+            'x' does not mean off.
+            'o' does not mean on.
+
+        All three planes still get tables. The mode character only changes the
+        curve shape used to reduce the later blend weight as
+        current-vs-previous differences increase.
     */
 
     if (d.mode.size() != 3) {
@@ -547,38 +552,44 @@ static bool build_cnr3_lookup_tables(
         return false;
     }
 
-    const bool enable_y = (d.mode[0] == 'o');
-    const bool enable_u = (d.mode[1] == 'o');
-    const bool enable_v = (d.mode[2] == 'o');
+    const bool wide_y = (d.mode[0] != 'x');
+    const bool wide_u = (d.mode[1] != 'x');
+    const bool wide_v = (d.mode[2] != 'x');
 
     build_cnr3_weight_table(
         d.table_y,
+        d.table_offset,
+        d.table_size,
         d.sample_peak,
         d.ln_scaled,
         d.lm_scaled,
-        enable_y
+        wide_y
     );
 
     build_cnr3_weight_table(
         d.table_u,
+        d.table_offset,
+        d.table_size,
         d.sample_peak,
         d.un_scaled,
         d.um_scaled,
-        enable_u
+        wide_u
     );
 
     build_cnr3_weight_table(
         d.table_v,
+        d.table_offset,
+        d.table_size,
         d.sample_peak,
         d.vn_scaled,
         d.vm_scaled,
-        enable_v
+        wide_v
     );
 
     if (
-        d.table_y.size() != static_cast<size_t>(d.sample_peak) + 1U ||
-        d.table_u.size() != static_cast<size_t>(d.sample_peak) + 1U ||
-        d.table_v.size() != static_cast<size_t>(d.sample_peak) + 1U
+        d.table_y.size() != static_cast<size_t>(d.table_size) ||
+        d.table_u.size() != static_cast<size_t>(d.table_size) ||
+        d.table_v.size() != static_cast<size_t>(d.table_size)
     ) {
         vsapi->mapSetError(out, "CNR3: internal error: lookup-table size mismatch.");
         return false;

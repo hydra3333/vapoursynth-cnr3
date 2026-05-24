@@ -802,13 +802,18 @@ static const VSFrame *VS_CC cnr3_get_frame(
             return nullptr;
         }
 
-        process_cnr3_frame_passthrough_for_now(
+        if (!process_cnr3_frame_passthrough_for_now(
             d,
             n,
             src,
             dst,
+            frameCtx,
             vsapi
-        );
+        )) {
+            vsapi->freeFrame(src);
+            vsapi->freeFrame(dst);
+            return nullptr;
+        }
 
         cnr3_cache_store_output_frame(
             d->cache,

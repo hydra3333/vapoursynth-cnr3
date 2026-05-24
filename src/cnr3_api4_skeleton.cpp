@@ -428,6 +428,21 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
+// -----------------------------------------------------------------------------
+// CNR3 cache manager
+// -----------------------------------------------------------------------------
+static void cnr3_cache_clear(
+    Cnr3CacheManager &cache,
+    const VSAPI *vsapi
+) {
+    if (cache.prev_output != nullptr) {
+        vsapi->freeFrame(cache.prev_output);
+        cache.prev_output = nullptr;
+    }
+
+    cache.next_needed = 0;
+}
+
 static void VS_CC cnr3_free(
     void *instanceData,
     VSCore *core,
@@ -442,15 +457,15 @@ static void VS_CC cnr3_free(
             vsapi->freeNode(d->node);
             d->node = nullptr;
         }
-
-        if (d->previous_output_frame != nullptr) {
-            vsapi->freeFrame(d->previous_output_frame);
-            d->previous_output_frame = nullptr;
-        }
-
+        
+        cnr3_cache_clear(d->cache, vsapi);
+        
         delete d;
     }
 }
+// -----------------------------------------------------------------------------
+// END CNR3 cache manager
+// -----------------------------------------------------------------------------
 
 static void replace_previous_output_frame(
     Cnr3Data *d,

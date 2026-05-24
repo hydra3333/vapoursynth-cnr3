@@ -184,12 +184,48 @@ struct Cnr3Data {
         The public parameters are 8-bit-domain values. These tables are built
         after those values have been scaled to the actual integer bit depth.
 
+        Important mode semantics:
+            'x' does not mean disabled.
+            'o' does not mean enabled.
+
+            'x' = narrow response curve.
+                  More sensitive to current-vs-previous differences.
+                  Blending will be reduced sooner as differences increase.
+                  This is safer but less aggressive.
+
+            'o' = wide response curve.
+                  Less sensitive to current-vs-previous differences.
+                  Blending remains allowed across a wider difference range.
+                  This gives stronger chroma stabilisation but has more risk
+                  of chroma lag, smearing, or ghosting around real motion.
+
+        Why the historical default mode="oxx" can still make sense:
+            Y uses the wider response, so luma structure does not block chroma
+            stabilisation too eagerly.
+
+            U and V use narrower responses, so actual chroma changes are
+            treated more conservatively.
+
+            This can give useful chroma shimmer reduction while reducing the
+            risk of dragging old chroma into genuinely changed areas.
+
         Table index:
-            absolute sample difference, from 0 to sample_peak.
+            signed sample difference plus table_offset.
+
+            Example:
+                signed_diff = current_sample - previous_sample
+                table_index = signed_diff + table_offset
 
         Table value:
-            0..256 weighting value.
+            0..sample_peak weighting value.
+
+        This matches the shape needed by the real vscnr2-style blend, where
+        Y and chroma table values are multiplied together before blending
+        previous filtered chroma with current source chroma.
     */
+    int table_offset = 256;
+    int table_size = 513;
+
     std::vector<int> table_y;
     std::vector<int> table_u;
     std::vector<int> table_v;

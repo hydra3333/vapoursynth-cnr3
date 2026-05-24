@@ -610,20 +610,19 @@ static const VSFrame *VS_CC cnr3_get_frame(
         */
 
         if (n != d->cache.next_needed) {
+            char error_message[256];
+
+            std::snprintf(
+                error_message,
+                sizeof(error_message),
+                "CNR3: recursive streaming mode currently requires strictly increasing frame requests. "
+                "requested=%d, next_needed=%d.",
+                n,
+                d->cache.next_needed
+            );
+
             vsapi->freeFrame(src);
-
-            if (d->cache.next_needed == 0) {
-                vsapi->setFilterError(
-                    "CNR3: recursive streaming mode currently requires the first requested frame to be frame 0.",
-                    frameCtx
-                );
-            } else {
-                vsapi->setFilterError(
-                    "CNR3: recursive streaming mode currently requires strictly increasing frame requests.",
-                    frameCtx
-                );
-            }
-
+            vsapi->setFilterError(error_message, frameCtx);
             return nullptr;
         }
 

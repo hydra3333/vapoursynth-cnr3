@@ -1163,6 +1163,13 @@ static void process_cnr3_chroma_plane_passthrough_u16(
             prevp += prev_stride;
         }
     }
+
+    cnr3_print_response_debug_stats(
+        d,
+        frame_number,
+        plane,
+        response_stats
+    );
 }
 
 static bool process_cnr3_chroma_plane(

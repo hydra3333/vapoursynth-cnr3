@@ -488,9 +488,6 @@ static void cnr3_cache_store_output_frame(
     */
     cache.next_needed = frame_number + 1;
 }
-// -----------------------------------------------------------------------------
-// END CNR3 cache manager
-// -----------------------------------------------------------------------------
 
 static const VSFrame *VS_CC cnr3_get_frame(
     int n,
@@ -529,21 +526,22 @@ static const VSFrame *VS_CC cnr3_get_frame(
             Later, this can be replaced by a seek-safe Policy C using recomputation
             or checkpoints.
         */
-        if (d->previous_output_frame_number == -1) {
-            if (n != 0) {
-                vsapi->freeFrame(src);
+
+        if (n != d->cache.next_needed) {
+            vsapi->freeFrame(src);
+
+            if (d->cache.next_needed == 0) {
                 vsapi->setFilterError(
                     "CNR3: recursive streaming mode currently requires the first requested frame to be frame 0.",
                     frameCtx
                 );
-                return nullptr;
+            } else {
+                vsapi->setFilterError(
+                    "CNR3: recursive streaming mode currently requires strictly increasing frame requests.",
+                    frameCtx
+                );
             }
-        } else if (n != d->previous_output_frame_number + 1) {
-            vsapi->freeFrame(src);
-            vsapi->setFilterError(
-                "CNR3: recursive streaming mode currently requires strictly increasing frame requests.",
-                frameCtx
-            );
+
             return nullptr;
         }
 
@@ -583,6 +581,9 @@ static const VSFrame *VS_CC cnr3_get_frame(
     }
     return nullptr;
 }
+// -----------------------------------------------------------------------------
+// END CNR3 cache manager
+// -----------------------------------------------------------------------------
 
 static void VS_CC cnr3_create(
     const VSMap *in,

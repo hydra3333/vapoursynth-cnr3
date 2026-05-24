@@ -680,7 +680,8 @@ static const VSFrame *VS_CC cnr3_get_frame(
                 error_message,
                 sizeof(error_message),
                 "CNR3: recursive streaming mode currently requires strictly increasing frame requests. "
-                "requested=%d, next_needed=%d, gap=%d, prev_output=%s.",
+                "instance=%d, requested=%d, next_needed=%d, gap=%d, prev_output=%s.",
+                d->instance_id,
                 requested_frame,
                 next_needed,
                 gap,

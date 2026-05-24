@@ -1122,7 +1122,10 @@ static bool process_cnr3_chroma_plane(
     */
     if (bytes_per_sample == 1) {
         process_cnr3_chroma_plane_passthrough_u8(
+            d,
+            frame_number,
             src,
+            prev_output,
             dst,
             plane,
             vsapi
@@ -1133,7 +1136,10 @@ static bool process_cnr3_chroma_plane(
 
     if (bytes_per_sample == 2) {
         process_cnr3_chroma_plane_passthrough_u16(
+            d,
+            frame_number,
             src,
+            prev_output,
             dst,
             plane,
             vsapi

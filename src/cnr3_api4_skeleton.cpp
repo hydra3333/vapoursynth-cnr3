@@ -590,7 +590,6 @@ static const VSFrame *VS_CC cnr3_get_frame(
     const VSAPI *vsapi
 ) {
     (void)frameData;
-    (void)core;
 
     Cnr3Data *d = static_cast<Cnr3Data *>(instanceData);
 

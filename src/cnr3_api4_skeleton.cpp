@@ -609,9 +609,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
         /*
             Initial recursive Policy A.
 
-            The real recursive algorithm uses previous_output_frame when producing
-            frame n. To keep behaviour deterministic during initial development,
-            require strictly increasing frame requests.
+            The real recursive algorithm uses d->cache.prev_output when producing frame n.
 
             Later, this can be replaced by a seek-safe Policy C using recomputation
             or checkpoints.

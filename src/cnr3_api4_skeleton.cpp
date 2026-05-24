@@ -885,7 +885,10 @@ static void process_cnr3_chroma_plane_passthrough_u8(
 }
 
 static void process_cnr3_chroma_plane_passthrough_u16(
+    const Cnr3Data *d,
+    int frame_number,
     const VSFrame *src,
+    const VSFrame *prev_output,
     VSFrame *dst,
     int plane,
     const VSAPI *vsapi
@@ -899,18 +902,49 @@ static void process_cnr3_chroma_plane_passthrough_u16(
         This is deliberately still pass-through:
             dst[x] = src[x]
 
-        Keep this separate from the 8-bit loop for now. The real blend will
-        need different sample types and arithmetic widths, and separate loops
-        make that easier to review and test.
+        Scaffold purpose:
+            prove the same current/previous read paths and signed table lookups
+            as the 8-bit path, while preserving high-bit-depth pass-through
+            output before real blending is connected.
     */
+    if (d == nullptr || src == nullptr || dst == nullptr || vsapi == nullptr) {
+        return;
+    }
+
     const uint8_t *srcp = vsapi->getReadPtr(src, plane);
     uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+
+    const uint8_t *prevp =
+        (frame_number > 0 && prev_output != nullptr) ?
+        vsapi->getReadPtr(prev_output, plane) :
+        nullptr;
+
+    const uint8_t *src_lumap = vsapi->getReadPtr(src, 0);
+
+    const uint8_t *prev_lumap =
+        (frame_number > 0 && prev_output != nullptr) ?
+        vsapi->getReadPtr(prev_output, 0) :
+        nullptr;
 
     const int src_stride = vsapi->getStride(src, plane);
     const int dst_stride = vsapi->getStride(dst, plane);
 
+    const int prev_stride =
+        (prev_output != nullptr) ? vsapi->getStride(prev_output, plane) : 0;
+
+    const int src_luma_stride = vsapi->getStride(src, 0);
+
+    const int prev_luma_stride =
+        (prev_output != nullptr) ? vsapi->getStride(prev_output, 0) : 0;
+
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
+
+    const int luma_width = vsapi->getFrameWidth(src, 0);
+    const int luma_height = vsapi->getFrameHeight(src, 0);
+
+    const std::vector<int> &chroma_table =
+        cnr3_get_table_for_chroma_plane(d, plane);
 
     for (int y = 0; y < plane_height; ++y) {
         const uint16_t *src_row =
@@ -919,14 +953,81 @@ static void process_cnr3_chroma_plane_passthrough_u16(
         uint16_t *dst_row =
             reinterpret_cast<uint16_t *>(dstp);
 
+        const uint16_t *prev_row =
+            (prevp != nullptr) ?
+            reinterpret_cast<const uint16_t *>(prevp) :
+            nullptr;
+
+        const int luma_y =
+            cnr3_get_chroma_to_luma_y(d, y, luma_height);
+
+        const uint16_t *src_luma_row =
+            reinterpret_cast<const uint16_t *>(
+                src_lumap + luma_y * src_luma_stride
+            );
+
+        const uint16_t *prev_luma_row =
+            (prev_lumap != nullptr) ?
+            reinterpret_cast<const uint16_t *>(
+                prev_lumap + luma_y * prev_luma_stride
+            ) :
+            nullptr;
+
         for (int x = 0; x < plane_width; ++x) {
             const uint16_t current_chroma = src_row[x];
+
+            int y_response = d->sample_peak;
+            int chroma_response = d->sample_peak;
+
+            if (prev_row != nullptr && prev_luma_row != nullptr) {
+                const uint16_t previous_chroma = prev_row[x];
+
+                const int chroma_signed_diff =
+                    static_cast<int>(current_chroma) -
+                    static_cast<int>(previous_chroma);
+
+                chroma_response = get_cnr3_table_value_for_signed_diff(
+                    chroma_table,
+                    d->table_offset,
+                    chroma_signed_diff
+                );
+
+                const int luma_x =
+                    cnr3_get_chroma_to_luma_x(d, x, luma_width);
+
+                const uint16_t current_luma = src_luma_row[luma_x];
+                const uint16_t previous_luma = prev_luma_row[luma_x];
+
+                const int y_signed_diff =
+                    static_cast<int>(current_luma) -
+                    static_cast<int>(previous_luma);
+
+                y_response = get_cnr3_table_value_for_signed_diff(
+                    d->table_y,
+                    d->table_offset,
+                    y_signed_diff
+                );
+            }
+
+            /*
+                Keep these calculated values alive and explicit even though the
+                scaffold still writes pass-through output.
+
+                The next stage will use them to form the actual recursive
+                blend weight.
+            */
+            (void)y_response;
+            (void)chroma_response;
 
             dst_row[x] = current_chroma;
         }
 
         srcp += src_stride;
         dstp += dst_stride;
+
+        if (prevp != nullptr) {
+            prevp += prev_stride;
+        }
     }
 }
 

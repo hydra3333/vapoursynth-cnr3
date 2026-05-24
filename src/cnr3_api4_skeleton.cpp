@@ -730,6 +730,39 @@ static void VS_CC cnr3_create(
     local.scene_chroma = get_optional_int(in, vsapi, "scene_chroma", 0) != 0;
     local.debug = get_optional_int(in, vsapi, "debug", 0) != 0;
 
+    if (local.mode.size() != 3) {
+        vsapi->freeNode(local.node);
+        vsapi->mapSetError(out, "CNR3: mode must be a 3-character string, for example \"oxx\".");
+        return;
+    }
+
+    for (const char c : local.mode) {
+        if (c != 'o' && c != 'x') {
+            vsapi->freeNode(local.node);
+            vsapi->mapSetError(out, "CNR3: mode may contain only 'o' and 'x' characters.");
+            return;
+        }
+    }
+
+    if (
+        local.ln < 0 ||
+        local.lm < 0 ||
+        local.un < 0 ||
+        local.um < 0 ||
+        local.vn < 0 ||
+        local.vm < 0
+    ) {
+        vsapi->freeNode(local.node);
+        vsapi->mapSetError(out, "CNR3: threshold parameters must be non-negative.");
+        return;
+    }
+
+    if (local.scdthr < 0.0) {
+        vsapi->freeNode(local.node);
+        vsapi->mapSetError(out, "CNR3: scdthr must be non-negative.");
+        return;
+    }
+   
     local.bits_per_sample = local.vi->format.bitsPerSample;
     local.sample_peak = (1 << local.bits_per_sample) - 1;
 
@@ -806,39 +839,6 @@ static void VS_CC cnr3_create(
             local.vm_scaled,
             local.table_v[static_cast<size_t>(local.vm_scaled)]
         );
-    }
-
-    if (local.mode.size() != 3) {
-        vsapi->freeNode(local.node);
-        vsapi->mapSetError(out, "CNR3: mode must be a 3-character string, for example \"oxx\".");
-        return;
-    }
-
-    for (const char c : local.mode) {
-        if (c != 'o' && c != 'x') {
-            vsapi->freeNode(local.node);
-            vsapi->mapSetError(out, "CNR3: mode may contain only 'o' and 'x' characters.");
-            return;
-        }
-    }
-
-    if (
-        local.ln < 0 ||
-        local.lm < 0 ||
-        local.un < 0 ||
-        local.um < 0 ||
-        local.vn < 0 ||
-        local.vm < 0
-    ) {
-        vsapi->freeNode(local.node);
-        vsapi->mapSetError(out, "CNR3: threshold parameters must be non-negative.");
-        return;
-    }
-
-    if (local.scdthr < 0.0) {
-        vsapi->freeNode(local.node);
-        vsapi->mapSetError(out, "CNR3: scdthr must be non-negative.");
-        return;
     }
 
     Cnr3Data *data = new Cnr3Data(local);

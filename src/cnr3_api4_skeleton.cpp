@@ -617,31 +617,35 @@ static bool process_cnr3_frame_passthrough_for_now(
     const VSAPI *vsapi
 ) {
     /*
-        Temporary processing function.
+        Temporary frame-processing function.
 
         Current behaviour:
             copy Y/U/V unchanged.
 
         Purpose:
-            establish the stable call site where the real recursive CNR3
+            establish the stable structure where the real recursive CNR3
             chroma processing will be inserted.
+
+        Processing structure:
+            Y:
+                copied unchanged, because CNR3 is a chroma stabiliser.
+
+            U/V:
+                routed through separate chroma-plane processing calls.
 
         Recursive precondition:
             frame 0 does not need a previous output frame.
 
             frame N > 0 must have d->cache.prev_output available, because the
             real algorithm will use output[N - 1] when producing output[N].
-
-        Future behaviour:
-            frame 0:
-                copy unchanged and initialise recursive state.
-
-            frame N > 0:
-                use d->cache.prev_output as output[N - 1], then create
-                output[N] from source[N] and the previous filtered output.
     */
     if (d == nullptr) {
         vsapi->setFilterError("CNR3: internal error: filter data is null.", frameCtx);
+        return false;
+    }
+
+    if (src == nullptr || dst == nullptr) {
+        vsapi->setFilterError("CNR3: internal error: source or destination frame is null.", frameCtx);
         return false;
     }
 
@@ -650,6 +654,8 @@ static bool process_cnr3_frame_passthrough_for_now(
         return false;
     }
 
+    const VSFrame *prev_output = d->cache.prev_output;
+
     if (frame_number == 0) {
         cnr3_debug_printf(
             d->debug,
@@ -657,7 +663,7 @@ static bool process_cnr3_frame_passthrough_for_now(
             d->instance_id
         );
     } else {
-        if (d->cache.prev_output == nullptr) {
+        if (prev_output == nullptr) {
             cnr3_debug_printf(
                 d->debug,
                 "CNR3 debug: instance=%d, missing previous output for recursive frame=%d.\n",
@@ -682,12 +688,42 @@ static bool process_cnr3_frame_passthrough_for_now(
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
 
-    copy_all_planes_unchanged(
+    /*
+        CNR3 is chroma-focused. Luma is copied unchanged.
+    */
+    copy_plane_bytes(
         src,
         dst,
+        0,
         bytes_per_sample,
         vsapi
     );
+
+    if (!process_cnr3_chroma_plane_passthrough_for_now(
+        d,
+        frame_number,
+        1,
+        src,
+        prev_output,
+        dst,
+        vsapi
+    )) {
+        vsapi->setFilterError("CNR3: internal error while processing U plane.", frameCtx);
+        return false;
+    }
+
+    if (!process_cnr3_chroma_plane_passthrough_for_now(
+        d,
+        frame_number,
+        2,
+        src,
+        prev_output,
+        dst,
+        vsapi
+    )) {
+        vsapi->setFilterError("CNR3: internal error while processing V plane.", frameCtx);
+        return false;
+    }
 
     return true;
 }

@@ -13,11 +13,40 @@
 #include <cstring>
 #include <string>
 #include <cstdio>
+#include <cstdarg>
 #include <cmath>
 #include <vector>
 
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
+
+// -----------------------------------------------------------------------------
+// HELPER functions
+// -----------------------------------------------------------------------------
+static void cnr3_debug_printf(
+    bool debug_enabled,
+    const char *format,
+    ...
+) {
+    /*
+        CNR3 diagnostic convention:
+            - never write plugin diagnostics to stdout
+            - debug/status output goes to stderr
+            - VapourSynth user-facing errors use mapSetError/setFilterError
+
+        stdout may be used by vspipe for video/data output, so plugin code
+        must not write anything there.
+    */
+    if (!debug_enabled) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, format);
+    std::vfprintf(stderr, format, args);
+    va_end(args);
+}
+// -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager

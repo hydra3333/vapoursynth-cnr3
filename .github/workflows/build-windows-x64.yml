@@ -21,8 +21,8 @@ jobs:
         shell: pwsh
         run: |
           $patterns = @(
-            'VapourSynth\.h',
-            'VSHelper\.h',
+            '#include\s+[<"]VapourSynth\.h[>"]',
+            '#include\s+[<"]VSHelper\.h[>"]',
             'VSNodeRef',
             'VSFrameRef',
             'VSFuncRef',

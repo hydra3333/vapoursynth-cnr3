@@ -549,11 +549,12 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
-static void process_cnr3_frame_passthrough_for_now(
+static bool process_cnr3_frame_passthrough_for_now(
     const Cnr3Data *d,
     int frame_number,
     const VSFrame *src,
     VSFrame *dst,
+    VSFrameContext *frameCtx,
     const VSAPI *vsapi
 ) {
     /*
@@ -566,20 +567,37 @@ static void process_cnr3_frame_passthrough_for_now(
             establish the stable call site where the real recursive CNR3
             chroma processing will be inserted.
 
-        Intended future behaviour:
+        Recursive precondition:
+            frame 0 does not need a previous output frame.
+
+            frame N > 0 must have d->cache.prev_output available, because the
+            real algorithm will use output[N - 1] when producing output[N].
+
+        Future behaviour:
             frame 0:
                 copy unchanged and initialise recursive state.
 
             frame N > 0:
                 use d->cache.prev_output as output[N - 1], then create
                 output[N] from source[N] and the previous filtered output.
-
-        frame_number is intentionally passed now even though the current
-        pass-through implementation does not yet need it. It will be useful for
-        diagnostics and scene/reset handling when the actual recursive chroma
-        algorithm is connected.
     */
-    (void)frame_number;
+    if (d == nullptr) {
+        vsapi->setFilterError("CNR3: internal error: filter data is null.", frameCtx);
+        return false;
+    }
+
+    if (frame_number < 0) {
+        vsapi->setFilterError("CNR3: internal error: negative frame number.", frameCtx);
+        return false;
+    }
+
+    if (frame_number > 0 && d->cache.prev_output == nullptr) {
+        vsapi->setFilterError(
+            "CNR3: internal error: previous output frame is missing for recursive processing.",
+            frameCtx
+        );
+        return false;
+    }
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
 
@@ -589,6 +607,8 @@ static void process_cnr3_frame_passthrough_for_now(
         bytes_per_sample,
         vsapi
     );
+
+    return true;
 }
 
 // -----------------------------------------------------------------------------

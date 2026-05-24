@@ -742,6 +742,121 @@ static const std::vector<int> &cnr3_get_table_for_chroma_plane(
     return (plane == 1) ? d->table_u : d->table_v;
 }
 
+struct Cnr3ResponseDebugStats {
+    /*
+        Compact per-frame, per-plane diagnostic counters.
+
+        These counters do not affect output pixels. They are a scaffold step
+        toward the real recursive blend.
+
+        The goal is to answer:
+            - are the Y response tables allowing any future blend?
+            - are the U/V response tables allowing any future blend?
+            - are both responses non-zero at the same chroma sample?
+
+        A future Cnr2-style blend will only be useful where the combined
+        response is non-zero.
+    */
+    uint64_t evaluated_samples = 0;
+    uint64_t y_nonzero_samples = 0;
+    uint64_t chroma_nonzero_samples = 0;
+    uint64_t combined_nonzero_samples = 0;
+
+    uint64_t y_response_sum = 0;
+    uint64_t chroma_response_sum = 0;
+};
+
+static void cnr3_update_response_debug_stats(
+    Cnr3ResponseDebugStats &stats,
+    int y_response,
+    int chroma_response
+) {
+    ++stats.evaluated_samples;
+
+    if (y_response > 0) {
+        ++stats.y_nonzero_samples;
+    }
+
+    if (chroma_response > 0) {
+        ++stats.chroma_nonzero_samples;
+    }
+
+    if (y_response > 0 && chroma_response > 0) {
+        ++stats.combined_nonzero_samples;
+    }
+
+    stats.y_response_sum += static_cast<uint64_t>(y_response);
+    stats.chroma_response_sum += static_cast<uint64_t>(chroma_response);
+}
+
+static void cnr3_print_response_debug_stats(
+    const Cnr3Data *d,
+    int frame_number,
+    int plane,
+    const Cnr3ResponseDebugStats &stats
+) {
+    /*
+        Print one compact diagnostic line per frame and chroma plane.
+
+        This intentionally avoids per-pixel logging. Per-pixel logging would be
+        unusable with vspipe and would also obscure the scheduling/cache logs.
+    */
+    if (d == nullptr || !d->debug) {
+        return;
+    }
+
+    const char plane_name = (plane == 1) ? 'U' : 'V';
+
+    if (stats.evaluated_samples == 0) {
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, frame=%d, plane=%c, response stats: no previous output available.\n",
+            d->instance_id,
+            frame_number,
+            plane_name
+        );
+
+        return;
+    }
+
+    const double evaluated =
+        static_cast<double>(stats.evaluated_samples);
+
+    const double y_avg =
+        static_cast<double>(stats.y_response_sum) / evaluated;
+
+    const double chroma_avg =
+        static_cast<double>(stats.chroma_response_sum) / evaluated;
+
+    const double y_nonzero_percent =
+        100.0 * static_cast<double>(stats.y_nonzero_samples) / evaluated;
+
+    const double chroma_nonzero_percent =
+        100.0 * static_cast<double>(stats.chroma_nonzero_samples) / evaluated;
+
+    const double combined_nonzero_percent =
+        100.0 * static_cast<double>(stats.combined_nonzero_samples) / evaluated;
+
+    cnr3_debug_printf(
+        d->debug,
+        "CNR3 debug: instance=%d, frame=%d, plane=%c, response stats: "
+        "samples=%llu, y_nonzero=%llu/%.2f%%, chroma_nonzero=%llu/%.2f%%, "
+        "combined_nonzero=%llu/%.2f%%, y_avg=%.2f, chroma_avg=%.2f\n",
+        d->instance_id,
+        frame_number,
+        plane_name,
+        static_cast<unsigned long long>(stats.evaluated_samples),
+        static_cast<unsigned long long>(stats.y_nonzero_samples),
+        y_nonzero_percent,
+        static_cast<unsigned long long>(stats.chroma_nonzero_samples),
+        chroma_nonzero_percent,
+        static_cast<unsigned long long>(stats.combined_nonzero_samples),
+        combined_nonzero_percent,
+        y_avg,
+        chroma_avg
+    );
+}
+
 static void process_cnr3_chroma_plane_passthrough_u8(
     const Cnr3Data *d,
     int frame_number,

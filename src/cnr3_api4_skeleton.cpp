@@ -28,10 +28,12 @@
 // -----------------------------------------------------------------------------
 // HELPER functions
 // -----------------------------------------------------------------------------
-static void cnr3_debug_printf(
-    bool debug_enabled,
+// -----------------------------------------------------------------------------
+// Helper functions - diagnostics
+// -----------------------------------------------------------------------------
+static void cnr3_vfprintf_stderr(
     const char *format,
-    ...
+    va_list args
 ) {
     /*
         CNR3 diagnostic convention:
@@ -41,16 +43,70 @@ static void cnr3_debug_printf(
 
         stdout may be used by vspipe for video/data output, so plugin code
         must not write anything there.
+
+        This helper receives an already-started va_list from a printf-style
+        wrapper function and writes the formatted message to stderr.
     */
-    if (!debug_enabled) {
+    if (format == nullptr) {
+        return;
+    }
+
+    std::vfprintf(stderr, format, args);
+    std::fflush(stderr);
+}
+
+static void cnr3_debug_printf(
+    bool debug_enabled,
+    const char *format,
+    ...
+) {
+    /*
+        This is a small printf-style helper.
+
+        The "..." is the C/C++ varargs syntax. It allows calls such as:
+
+            cnr3_debug_printf(debug, "frame=%d value=%d\n", n, value);
+
+        The named arguments are:
+            debug_enabled
+            format
+
+        Everything after format is captured by va_start() into args and passed
+        to std::vfprintf().
+
+        Use this only for CNR3 diagnostics. Do not use stdout.
+    */
+    if (!debug_enabled || format == nullptr) {
         return;
     }
 
     va_list args;
     va_start(args, format);
-    std::vfprintf(stderr, format, args);
+    cnr3_vfprintf_stderr(format, args);
     va_end(args);
 }
+
+static void cnr3_stderr_printf(
+    const char *format,
+    ...
+) {
+    /*
+        Unconditional printf-style stderr helper.
+
+        Use this only for rare non-debug diagnostics that should always be
+        visible. Normal user-facing VapourSynth errors should still use
+        mapSetError() or setFilterError().
+    */
+    if (format == nullptr) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, format);
+    cnr3_vfprintf_stderr(format, args);
+    va_end(args);
+}
+// -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------

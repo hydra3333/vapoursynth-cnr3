@@ -689,8 +689,8 @@ static void VS_CC cnr3_create(
         const int u_mid = (local.un_scaled + local.um_scaled) / 2;
         const int v_mid = (local.vn_scaled + local.vm_scaled) / 2;
 
-        std::fprintf(
-            stderr,
+        cnr3_debug_printf(
+            local.debug,
             "CNR3 debug: format=%d-bit YUV, peak=%d, "
             "ln=%d->%d, lm=%d->%d, "
             "un=%d->%d, um=%d->%d, "

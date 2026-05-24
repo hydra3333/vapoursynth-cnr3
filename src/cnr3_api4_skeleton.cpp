@@ -591,12 +591,34 @@ static bool process_cnr3_frame_passthrough_for_now(
         return false;
     }
 
-    if (frame_number > 0 && d->cache.prev_output == nullptr) {
-        vsapi->setFilterError(
-            "CNR3: internal error: previous output frame is missing for recursive processing.",
-            frameCtx
+    if (frame_number == 0) {
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, processing frame 0 using initial-copy path.\n",
+            d->instance_id
         );
-        return false;
+    } else {
+        if (d->cache.prev_output == nullptr) {
+            cnr3_debug_printf(
+                d->debug,
+                "CNR3 debug: instance=%d, missing previous output for recursive frame=%d.\n",
+                d->instance_id,
+                frame_number
+            );
+
+            vsapi->setFilterError(
+                "CNR3: internal error: previous output frame is missing for recursive processing.",
+                frameCtx
+            );
+            return false;
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, processing frame=%d using recursive previous-output path.\n",
+            d->instance_id,
+            frame_number
+        );
     }
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;

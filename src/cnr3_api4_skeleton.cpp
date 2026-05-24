@@ -626,11 +626,19 @@ static const VSFrame *VS_CC cnr3_get_frame(
     Cnr3Data *d = static_cast<Cnr3Data *>(instanceData);
 
     if (activationReason == arInitial) {
+        /*
+            Normally too noisy for routine debugging.
+
+            Enable temporarily only when investigating VapourSynth scheduling
+            or unexpected frame request order.
+        */
+        /*
         cnr3_debug_print_cache_state(
             d,
             "arInitial/request source frame",
             n
         );
+        */
 
         vsapi->requestFrameFilter(n, d->node, frameCtx);
         return nullptr;

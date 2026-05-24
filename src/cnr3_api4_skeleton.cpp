@@ -102,16 +102,12 @@ struct Cnr3Data {
     bool scene_chroma = false;
 
     /*
-        Recursive streaming state.
+        Frame ordering and recursive-state manager.
 
-        Initial Policy A:
-            CNR3 recursive mode requires strictly increasing frame requests:
-                0, 1, 2, 3, ...
-
-        Later Policy C may add seek-safe recomputation or checkpoints.
+        Currently this implements only strict streaming Policy A.
+        The struct shape deliberately leaves room for the future cache manager.
     */
-    VSFrame *previous_output_frame = nullptr;
-    int previous_output_frame_number = -1;
+    Cnr3CacheManager cache;
 
     bool debug = false;
 };

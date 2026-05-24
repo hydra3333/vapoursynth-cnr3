@@ -855,7 +855,7 @@ static void VS_CC cnr3_create(
 
         cnr3_debug_printf(
             local.debug,
-            "CNR3 debug: format=%d-bit YUV, peak=%d, "
+            "CNR3 debug: instance=%d, format=%d-bit YUV, peak=%d, "
             "ln=%d->%d, lm=%d->%d, "
             "un=%d->%d, um=%d->%d, "
             "vn=%d->%d, vm=%d->%d, "

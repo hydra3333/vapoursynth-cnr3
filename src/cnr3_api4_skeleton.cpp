@@ -130,7 +130,7 @@ struct Cnr3CacheManager {
             recovery state
             seek mode
     */
-    VSFrame *prev_output = nullptr;
+    const VSFrame *prev_output = nullptr;
     int next_needed = 0;
 };
 // -----------------------------------------------------------------------------

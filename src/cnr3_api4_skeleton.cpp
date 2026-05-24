@@ -1311,13 +1311,14 @@ static void VS_CC cnr3_create(
     }
 
     if (local.debug) {
-        const int y_mid = (local.ln_scaled + local.lm_scaled) / 2;
-        const int u_mid = (local.un_scaled + local.um_scaled) / 2;
-        const int v_mid = (local.vn_scaled + local.vm_scaled) / 2;
+        const int y_mid = local.ln_scaled / 2;
+        const int u_mid = local.un_scaled / 2;
+        const int v_mid = local.vn_scaled / 2;
 
         cnr3_debug_printf(
             local.debug,
             "CNR3 debug: instance=%d, format=%d-bit YUV, peak=%d, "
+            "table_offset=%d, table_size=%d, "
             "ln=%d->%d, lm=%d->%d, "
             "un=%d->%d, um=%d->%d, "
             "vn=%d->%d, vm=%d->%d, "
@@ -1325,6 +1326,8 @@ static void VS_CC cnr3_create(
             local.instance_id,
             local.bits_per_sample,
             local.sample_peak,
+            local.table_offset,
+            local.table_size,
             local.ln,
             local.ln_scaled,
             local.lm,

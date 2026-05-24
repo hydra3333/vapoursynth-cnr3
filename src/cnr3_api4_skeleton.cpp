@@ -1902,9 +1902,9 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(
     const VSPLUGINAPI *vspapi
 ) {
     vspapi->configPlugin(
-        "com.walshdcw.cnr3",
+        "org.vapoursynth.cnr3",
         "cnr3",
-        "CNR3 experimental recursive chroma stabiliser",
+        "CNR3 recursive chroma stabiliser",
         VS_MAKE_VERSION(0, 1),
         VAPOURSYNTH_API_VERSION,
         0,

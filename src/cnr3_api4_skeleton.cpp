@@ -6,6 +6,11 @@
     loadable VapourSynth plugin DLL before the recursive CNR3 algorithm is
     connected.
 
+    Diagnostic output rule:
+        CNR3 must never write diagnostics to stdout.
+        Debug/status messages must go to stderr.
+        VapourSynth errors must use mapSetError() or setFilterError().
+
     SPDX-License-Identifier: AGPL-3.0-or-later
 */
 

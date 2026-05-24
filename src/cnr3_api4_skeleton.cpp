@@ -463,19 +463,16 @@ static void VS_CC cnr3_free(
         delete d;
     }
 }
-// -----------------------------------------------------------------------------
-// END CNR3 cache manager
-// -----------------------------------------------------------------------------
 
-static void replace_previous_output_frame(
-    Cnr3Data *d,
-    const VSFrame *new_previous_frame,
+static void cnr3_cache_store_output_frame(
+    Cnr3CacheManager &cache,
+    const VSFrame *output_frame,
     int frame_number,
     const VSAPI *vsapi
 ) {
-    if (d->previous_output_frame != nullptr) {
-        vsapi->freeFrame(d->previous_output_frame);
-        d->previous_output_frame = nullptr;
+    if (cache.prev_output != nullptr) {
+        vsapi->freeFrame(cache.prev_output);
+        cache.prev_output = nullptr;
     }
 
     /*
@@ -483,9 +480,17 @@ static void replace_previous_output_frame(
         pixel data. That is fine here because VapourSynth frames are immutable
         after being returned.
     */
-    d->previous_output_frame = vsapi->cloneFrame(new_previous_frame);
-    d->previous_output_frame_number = frame_number;
+    cache.prev_output = vsapi->cloneFrame(output_frame);
+
+    /*
+        In strict streaming mode, after output frame N has been produced,
+        the next frame we can correctly accept is N + 1.
+    */
+    cache.next_needed = frame_number + 1;
 }
+// -----------------------------------------------------------------------------
+// END CNR3 cache manager
+// -----------------------------------------------------------------------------
 
 static const VSFrame *VS_CC cnr3_get_frame(
     int n,

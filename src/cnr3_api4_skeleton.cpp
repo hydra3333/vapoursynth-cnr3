@@ -152,7 +152,7 @@ struct Cnr3Data {
     VSNode *node = nullptr;
     const VSVideoInfo *vi = nullptr;
 
-    // ise an ID identify and track instances
+    // an ID identify and track instances
     int instance_id = 0;
 
     std::string mode = "oxx";
@@ -756,6 +756,9 @@ static void VS_CC cnr3_create(
     (void)userData;
 
     Cnr3Data local;
+
+    // an ID to identify and track instances
+    local.instance_id = g_cnr3_next_instance_id.fetch_add(1);
 
     int err = 0;
     local.node = vsapi->mapGetNode(in, "clip", 0, &err);

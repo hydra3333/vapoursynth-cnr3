@@ -549,6 +549,65 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
+static bool process_cnr3_chroma_plane_passthrough_for_now(
+    const Cnr3Data *d,
+    int frame_number,
+    int plane,
+    const VSFrame *src,
+    const VSFrame *prev_output,
+    VSFrame *dst,
+    const VSAPI *vsapi
+) {
+    /*
+        Temporary chroma-plane processing function.
+
+        Current behaviour:
+            copy the requested chroma plane unchanged.
+
+        Purpose:
+            establish the stable call site where the real recursive CNR3
+            chroma stabilisation will be inserted.
+
+        Future behaviour:
+            for each chroma sample in source frame N:
+                read current source chroma from source[N]
+                read previous filtered chroma from output[N - 1]
+                use Y/U/V guard tables to decide blend strength
+                write stabilised chroma to output[N]
+
+        prev_output is intentionally passed now even though this temporary
+        pass-through implementation does not read from it yet. It will become
+        the previous filtered frame used by the real recursive algorithm.
+
+        Plane convention:
+            plane 1 = U
+            plane 2 = V
+    */
+    if (d == nullptr || src == nullptr || dst == nullptr || vsapi == nullptr) {
+        return false;
+    }
+
+    if (plane != 1 && plane != 2) {
+        return false;
+    }
+
+    if (frame_number > 0 && prev_output == nullptr) {
+        return false;
+    }
+
+    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
+
+    copy_plane_bytes(
+        src,
+        dst,
+        plane,
+        bytes_per_sample,
+        vsapi
+    );
+
+    return true;
+}
+
 static bool process_cnr3_frame_passthrough_for_now(
     const Cnr3Data *d,
     int frame_number,

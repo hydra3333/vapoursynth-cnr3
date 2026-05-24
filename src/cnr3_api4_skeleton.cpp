@@ -574,11 +574,11 @@ static void process_cnr3_frame_passthrough_for_now(
                 use d->cache.prev_output as output[N - 1], then create
                 output[N] from source[N] and the previous filtered output.
 
-        d and frame_number are intentionally passed now even though the current
-        pass-through implementation does not yet need them. They will be needed
-        when the actual recursive chroma algorithm is connected.
+        frame_number is intentionally passed now even though the current
+        pass-through implementation does not yet need it. It will be useful for
+        diagnostics and scene/reset handling when the actual recursive chroma
+        algorithm is connected.
     */
-    (void)d;
     (void)frame_number;
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;

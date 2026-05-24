@@ -695,7 +695,8 @@ static const VSFrame *VS_CC cnr3_get_frame(
 
         cnr3_debug_printf(
             d->debug,
-            "CNR3 debug: in-order frame accepted: requested=%d, next_needed=%d, prev_output=%s\n",
+            "CNR3 debug: instance=%d, in-order frame accepted: requested=%d, next_needed=%d, prev_output=%s\n",
+            d->instance_id,
             n,
             d->cache.next_needed,
             d->cache.prev_output != nullptr ? "yes" : "no"

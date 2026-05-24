@@ -545,11 +545,13 @@ static void cnr3_cache_store_output_frame(
     }
 
     /*
-        cloneFrame() keeps a reference to the frame. It does not deep-copy
-        pixel data. That is fine here because VapourSynth frames are immutable
-        after being returned.
+        addFrameRef() keeps an additional reference to the frame. It does not
+        deep-copy pixel data. That is fine here because VapourSynth frames are
+        immutable after being returned.
+
+        The stored reference must later be released with freeFrame().
     */
-    cache.prev_output = vsapi->cloneFrame(output_frame);
+    cache.prev_output = vsapi->addFrameRef(output_frame);
 
     /*
         In strict streaming mode, after output frame N has been produced,

@@ -549,6 +549,97 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
+static void process_cnr3_chroma_plane_passthrough_u8(
+    const VSFrame *src,
+    VSFrame *dst,
+    int plane,
+    const VSAPI *vsapi
+) {
+    /*
+        Temporary per-sample chroma loop for 8-bit integer clips.
+
+        This is deliberately still pass-through:
+            dst[x] = src[x]
+
+        Purpose:
+            prove the per-pixel addressing, width, height, and stride logic
+            before connecting the recursive CNR3 blend.
+
+        Do not optimise this back into memcpy while algorithm development is
+        in progress. The next stages need this loop body as the stable place to
+        read current chroma, read previous filtered chroma, compute guard
+        weights, and write stabilised chroma.
+    */
+    const uint8_t *srcp = vsapi->getReadPtr(src, plane);
+    uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+
+    const int src_stride = vsapi->getStride(src, plane);
+    const int dst_stride = vsapi->getStride(dst, plane);
+
+    const int plane_width = vsapi->getFrameWidth(src, plane);
+    const int plane_height = vsapi->getFrameHeight(src, plane);
+
+    for (int y = 0; y < plane_height; ++y) {
+        const uint8_t *src_row = srcp;
+        uint8_t *dst_row = dstp;
+
+        for (int x = 0; x < plane_width; ++x) {
+            const uint8_t current_chroma = src_row[x];
+
+            dst_row[x] = current_chroma;
+        }
+
+        srcp += src_stride;
+        dstp += dst_stride;
+    }
+}
+
+static void process_cnr3_chroma_plane_passthrough_u16(
+    const VSFrame *src,
+    VSFrame *dst,
+    int plane,
+    const VSAPI *vsapi
+) {
+    /*
+        Temporary per-sample chroma loop for 10/12/16-bit integer clips.
+
+        VapourSynth stores integer formats above 8-bit in 16-bit samples, so
+        this path handles all currently accepted high-bit-depth inputs.
+
+        This is deliberately still pass-through:
+            dst[x] = src[x]
+
+        Keep this separate from the 8-bit loop for now. The real blend will
+        need different sample types and arithmetic widths, and separate loops
+        make that easier to review and test.
+    */
+    const uint8_t *srcp = vsapi->getReadPtr(src, plane);
+    uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+
+    const int src_stride = vsapi->getStride(src, plane);
+    const int dst_stride = vsapi->getStride(dst, plane);
+
+    const int plane_width = vsapi->getFrameWidth(src, plane);
+    const int plane_height = vsapi->getFrameHeight(src, plane);
+
+    for (int y = 0; y < plane_height; ++y) {
+        const uint16_t *src_row =
+            reinterpret_cast<const uint16_t *>(srcp);
+
+        uint16_t *dst_row =
+            reinterpret_cast<uint16_t *>(dstp);
+
+        for (int x = 0; x < plane_width; ++x) {
+            const uint16_t current_chroma = src_row[x];
+
+            dst_row[x] = current_chroma;
+        }
+
+        srcp += src_stride;
+        dstp += dst_stride;
+    }
+}
+
 static bool process_cnr3_chroma_plane(
     const Cnr3Data *d,
     int frame_number,

@@ -205,12 +205,16 @@ static void cnr3_debug_print_cache_state(
         return;
     }
 
+    const int next_needed = d->cache.next_needed;
+    const int gap = requested_frame - next_needed;
+
     cnr3_debug_printf(
         d->debug,
-        "CNR3 debug: %s: requested=%d, next_needed=%d, prev_output=%s\n",
+        "CNR3 debug: %s: requested=%d, next_needed=%d, gap=%d, prev_output=%s\n",
         where,
         requested_frame,
-        d->cache.next_needed,
+        next_needed,
+        gap,
         d->cache.prev_output != nullptr ? "yes" : "no"
     );
 }

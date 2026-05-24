@@ -559,23 +559,27 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
     const VSAPI *vsapi
 ) {
     /*
-        Temporary chroma-plane recursive-read proof.
+        Temporary chroma-plane pass-through function.
 
-        Current test behaviour:
-            frame 0:
-                copy the requested chroma plane from source frame 0.
-
-            frame N > 0:
-                copy the requested chroma plane from output[N - 1], which is
-                stored in prev_output.
+        Current behaviour:
+            copy the requested chroma plane from the current source frame.
 
         Purpose:
-            prove that the recursive previous-output frame is valid and can be
-            read safely before implementing the real weighted chroma blend.
+            confirm that the split frame-processing structure still produces
+            visually identical output before the real recursive chroma blend is
+            added.
 
-        Expected visual effect:
-            luma remains current because the frame-level function copies Y from
-            source[N], but chroma lags by one processed frame.
+        Important note:
+            Do not copy chroma from prev_output here as a proof test. Since
+            prev_output is the previous filtered output, copying U/V from it
+            recursively causes chroma to remain effectively stuck at frame 0:
+
+                output[1].UV = output[0].UV
+                output[2].UV = output[1].UV
+                output[3].UV = output[2].UV
+
+            That is useful as a crude proof that prev_output is readable, but it
+            is not a simple one-frame lag and it badly distorts colour.
 
         Future behaviour:
             for each chroma sample in source frame N:
@@ -596,26 +600,19 @@ static bool process_cnr3_chroma_plane_passthrough_for_now(
         return false;
     }
 
-    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
-
-    if (frame_number == 0) {
-        copy_plane_bytes(
-            src,
-            dst,
-            plane,
-            bytes_per_sample,
-            vsapi
-        );
-
-        return true;
-    }
-
-    if (prev_output == nullptr) {
+    /*
+        Keep this validation even though pass-through does not read prev_output.
+        The real recursive algorithm will need it, and the frame-level function
+        has already established this as part of the recursive precondition.
+    */
+    if (frame_number > 0 && prev_output == nullptr) {
         return false;
     }
 
+    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
+
     copy_plane_bytes(
-        prev_output,
+        src,
         dst,
         plane,
         bytes_per_sample,

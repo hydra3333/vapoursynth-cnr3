@@ -646,21 +646,44 @@ static const VSFrame *VS_CC cnr3_get_frame(
         */
 
         if (n != d->cache.next_needed) {
-            char error_message[256];
+            const int requested_frame = n;
+            const int next_needed = d->cache.next_needed;
+            const int gap = requested_frame - next_needed;
+
+            cnr3_debug_printf(
+                d->debug,
+                "CNR3 debug: out-of-order frame request: requested=%d, next_needed=%d, gap=%d, prev_output=%s\n",
+                requested_frame,
+                next_needed,
+                gap,
+                d->cache.prev_output != nullptr ? "yes" : "no"
+            );
+
+            char error_message[384];
 
             std::snprintf(
                 error_message,
                 sizeof(error_message),
                 "CNR3: recursive streaming mode currently requires strictly increasing frame requests. "
-                "requested=%d, next_needed=%d.",
-                n,
-                d->cache.next_needed
+                "requested=%d, next_needed=%d, gap=%d, prev_output=%s.",
+                requested_frame,
+                next_needed,
+                gap,
+                d->cache.prev_output != nullptr ? "yes" : "no"
             );
 
             vsapi->freeFrame(src);
             vsapi->setFilterError(error_message, frameCtx);
             return nullptr;
         }
+
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: in-order frame accepted: requested=%d, next_needed=%d, prev_output=%s\n",
+            n,
+            d->cache.next_needed,
+            d->cache.prev_output != nullptr ? "yes" : "no"
+        );
 
         VSFrame *dst = vsapi->newVideoFrame(
             &d->vi->format,

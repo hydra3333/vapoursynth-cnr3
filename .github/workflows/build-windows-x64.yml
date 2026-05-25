@@ -56,7 +56,7 @@ jobs:
             /O2 ^
             /LD ^
             /I third_party\vapoursynth\include ^
-            src\cnr3_api4_skeleton.cpp ^
+            src\vapoursynth-Cnr3.cpp ^
             /Fe:build\cnr3.dll
 
       - name: Show build output

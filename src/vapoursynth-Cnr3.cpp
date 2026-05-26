@@ -1265,16 +1265,16 @@ static void cnr3_print_blend_debug_stats(
         static_cast<double>(stats.nonzero_weight_samples) /
         active;
 
-    const double near_full_percent =
+    const double near_max_percent =
         100.0 *
-        static_cast<double>(stats.near_full_weight_samples) /
+        static_cast<double>(stats.near_max_weight_samples) /
         active;
 
     cnr3_debug_printf(
         d->debug,
         "CNR3 debug: instance=%d, frame=%d, plane=%c, blend stats: "
         "samples=%llu, active=%llu, weight_nonzero=%llu/%.2f%%, "
-        "weight_near_full=%llu/%.2f%%, weight_avg=%.2f%%, "
+        "weight_near_max=%llu/%.2f%%, weight_avg=%.2f%%, "
         "weight_min=%.2f%%, weight_max=%.2f%%\n",
         d->instance_id,
         frame_number,
@@ -1283,8 +1283,8 @@ static void cnr3_print_blend_debug_stats(
         static_cast<unsigned long long>(stats.active_blend_samples),
         static_cast<unsigned long long>(stats.nonzero_weight_samples),
         nonzero_percent,
-        static_cast<unsigned long long>(stats.near_full_weight_samples),
-        near_full_percent,
+        static_cast<unsigned long long>(stats.near_max_weight_samples),
+        near_max_percent,
         weight_avg_percent,
         weight_min_percent,
         weight_max_percent

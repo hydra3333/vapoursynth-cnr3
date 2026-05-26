@@ -1386,6 +1386,12 @@ static void process_cnr3_chroma_plane_passthrough_u8(
     const std::vector<int> &chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
 
+    const int64_t max_possible_blend_weight =
+        calculate_cnr3_max_possible_blend_weight(
+            d,
+            chroma_table
+        );
+
     Cnr3ResponseDebugStats response_stats;
     Cnr3BlendDebugStats blend_stats;
 

@@ -1470,7 +1470,7 @@ static void process_cnr3_chroma_plane_passthrough_u8(
                 cnr3_update_blend_debug_stats(
                     blend_stats,
                     blend_weight,
-                    get_cnr3_blend_scale(d->bits_per_sample)
+                    max_possible_blend_weight
                 );
 
                 const int blended_chroma = blend_cnr3_chroma_sample(
@@ -1562,6 +1562,12 @@ static void process_cnr3_chroma_plane_passthrough_u16(
     const std::vector<int> &chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
 
+    const int64_t max_possible_blend_weight =
+        calculate_cnr3_max_possible_blend_weight(
+            d,
+            chroma_table
+        );
+
     Cnr3ResponseDebugStats response_stats;
     Cnr3BlendDebugStats blend_stats;
 
@@ -1645,7 +1651,7 @@ static void process_cnr3_chroma_plane_passthrough_u16(
                 cnr3_update_blend_debug_stats(
                     blend_stats,
                     blend_weight,
-                    get_cnr3_blend_scale(d->bits_per_sample)
+                    max_possible_blend_weight
                 );
 
                 const int blended_chroma = blend_cnr3_chroma_sample(

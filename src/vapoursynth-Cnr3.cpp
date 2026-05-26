@@ -1335,6 +1335,7 @@ static void process_cnr3_chroma_plane_passthrough_u8(
         cnr3_get_table_for_chroma_plane(d, plane);
 
     Cnr3ResponseDebugStats response_stats;
+    Cnr3BlendDebugStats blend_stats;
 
     for (int y = 0; y < plane_height; ++y) {
         const uint8_t *src_row = srcp;
@@ -1402,6 +1403,18 @@ static void process_cnr3_chroma_plane_passthrough_u8(
             if (d->blend && prev_row != nullptr) {
                 const uint8_t previous_chroma = prev_row[x];
 
+                const int64_t blend_weight =
+                    calculate_cnr3_combined_blend_weight(
+                        y_response,
+                        chroma_response
+                    );
+
+                cnr3_update_blend_debug_stats(
+                    blend_stats,
+                    blend_weight,
+                    get_cnr3_blend_scale(d->bits_per_sample)
+                );
+
                 const int blended_chroma = blend_cnr3_chroma_sample(
                     static_cast<int>(current_chroma),
                     static_cast<int>(previous_chroma),
@@ -1431,6 +1444,13 @@ static void process_cnr3_chroma_plane_passthrough_u8(
         frame_number,
         plane,
         response_stats
+    );
+
+    cnr3_print_blend_debug_stats(
+        d,
+        frame_number,
+        plane,
+        blend_stats
     );
 }
 

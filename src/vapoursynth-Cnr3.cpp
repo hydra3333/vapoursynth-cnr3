@@ -1976,8 +1976,17 @@ static void VS_CC cnr3_create(
     local.vm = static_cast<int>(get_optional_int(in, vsapi, "vm", 255));
 
     local.scdthr = get_optional_float(in, vsapi, "scdthr", 10.0);
-
     local.scene_chroma = get_optional_int(in, vsapi, "scene_chroma", 0) != 0;
+
+    /*
+        Temporary development option.
+        Default to pass-through output while proving the blend implementation.
+        Use blend=1 to enable recursive chroma blending for A/B testing.
+        This option should be removed or hard-coded on before a Cnr2-like
+        public release.
+    */
+    local.blend = get_optional_int(in, vsapi, "blend", 0) != 0;
+
     local.debug = get_optional_int(in, vsapi, "debug", 0) != 0;
 
     if (local.mode.size() != 3) {

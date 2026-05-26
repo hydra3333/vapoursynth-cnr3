@@ -1395,7 +1395,7 @@ static bool process_cnr3_chroma_plane(
     }
 
     cnr3_debug_printf(
-        d->debug && frame_number <= 2,
+        d->debug,    //d->debug && frame_number <= 5,
         "CNR3 debug: process_cnr3_chroma_plane() instance=%d, frame=%d, plane=%c, using downsampled-luma guard buffer: chroma=%dx%d, subsampling=%d:%d\n",
         d->instance_id,
         frame_number,

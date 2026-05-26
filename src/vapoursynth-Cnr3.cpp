@@ -460,6 +460,49 @@ static int64_t get_cnr3_blend_scale(
     return static_cast<int64_t>(1) << shift2;
 }
 
+static int64_t calculate_cnr3_max_possible_blend_weight(
+    const Cnr3Data *d,
+    const std::vector<int> &chroma_table
+) {
+    /*
+        Maximum possible blend weight for this plane and current table setup.
+
+        This is normally:
+
+            table_y[zero_diff] * table_u_or_v[zero_diff]
+
+        It may be below the mathematical full scale. With 8-bit defaults:
+
+            table_y[0] = 192
+            table_u/v[0] = 254
+            max_possible_weight = 48768
+
+            48768 / 65536 = about 74.41%
+
+        This value is used only for diagnostics.
+    */
+    if (d == nullptr) {
+        return 0;
+    }
+
+    const int y_zero_response = get_cnr3_table_value_for_signed_diff(
+        d->table_y,
+        d->table_offset,
+        0
+    );
+
+    const int chroma_zero_response = get_cnr3_table_value_for_signed_diff(
+        chroma_table,
+        d->table_offset,
+        0
+    );
+
+    return calculate_cnr3_combined_blend_weight(
+        y_zero_response,
+        chroma_zero_response
+    );
+}
+
 static int64_t calculate_cnr3_combined_blend_weight(
     int y_response,
     int chroma_response

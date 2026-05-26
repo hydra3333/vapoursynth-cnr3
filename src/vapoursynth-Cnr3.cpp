@@ -2222,6 +2222,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(
         "vm:int:opt;"
         "scdthr:float:opt;"
         "scene_chroma:int:opt;"
+        "blend:int:opt;"
         "debug:int:opt;",
         "clip:vnode;",
         cnr3_create,

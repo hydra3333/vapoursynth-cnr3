@@ -1164,7 +1164,7 @@ struct Cnr3BlendDebugStats {
 static void cnr3_update_blend_debug_stats(
     Cnr3BlendDebugStats &stats,
     int64_t weight,
-    int64_t weight_scale
+    int64_t max_possible_weight
 ) {
     ++stats.evaluated_samples;
     ++stats.active_blend_samples;
@@ -1174,12 +1174,17 @@ static void cnr3_update_blend_debug_stats(
     }
 
     /*
-        "Near full" is intentionally a diagnostic threshold, not an algorithm
-        threshold. It helps identify frames where CNR3 is mostly reusing
-        previous filtered chroma.
+        "Near max" means near the strongest weight reachable with the current
+        response tables, not near 100% of the mathematical blend denominator.
+
+        This makes the diagnostic useful with historical defaults, where the
+        maximum possible 8-bit weight is about 74.41% of full scale.
     */
-    if (weight >= (weight_scale * 95) / 100) {
-        ++stats.near_full_weight_samples;
+    if (
+        max_possible_weight > 0 &&
+        weight >= (max_possible_weight * 95) / 100
+    ) {
+        ++stats.near_max_weight_samples;
     }
 
     stats.weight_sum += static_cast<uint64_t>(weight);

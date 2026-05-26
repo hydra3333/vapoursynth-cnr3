@@ -1361,14 +1361,34 @@ static void process_cnr3_chroma_plane_passthrough_u16(
             }
 
             /*
-                Pass-through output is still intentional.
+                Development behaviour:
 
-                The response values are calculated and counted above, but they
-                are not yet allowed to influence the pixel. The next algorithm
-                step will use those response values to form the recursive
-                blend weight.
+                    blend=false:
+                        preserve the known-good pass-through output.
+
+                    blend=true and previous output is available:
+                        enable the first real vscnr2-style recursive chroma
+                        blend, using previous filtered output as history.
+
+                Frame 0 remains pass-through because prev_row is null.
             */
-            dst_row[x] = current_chroma;
+            if (d->blend && prev_row != nullptr) {
+                const uint16_t previous_chroma = prev_row[x];
+
+                const int blended_chroma = blend_cnr3_chroma_sample(
+                    static_cast<int>(current_chroma),
+                    static_cast<int>(previous_chroma),
+                    y_response,
+                    chroma_response,
+                    d->bits_per_sample
+                );
+
+                dst_row[x] = static_cast<uint16_t>(
+                    clamp_int(blended_chroma, 0, d->sample_peak)
+                );
+            } else {
+                dst_row[x] = current_chroma;
+            }
         }
 
         srcp += src_stride;

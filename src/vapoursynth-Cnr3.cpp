@@ -2071,7 +2071,7 @@ static void VS_CC cnr3_create(
             "ln=%d->%d, lm=%d->%d, "
             "un=%d->%d, um=%d->%d, "
             "vn=%d->%d, vm=%d->%d, "
-            "mode=%s, scdthr=%.6f, scene_chroma=%d\n",
+            "mode=%s, scdthr=%f, scene_chroma=%d, blend=%d\n",
             local.instance_id,
             local.bits_per_sample,
             local.sample_peak,
@@ -2091,7 +2091,8 @@ static void VS_CC cnr3_create(
             local.vm_scaled,
             local.mode.c_str(),
             local.scdthr,
-            local.scene_chroma ? 1 : 0
+            local.scene_chroma ? 1 : 0,
+            local.blend ? 1 : 0
         );
 
         cnr3_debug_printf(

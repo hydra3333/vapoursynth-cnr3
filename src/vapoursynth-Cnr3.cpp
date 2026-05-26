@@ -247,7 +247,7 @@ struct Cnr3Data {
         stabiliser by default, and this switch should be removed or hard-coded
         on.
     */
-    bool blend = true;
+    bool blend = false;
 
     /*
         Frame ordering and recursive-state manager.

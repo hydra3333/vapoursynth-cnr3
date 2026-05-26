@@ -1394,6 +1394,18 @@ static bool process_cnr3_chroma_plane(
         }
     }
 
+    cnr3_debug_printf(
+        d->debug && frame_number <= 2,
+        "CNR3 debug: process_cnr3_chroma_plane() instance=%d, frame=%d, plane=%c, using downsampled-luma guard buffer: chroma=%dx%d, subsampling=%d:%d\n",
+        d->instance_id,
+        frame_number,
+        plane == 1 ? 'U' : 'V',
+        plane_width,
+        plane_height,
+        d->vi->format.subSamplingW,
+        d->vi->format.subSamplingH
+    );
+
     /*
         Scaffold stage only.
 

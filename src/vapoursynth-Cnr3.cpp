@@ -445,6 +445,41 @@ static int get_cnr3_table_value_for_signed_diff(
     return table[static_cast<size_t>(index)];
 }
 
+static int64_t get_cnr3_blend_scale(
+    int bits_per_sample
+) {
+    /*
+        Return the denominator used by the vscnr2-style blend formula.
+
+        For 8-bit:
+            1 << 16 = 65536
+
+        For 16-bit:
+            1 << 32 = 4294967296
+
+        CNR3 currently accepts 8..16-bit integer clips, so int64_t is safely
+        large enough for this scale and for intermediate multiply/add work.
+    */
+    const int shift2 = bits_per_sample << 1;
+
+    return static_cast<int64_t>(1) << shift2;
+}
+
+static int64_t calculate_cnr3_combined_blend_weight(
+    int y_response,
+    int chroma_response
+) {
+    /*
+        vscnr2-style combined blend weight.
+
+        A high weight reuses more previous filtered chroma.
+        A low weight keeps more current source chroma.
+    */
+    return
+        static_cast<int64_t>(y_response) *
+        static_cast<int64_t>(chroma_response);
+}
+
 static int blend_cnr3_chroma_sample(
     int current_sample,
     int previous_filtered_sample,
@@ -454,13 +489,6 @@ static int blend_cnr3_chroma_sample(
 ) {
     /*
         First real vscnr2-style recursive chroma blend.
-
-        The response tables are in the actual sample-depth domain:
-            8-bit:   0..255
-            16-bit:  0..65535
-
-        The combined weight is the product of the Y response and the chroma
-        response. It is therefore in a 2*bits_per_sample scale.
 
         vscnr2-style formula:
 
@@ -476,17 +504,15 @@ static int blend_cnr3_chroma_sample(
             shift2 = bits_per_sample * 2
             shift  = 1 << shift2
             shift1 = shift / 2
-
-        A high weight reuses more previous filtered chroma.
-        A low weight keeps more current source chroma.
     */
     const int shift2 = bits_per_sample << 1;
-    const int64_t shift = static_cast<int64_t>(1) << shift2;
+    const int64_t shift = get_cnr3_blend_scale(bits_per_sample);
     const int64_t shift1 = shift >> 1;
 
-    const int64_t weight =
-        static_cast<int64_t>(y_response) *
-        static_cast<int64_t>(chroma_response);
+    const int64_t weight = calculate_cnr3_combined_blend_weight(
+        y_response,
+        chroma_response
+    );
 
     const int64_t blended =
         (

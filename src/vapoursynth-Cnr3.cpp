@@ -235,17 +235,12 @@ struct Cnr3Data {
     bool scene_chroma = false;
 
     /*
-        Temporary development switch.
-
-        blend=false keeps the current pass-through chroma output while still
-        running the diagnostic read/table paths.
-
         blend=true enables the first real vscnr2-style recursive chroma blend.
+        blend=false keeps the current pass-through chroma output while still
+                    running the diagnostic read/table paths.
 
-        This is not intended to remain as a final public CNR3 option. Once the
-        algorithm is proven, CNR3 should behave like a Cnr2-style chroma
-        stabiliser by default, and this switch should be removed or hard-coded
-        on.
+        The option will remain for future maintenance/testing, and release behaviour
+        will default to Cnr2-style blending enabled.
     */
     bool blend = true;
 

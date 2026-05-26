@@ -673,59 +673,235 @@ static void copy_all_planes_unchanged(
     copy_plane_bytes(src, dst, 2, bytes_per_sample, vsapi);
 }
 
-static int cnr3_get_chroma_to_luma_x(
+static void build_cnr3_downsampled_luma_buffer_u8(
     const Cnr3Data *d,
-    int chroma_x,
-    int luma_width
+    const VSFrame *frame,
+    int chroma_width,
+    int chroma_height,
+    std::vector<int> &luma_buffer,
+    const VSAPI *vsapi
 ) {
     /*
-        Map one chroma sample coordinate to a representative luma coordinate.
+        Build a luma buffer at chroma resolution for 8-bit clips.
 
-        This is intentionally simple for the scaffold stage.
+        vscnr2 downsamples luma before using it as the Y guard for chroma
+        processing. It does not use only the top-left corresponding luma
+        sample. Its downsample shape is effectively:
 
-        For 4:4:4:
-            subSamplingW = 0, so luma_x = chroma_x
+            dst[x, y] = (Y[x0, y0] + Y[x0 + 1, y0]
+                       + Y[x0, y1] + Y[x0 + 1, y1] + 2) >> 2
 
-        For 4:2:2 / 4:2:0:
-            subSamplingW = 1, so luma_x = chroma_x * 2
+        where:
+            x0 = chroma_x << subSamplingW
+            y0 = chroma_y << subSamplingH
+            y1 = y0 + subSamplingH
 
-        The result is clamped because the right edge can be awkward on unusual
-        frame sizes or future formats.
+        For 4:2:0 this is the expected 2x2 luma average.
+        For 4:2:2 it becomes a two-sample horizontal average, counted twice,
+        matching the vscnr2 structure.
+        For 4:4:4 and 4:4:0, x0 + 1 can reach the right edge. CNR3 clamps
+        that edge read instead of relying on padding or reading past the row.
     */
-    if (d == nullptr || luma_width <= 0) {
-        return 0;
+    luma_buffer.assign(
+        static_cast<size_t>(chroma_width) *
+        static_cast<size_t>(chroma_height),
+        0
+    );
+
+    if (d == nullptr || frame == nullptr || vsapi == nullptr) {
+        return;
     }
 
-    const int luma_x = chroma_x << d->vi->format.subSamplingW;
+    const uint8_t *src_luma = vsapi->getReadPtr(frame, 0);
+    const int src_luma_stride = vsapi->getStride(frame, 0);
+    const int luma_width = vsapi->getFrameWidth(frame, 0);
+    const int luma_height = vsapi->getFrameHeight(frame, 0);
 
-    return clamp_int(luma_x, 0, luma_width - 1);
+    for (int y = 0; y < chroma_height; ++y) {
+        const int y0 = clamp_int(
+            y << d->vi->format.subSamplingH,
+            0,
+            luma_height - 1
+        );
+
+        const int y1 = clamp_int(
+            y0 + d->vi->format.subSamplingH,
+            0,
+            luma_height - 1
+        );
+
+        const uint8_t *row0 = src_luma + y0 * src_luma_stride;
+        const uint8_t *row1 = src_luma + y1 * src_luma_stride;
+
+        int *dst_row =
+            luma_buffer.data() +
+            static_cast<size_t>(y) * static_cast<size_t>(chroma_width);
+
+        for (int x = 0; x < chroma_width; ++x) {
+            const int x0 = clamp_int(
+                x << d->vi->format.subSamplingW,
+                0,
+                luma_width - 1
+            );
+
+            const int x1 = clamp_int(
+                x0 + 1,
+                0,
+                luma_width - 1
+            );
+
+            dst_row[x] =
+                (
+                    static_cast<int>(row0[x0]) +
+                    static_cast<int>(row0[x1]) +
+                    static_cast<int>(row1[x0]) +
+                    static_cast<int>(row1[x1]) +
+                    2
+                ) >> 2;
+        }
+    }
 }
 
-static int cnr3_get_chroma_to_luma_y(
+static void build_cnr3_downsampled_luma_buffer_u16(
     const Cnr3Data *d,
-    int chroma_y,
-    int luma_height
+    const VSFrame *frame,
+    int chroma_width,
+    int chroma_height,
+    std::vector<int> &luma_buffer,
+    const VSAPI *vsapi
 ) {
     /*
-        Map one chroma sample coordinate to a representative luma coordinate.
+        Build a luma buffer at chroma resolution for 10/12/16-bit clips.
 
-        For 4:4:4 / 4:2:2:
-            subSamplingH = 0, so luma_y = chroma_y
-
-        For 4:2:0:
-            subSamplingH = 1, so luma_y = chroma_y * 2
-
-        This is only the initial safe mapping. The real algorithm can later be
-        refined if vscnr2's exact chroma-to-luma relationship needs a different
-        representative luma sample.
+        VapourSynth stores integer formats above 8-bit as 16-bit samples.
+        The averaging shape intentionally mirrors the 8-bit helper so the
+        high-bit-depth path remains a scaled extension of the vscnr2 8-bit
+        behaviour.
     */
-    if (d == nullptr || luma_height <= 0) {
-        return 0;
+    luma_buffer.assign(
+        static_cast<size_t>(chroma_width) *
+        static_cast<size_t>(chroma_height),
+        0
+    );
+
+    if (d == nullptr || frame == nullptr || vsapi == nullptr) {
+        return;
     }
 
-    const int luma_y = chroma_y << d->vi->format.subSamplingH;
+    const uint8_t *src_luma_base = vsapi->getReadPtr(frame, 0);
+    const int src_luma_stride = vsapi->getStride(frame, 0);
+    const int luma_width = vsapi->getFrameWidth(frame, 0);
+    const int luma_height = vsapi->getFrameHeight(frame, 0);
 
-    return clamp_int(luma_y, 0, luma_height - 1);
+    for (int y = 0; y < chroma_height; ++y) {
+        const int y0 = clamp_int(
+            y << d->vi->format.subSamplingH,
+            0,
+            luma_height - 1
+        );
+
+        const int y1 = clamp_int(
+            y0 + d->vi->format.subSamplingH,
+            0,
+            luma_height - 1
+        );
+
+        const uint16_t *row0 =
+            reinterpret_cast<const uint16_t *>(
+                src_luma_base + y0 * src_luma_stride
+            );
+
+        const uint16_t *row1 =
+            reinterpret_cast<const uint16_t *>(
+                src_luma_base + y1 * src_luma_stride
+            );
+
+        int *dst_row =
+            luma_buffer.data() +
+            static_cast<size_t>(y) * static_cast<size_t>(chroma_width);
+
+        for (int x = 0; x < chroma_width; ++x) {
+            const int x0 = clamp_int(
+                x << d->vi->format.subSamplingW,
+                0,
+                luma_width - 1
+            );
+
+            const int x1 = clamp_int(
+                x0 + 1,
+                0,
+                luma_width - 1
+            );
+
+            dst_row[x] =
+                (
+                    static_cast<int>(row0[x0]) +
+                    static_cast<int>(row0[x1]) +
+                    static_cast<int>(row1[x0]) +
+                    static_cast<int>(row1[x1]) +
+                    2
+                ) >> 2;
+        }
+    }
+}
+
+static bool build_cnr3_downsampled_luma_buffer(
+    const Cnr3Data *d,
+    const VSFrame *frame,
+    int chroma_width,
+    int chroma_height,
+    int bytes_per_sample,
+    std::vector<int> &luma_buffer,
+    const VSAPI *vsapi
+) {
+    /*
+        Dispatch helper for the temporary scaffold and later blend path.
+
+        The returned buffer has exactly one integer luma value for each chroma
+        sample. That lets the chroma loop use:
+
+            diff_y = current_downsampled_y - previous_downsampled_y
+
+        which is much closer to vscnr2 than using one representative full-size
+        luma sample per chroma sample.
+    */
+    if (
+        d == nullptr ||
+        frame == nullptr ||
+        vsapi == nullptr ||
+        chroma_width <= 0 ||
+        chroma_height <= 0
+    ) {
+        return false;
+    }
+
+    if (bytes_per_sample == 1) {
+        build_cnr3_downsampled_luma_buffer_u8(
+            d,
+            frame,
+            chroma_width,
+            chroma_height,
+            luma_buffer,
+            vsapi
+        );
+
+        return true;
+    }
+
+    if (bytes_per_sample == 2) {
+        build_cnr3_downsampled_luma_buffer_u16(
+            d,
+            frame,
+            chroma_width,
+            chroma_height,
+            luma_buffer,
+            vsapi
+        );
+
+        return true;
+    }
+
+    return false;
 }
 
 static const std::vector<int> &cnr3_get_table_for_chroma_plane(
@@ -864,6 +1040,8 @@ static void process_cnr3_chroma_plane_passthrough_u8(
     const VSFrame *prev_output,
     VSFrame *dst,
     int plane,
+    const std::vector<int> &current_luma,
+    const std::vector<int> &previous_luma,
     const VSAPI *vsapi
 ) {
     /*
@@ -876,8 +1054,7 @@ static void process_cnr3_chroma_plane_passthrough_u8(
             - read current source chroma
             - read previous filtered chroma when frame_number > 0
             - calculate signed current-vs-previous chroma difference
-            - map the chroma coordinate to a representative luma coordinate
-            - calculate signed current-vs-previous luma difference
+            - use vscnr2-style downsampled luma buffers for Y difference
             - look up Y and U/V response-table values
             - still write current source chroma unchanged
 
@@ -896,29 +1073,14 @@ static void process_cnr3_chroma_plane_passthrough_u8(
         vsapi->getReadPtr(prev_output, plane) :
         nullptr;
 
-    const uint8_t *src_lumap = vsapi->getReadPtr(src, 0);
-
-    const uint8_t *prev_lumap =
-        (frame_number > 0 && prev_output != nullptr) ?
-        vsapi->getReadPtr(prev_output, 0) :
-        nullptr;
-
     const int src_stride = vsapi->getStride(src, plane);
     const int dst_stride = vsapi->getStride(dst, plane);
 
     const int prev_stride =
         (prev_output != nullptr) ? vsapi->getStride(prev_output, plane) : 0;
 
-    const int src_luma_stride = vsapi->getStride(src, 0);
-
-    const int prev_luma_stride =
-        (prev_output != nullptr) ? vsapi->getStride(prev_output, 0) : 0;
-
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
-
-    const int luma_width = vsapi->getFrameWidth(src, 0);
-    const int luma_height = vsapi->getFrameHeight(src, 0);
 
     const std::vector<int> &chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
@@ -932,16 +1094,8 @@ static void process_cnr3_chroma_plane_passthrough_u8(
         const uint8_t *prev_row =
             (prevp != nullptr) ? prevp : nullptr;
 
-        const int luma_y =
-            cnr3_get_chroma_to_luma_y(d, y, luma_height);
-
-        const uint8_t *src_luma_row =
-            src_lumap + luma_y * src_luma_stride;
-
-        const uint8_t *prev_luma_row =
-            (prev_lumap != nullptr) ?
-            prev_lumap + luma_y * prev_luma_stride :
-            nullptr;
+        const size_t luma_row_offset =
+            static_cast<size_t>(y) * static_cast<size_t>(plane_width);
 
         for (int x = 0; x < plane_width; ++x) {
             const uint8_t current_chroma = src_row[x];
@@ -949,7 +1103,7 @@ static void process_cnr3_chroma_plane_passthrough_u8(
             int y_response = d->sample_peak;
             int chroma_response = d->sample_peak;
 
-            if (prev_row != nullptr && prev_luma_row != nullptr) {
+            if (prev_row != nullptr && !previous_luma.empty()) {
                 const uint8_t previous_chroma = prev_row[x];
 
                 const int chroma_signed_diff =
@@ -962,15 +1116,14 @@ static void process_cnr3_chroma_plane_passthrough_u8(
                     chroma_signed_diff
                 );
 
-                const int luma_x =
-                    cnr3_get_chroma_to_luma_x(d, x, luma_width);
+                const size_t luma_index =
+                    luma_row_offset + static_cast<size_t>(x);
 
-                const uint8_t current_luma = src_luma_row[luma_x];
-                const uint8_t previous_luma = prev_luma_row[luma_x];
+                const int current_downsampled_luma = current_luma[luma_index];
+                const int previous_downsampled_luma = previous_luma[luma_index];
 
                 const int y_signed_diff =
-                    static_cast<int>(current_luma) -
-                    static_cast<int>(previous_luma);
+                    current_downsampled_luma - previous_downsampled_luma;
 
                 y_response = get_cnr3_table_value_for_signed_diff(
                     d->table_y,
@@ -1019,6 +1172,8 @@ static void process_cnr3_chroma_plane_passthrough_u16(
     const VSFrame *prev_output,
     VSFrame *dst,
     int plane,
+    const std::vector<int> &current_luma,
+    const std::vector<int> &previous_luma,
     const VSAPI *vsapi
 ) {
     /*
@@ -1031,9 +1186,10 @@ static void process_cnr3_chroma_plane_passthrough_u16(
             dst[x] = src[x]
 
         Scaffold purpose:
-            prove the same current/previous read paths and signed table lookups
-            as the 8-bit path, while preserving high-bit-depth pass-through
-            output before real blending is connected.
+            prove the same current/previous read paths, vscnr2-style
+            downsampled-luma Y guard, and signed table lookups as the 8-bit
+            path, while preserving high-bit-depth pass-through output before
+            real blending is connected.
     */
     if (d == nullptr || src == nullptr || dst == nullptr || vsapi == nullptr) {
         return;
@@ -1047,29 +1203,14 @@ static void process_cnr3_chroma_plane_passthrough_u16(
         vsapi->getReadPtr(prev_output, plane) :
         nullptr;
 
-    const uint8_t *src_lumap = vsapi->getReadPtr(src, 0);
-
-    const uint8_t *prev_lumap =
-        (frame_number > 0 && prev_output != nullptr) ?
-        vsapi->getReadPtr(prev_output, 0) :
-        nullptr;
-
     const int src_stride = vsapi->getStride(src, plane);
     const int dst_stride = vsapi->getStride(dst, plane);
 
     const int prev_stride =
         (prev_output != nullptr) ? vsapi->getStride(prev_output, plane) : 0;
 
-    const int src_luma_stride = vsapi->getStride(src, 0);
-
-    const int prev_luma_stride =
-        (prev_output != nullptr) ? vsapi->getStride(prev_output, 0) : 0;
-
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
-
-    const int luma_width = vsapi->getFrameWidth(src, 0);
-    const int luma_height = vsapi->getFrameHeight(src, 0);
 
     const std::vector<int> &chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
@@ -1088,20 +1229,8 @@ static void process_cnr3_chroma_plane_passthrough_u16(
             reinterpret_cast<const uint16_t *>(prevp) :
             nullptr;
 
-        const int luma_y =
-            cnr3_get_chroma_to_luma_y(d, y, luma_height);
-
-        const uint16_t *src_luma_row =
-            reinterpret_cast<const uint16_t *>(
-                src_lumap + luma_y * src_luma_stride
-            );
-
-        const uint16_t *prev_luma_row =
-            (prev_lumap != nullptr) ?
-            reinterpret_cast<const uint16_t *>(
-                prev_lumap + luma_y * prev_luma_stride
-            ) :
-            nullptr;
+        const size_t luma_row_offset =
+            static_cast<size_t>(y) * static_cast<size_t>(plane_width);
 
         for (int x = 0; x < plane_width; ++x) {
             const uint16_t current_chroma = src_row[x];
@@ -1109,7 +1238,7 @@ static void process_cnr3_chroma_plane_passthrough_u16(
             int y_response = d->sample_peak;
             int chroma_response = d->sample_peak;
 
-            if (prev_row != nullptr && prev_luma_row != nullptr) {
+            if (prev_row != nullptr && !previous_luma.empty()) {
                 const uint16_t previous_chroma = prev_row[x];
 
                 const int chroma_signed_diff =
@@ -1122,15 +1251,14 @@ static void process_cnr3_chroma_plane_passthrough_u16(
                     chroma_signed_diff
                 );
 
-                const int luma_x =
-                    cnr3_get_chroma_to_luma_x(d, x, luma_width);
+                const size_t luma_index =
+                    luma_row_offset + static_cast<size_t>(x);
 
-                const uint16_t current_luma = src_luma_row[luma_x];
-                const uint16_t previous_luma = prev_luma_row[luma_x];
+                const int current_downsampled_luma = current_luma[luma_index];
+                const int previous_downsampled_luma = previous_luma[luma_index];
 
                 const int y_signed_diff =
-                    static_cast<int>(current_luma) -
-                    static_cast<int>(previous_luma);
+                    current_downsampled_luma - previous_downsampled_luma;
 
                 y_response = get_cnr3_table_value_for_signed_diff(
                     d->table_y,
@@ -1224,8 +1352,8 @@ static bool process_cnr3_chroma_plane(
 
     /*
         Keep this validation even though the current pass-through path does not
-        read prev_output. The real recursive algorithm will need it, and the
-        frame-level function has already established this as part of the
+        write from prev_output. The real recursive algorithm will need it, and
+        the frame-level function has already established this as part of the
         recursive precondition.
     */
     if (frame_number > 0 && prev_output == nullptr) {
@@ -1234,12 +1362,49 @@ static bool process_cnr3_chroma_plane(
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
 
+    const int plane_width = vsapi->getFrameWidth(src, plane);
+    const int plane_height = vsapi->getFrameHeight(src, plane);
+
+    std::vector<int> current_luma;
+    std::vector<int> previous_luma;
+
+    if (!build_cnr3_downsampled_luma_buffer(
+        d,
+        src,
+        plane_width,
+        plane_height,
+        bytes_per_sample,
+        current_luma,
+        vsapi
+    )) {
+        return false;
+    }
+
+    if (frame_number > 0) {
+        if (!build_cnr3_downsampled_luma_buffer(
+            d,
+            prev_output,
+            plane_width,
+            plane_height,
+            bytes_per_sample,
+            previous_luma,
+            vsapi
+        )) {
+            return false;
+        }
+    }
+
     /*
         Scaffold stage only.
 
         At this point, CNR3 intentionally still writes pass-through chroma.
         The purpose of using per-sample loops now is to prove the exact loop
         structure that the real recursive blend will later use.
+
+        This version now uses vscnr2-style downsampled-luma buffers at chroma
+        resolution for the Y guard instead of one representative full-size luma
+        sample. That is important because the real-clip diagnostics showed the
+        luma guard doing much of the future blend gating.
 
         Future algorithm notes:
             - frame 0 will initialise from current source chroma
@@ -1269,6 +1434,8 @@ static bool process_cnr3_chroma_plane(
             prev_output,
             dst,
             plane,
+            current_luma,
+            previous_luma,
             vsapi
         );
 
@@ -1283,6 +1450,8 @@ static bool process_cnr3_chroma_plane(
             prev_output,
             dst,
             plane,
+            current_luma,
+            previous_luma,
             vsapi
         );
 

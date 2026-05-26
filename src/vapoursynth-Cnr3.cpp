@@ -1126,6 +1126,162 @@ static void cnr3_print_response_debug_stats(
     );
 }
 
+struct Cnr3BlendDebugStats {
+    /*
+        Compact per-frame, per-plane blend-strength counters.
+
+        These counters are diagnostics only. They do not affect output pixels.
+
+        The goal is to answer:
+            - did the blend path actually run?
+            - how much previous filtered chroma was reused?
+            - are weights mostly tiny, moderate, or near full strength?
+
+        weight_scale is:
+            8-bit:   65536
+            16-bit:  4294967296
+
+        A weight_percent near:
+            0%   means mostly current source chroma
+            100% means mostly previous filtered chroma
+    */
+    uint64_t evaluated_samples = 0;
+    uint64_t active_blend_samples = 0;
+    uint64_t nonzero_weight_samples = 0;
+    uint64_t near_full_weight_samples = 0;
+
+    uint64_t weight_sum = 0;
+    int64_t weight_min = 0;
+    int64_t weight_max = 0;
+
+    bool have_weight = false;
+};
+
+static void cnr3_update_blend_debug_stats(
+    Cnr3BlendDebugStats &stats,
+    int64_t weight,
+    int64_t weight_scale
+) {
+    ++stats.evaluated_samples;
+    ++stats.active_blend_samples;
+
+    if (weight > 0) {
+        ++stats.nonzero_weight_samples;
+    }
+
+    /*
+        "Near full" is intentionally a diagnostic threshold, not an algorithm
+        threshold. It helps identify frames where CNR3 is mostly reusing
+        previous filtered chroma.
+    */
+    if (weight >= (weight_scale * 95) / 100) {
+        ++stats.near_full_weight_samples;
+    }
+
+    stats.weight_sum += static_cast<uint64_t>(weight);
+
+    if (!stats.have_weight) {
+        stats.weight_min = weight;
+        stats.weight_max = weight;
+        stats.have_weight = true;
+    } else {
+        if (weight < stats.weight_min) {
+            stats.weight_min = weight;
+        }
+
+        if (weight > stats.weight_max) {
+            stats.weight_max = weight;
+        }
+    }
+}
+
+static void cnr3_print_blend_debug_stats(
+    const Cnr3Data *d,
+    int frame_number,
+    int plane,
+    const Cnr3BlendDebugStats &stats
+) {
+    /*
+        Print one compact blend-strength diagnostic line per frame and chroma
+        plane. This is deliberately aggregate-only; do not add per-pixel logs.
+    */
+    if (d == nullptr || !d->debug) {
+        return;
+    }
+
+    const char plane_name = (plane == 1) ? 'U' : 'V';
+
+    if (!d->blend) {
+        return;
+    }
+
+    if (stats.active_blend_samples == 0 || !stats.have_weight) {
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, frame=%d, plane=%c, blend stats: no active blend samples.\n",
+            d->instance_id,
+            frame_number,
+            plane_name
+        );
+
+        return;
+    }
+
+    const double active =
+        static_cast<double>(stats.active_blend_samples);
+
+    const int64_t weight_scale =
+        get_cnr3_blend_scale(d->bits_per_sample);
+
+    const double weight_avg_percent =
+        100.0 *
+        static_cast<double>(stats.weight_sum) /
+        (
+            active *
+            static_cast<double>(weight_scale)
+        );
+
+    const double weight_min_percent =
+        100.0 *
+        static_cast<double>(stats.weight_min) /
+        static_cast<double>(weight_scale);
+
+    const double weight_max_percent =
+        100.0 *
+        static_cast<double>(stats.weight_max) /
+        static_cast<double>(weight_scale);
+
+    const double nonzero_percent =
+        100.0 *
+        static_cast<double>(stats.nonzero_weight_samples) /
+        active;
+
+    const double near_full_percent =
+        100.0 *
+        static_cast<double>(stats.near_full_weight_samples) /
+        active;
+
+    cnr3_debug_printf(
+        d->debug,
+        "CNR3 debug: instance=%d, frame=%d, plane=%c, blend stats: "
+        "samples=%llu, active=%llu, weight_nonzero=%llu/%.2f%%, "
+        "weight_near_full=%llu/%.2f%%, weight_avg=%.2f%%, "
+        "weight_min=%.2f%%, weight_max=%.2f%%\n",
+        d->instance_id,
+        frame_number,
+        plane_name,
+        static_cast<unsigned long long>(stats.evaluated_samples),
+        static_cast<unsigned long long>(stats.active_blend_samples),
+        static_cast<unsigned long long>(stats.nonzero_weight_samples),
+        nonzero_percent,
+        static_cast<unsigned long long>(stats.near_full_weight_samples),
+        near_full_percent,
+        weight_avg_percent,
+        weight_min_percent,
+        weight_max_percent
+    );
+}
+
 static void process_cnr3_chroma_plane_passthrough_u8(
     const Cnr3Data *d,
     int frame_number,

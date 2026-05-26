@@ -235,6 +235,21 @@ struct Cnr3Data {
     bool scene_chroma = false;
 
     /*
+        Temporary development switch.
+
+        blend=false keeps the current pass-through chroma output while still
+        running the diagnostic read/table paths.
+
+        blend=true enables the first real vscnr2-style recursive chroma blend.
+
+        This is not intended to remain as a final public CNR3 option. Once the
+        algorithm is proven, CNR3 should behave like a Cnr2-style chroma
+        stabiliser by default, and this switch should be removed or hard-coded
+        on.
+    */
+    bool blend = true;
+
+    /*
         Frame ordering and recursive-state manager.
 
         Currently this implements only strict streaming Policy A.
@@ -414,8 +429,7 @@ static int get_cnr3_table_value_for_signed_diff(
     /*
         Safe table lookup helper.
 
-        The real blend path will eventually use current-vs-previous signed
-        sample differences:
+        The real blend path uses current-vs-previous signed sample differences:
 
             signed_diff = current_sample - previous_sample
 
@@ -429,6 +443,59 @@ static int get_cnr3_table_value_for_signed_diff(
     }
 
     return table[static_cast<size_t>(index)];
+}
+
+static int blend_cnr3_chroma_sample(
+    int current_sample,
+    int previous_filtered_sample,
+    int y_response,
+    int chroma_response,
+    int bits_per_sample
+) {
+    /*
+        First real vscnr2-style recursive chroma blend.
+
+        The response tables are in the actual sample-depth domain:
+            8-bit:   0..255
+            16-bit:  0..65535
+
+        The combined weight is the product of the Y response and the chroma
+        response. It is therefore in a 2*bits_per_sample scale.
+
+        vscnr2-style formula:
+
+            weight = table_y[diff_y + offset] * table_uv[diff_uv + offset]
+
+            dst = (
+                    weight * previous_filtered_chroma
+                    + (shift - weight) * current_source_chroma
+                    + shift1
+                  ) >> shift2
+
+        where:
+            shift2 = bits_per_sample * 2
+            shift  = 1 << shift2
+            shift1 = shift / 2
+
+        A high weight reuses more previous filtered chroma.
+        A low weight keeps more current source chroma.
+    */
+    const int shift2 = bits_per_sample << 1;
+    const int64_t shift = static_cast<int64_t>(1) << shift2;
+    const int64_t shift1 = shift >> 1;
+
+    const int64_t weight =
+        static_cast<int64_t>(y_response) *
+        static_cast<int64_t>(chroma_response);
+
+    const int64_t blended =
+        (
+            weight * static_cast<int64_t>(previous_filtered_sample) +
+            (shift - weight) * static_cast<int64_t>(current_sample) +
+            shift1
+        ) >> shift2;
+
+    return static_cast<int>(blended);
 }
 
 static void build_cnr3_weight_table(
@@ -1139,14 +1206,34 @@ static void process_cnr3_chroma_plane_passthrough_u8(
             }
 
             /*
-                Pass-through output is still intentional.
+                Development behaviour:
 
-                The response values are calculated and counted above, but they
-                are not yet allowed to influence the pixel. The next algorithm
-                step will use those response values to form the recursive
-                blend weight.
+                    blend=false:
+                        preserve the known-good pass-through output.
+
+                    blend=true and previous output is available:
+                        enable the first real vscnr2-style recursive chroma
+                        blend, using previous filtered output as history.
+
+                Frame 0 remains pass-through because prev_row is null.
             */
-            dst_row[x] = current_chroma;
+            if (d->blend && prev_row != nullptr) {
+                const uint8_t previous_chroma = prev_row[x];
+
+                const int blended_chroma = blend_cnr3_chroma_sample(
+                    static_cast<int>(current_chroma),
+                    static_cast<int>(previous_chroma),
+                    y_response,
+                    chroma_response,
+                    d->bits_per_sample
+                );
+
+                dst_row[x] = static_cast<uint8_t>(
+                    clamp_int(blended_chroma, 0, d->sample_peak)
+                );
+            } else {
+                dst_row[x] = current_chroma;
+            }
         }
         
         srcp += src_stride;

@@ -1130,20 +1130,29 @@ struct Cnr3BlendDebugStats {
         The goal is to answer:
             - did the blend path actually run?
             - how much previous filtered chroma was reused?
-            - are weights mostly tiny, moderate, or near full strength?
+            - are weights mostly tiny, moderate, or near the strongest weight
+              possible for the current mode/threshold/table setup?
 
-        weight_scale is:
+        weight_scale is the mathematical blend denominator:
             8-bit:   65536
             16-bit:  4294967296
 
-        A weight_percent near:
-            0%   means mostly current source chroma
-            100% means mostly previous filtered chroma
+        max_possible_weight is the strongest weight this plane can reach with
+        the current response tables:
+
+            table_y[0] * table_u_or_v[0]
+
+        This distinction matters because the historical defaults do not reach
+        100% mathematical blend weight. For example, 8-bit defaults give:
+
+            192 * 254 / 65536 = about 74.41%
+
+        So "near max" is more useful than "near full scale".
     */
     uint64_t evaluated_samples = 0;
     uint64_t active_blend_samples = 0;
     uint64_t nonzero_weight_samples = 0;
-    uint64_t near_full_weight_samples = 0;
+    uint64_t near_max_weight_samples = 0;
 
     uint64_t weight_sum = 0;
     int64_t weight_min = 0;

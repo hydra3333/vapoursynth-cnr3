@@ -1620,6 +1620,13 @@ static void process_cnr3_chroma_plane_passthrough_u16(
         plane,
         response_stats
     );
+
+    cnr3_print_blend_debug_stats(
+        d,
+        frame_number,
+        plane,
+        blend_stats
+    );
 }
 
 static bool process_cnr3_chroma_plane(

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -460,9 +461,24 @@ static int64_t get_cnr3_blend_scale(
     return static_cast<int64_t>(1) << shift2;
 }
 
+static int64_t calculate_cnr3_combined_blend_weight(
+    int y_response,
+    int chroma_response
+) {
+    /*
+        vscnr2-style combined blend weight.
+
+        A high weight reuses more previous filtered chroma.
+        A low weight keeps more current source chroma.
+    */
+    return
+        static_cast<int64_t>(y_response) *
+        static_cast<int64_t>(chroma_response);
+}
+
 static int64_t calculate_cnr3_max_possible_blend_weight(
-    const Cnr3Data *d,
-    const std::vector<int> &chroma_table
+    const Cnr3Data* d,
+    const std::vector<int>& chroma_table
 ) {
     /*
         Maximum possible blend weight for this plane and current table setup.
@@ -501,21 +517,6 @@ static int64_t calculate_cnr3_max_possible_blend_weight(
         y_zero_response,
         chroma_zero_response
     );
-}
-
-static int64_t calculate_cnr3_combined_blend_weight(
-    int y_response,
-    int chroma_response
-) {
-    /*
-        vscnr2-style combined blend weight.
-
-        A high weight reuses more previous filtered chroma.
-        A low weight keeps more current source chroma.
-    */
-    return
-        static_cast<int64_t>(y_response) *
-        static_cast<int64_t>(chroma_response);
 }
 
 static int blend_cnr3_chroma_sample(
@@ -775,8 +776,8 @@ static void copy_plane_bytes(
     const uint8_t *srcp = vsapi->getReadPtr(src, plane);
     uint8_t *dstp = vsapi->getWritePtr(dst, plane);
 
-    const int src_stride = vsapi->getStride(src, plane);
-    const int dst_stride = vsapi->getStride(dst, plane);
+    const ptrdiff_t src_stride = vsapi->getStride(src, plane);
+    const ptrdiff_t dst_stride = vsapi->getStride(dst, plane);
 
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
@@ -843,8 +844,8 @@ static void build_cnr3_downsampled_luma_buffer_u8(
         return;
     }
 
-    const uint8_t *src_luma = vsapi->getReadPtr(frame, 0);
-    const int src_luma_stride = vsapi->getStride(frame, 0);
+    const uint8_t* src_luma = vsapi->getReadPtr(frame, 0);
+    const ptrdiff_t src_luma_stride = vsapi->getStride(frame, 0);
     const int luma_width = vsapi->getFrameWidth(frame, 0);
     const int luma_height = vsapi->getFrameHeight(frame, 0);
 
@@ -919,8 +920,8 @@ static void build_cnr3_downsampled_luma_buffer_u16(
         return;
     }
 
-    const uint8_t *src_luma_base = vsapi->getReadPtr(frame, 0);
-    const int src_luma_stride = vsapi->getStride(frame, 0);
+    const uint8_t* src_luma_base = vsapi->getReadPtr(frame, 0);
+    const ptrdiff_t src_luma_stride = vsapi->getStride(frame, 0);
     const int luma_width = vsapi->getFrameWidth(frame, 0);
     const int luma_height = vsapi->getFrameHeight(frame, 0);
 
@@ -1374,10 +1375,10 @@ static void process_cnr3_chroma_plane_passthrough_u8(
         vsapi->getReadPtr(prev_output, plane) :
         nullptr;
 
-    const int src_stride = vsapi->getStride(src, plane);
-    const int dst_stride = vsapi->getStride(dst, plane);
+    const ptrdiff_t src_stride = vsapi->getStride(src, plane);
+    const ptrdiff_t dst_stride = vsapi->getStride(dst, plane);
 
-    const int prev_stride =
+    const ptrdiff_t prev_stride =
         (prev_output != nullptr) ? vsapi->getStride(prev_output, plane) : 0;
 
     const int plane_width = vsapi->getFrameWidth(src, plane);
@@ -1550,10 +1551,10 @@ static void process_cnr3_chroma_plane_passthrough_u16(
         vsapi->getReadPtr(prev_output, plane) :
         nullptr;
 
-    const int src_stride = vsapi->getStride(src, plane);
-    const int dst_stride = vsapi->getStride(dst, plane);
+    const ptrdiff_t src_stride = vsapi->getStride(src, plane);
+    const ptrdiff_t dst_stride = vsapi->getStride(dst, plane);
 
-    const int prev_stride =
+    const ptrdiff_t prev_stride =
         (prev_output != nullptr) ? vsapi->getStride(prev_output, plane) : 0;
 
     const int plane_width = vsapi->getFrameWidth(src, plane);
@@ -2265,13 +2266,13 @@ static void VS_CC cnr3_create(
     local.scene_chroma = get_optional_int(in, vsapi, "scene_chroma", 0) != 0;
 
     /*
-        Temporary development option.
-        Default to pass-through output while proving the blend implementation.
-        Use blend=1 to enable recursive chroma blending for A/B testing.
-        This option should be removed or hard-coded on before a Cnr2-like
-        public release.
-    */
-    local.blend = get_optional_int(in, vsapi, "blend", 0) != 0;
+        Development/maintenance option.
+        Default to recursive Cnr2-style chroma blending enabled.
+        blend=false remains available for maintenance/testing because it keeps
+        the diagnostic read/table paths active while forcing chroma output to
+        pass through unchanged.
+   */
+    local.blend = get_optional_int(in, vsapi, "blend", 1) != 0;
 
     local.debug = get_optional_int(in, vsapi, "debug", 0) != 0;
 

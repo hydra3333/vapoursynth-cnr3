@@ -427,3 +427,22 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# CNR3 / native plugin local build outputs
+*.dll
+*.lib
+*.exp
+*.iobj
+*.ipdb
+*.lastbuildstate
+*.recipe
+*.vcxproj.FileListAbsolute.txt
+
+# Visual Studio generated solution cache/database files
+*.slnx.sqlite
+*.db-shm
+*.db-wal
+
+# Common local x64 build folders generated beside .vcxproj files
+**/x64/
+**/Win32/

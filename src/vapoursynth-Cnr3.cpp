@@ -1676,13 +1676,14 @@ static void process_cnr3_chroma_plane_u16(
                 Development behaviour:
 
                     blend=false:
-                        preserve the known-good pass-through output.
+                        force current-source chroma output while keeping
+                        diagnostics active.
 
                     blend=true and previous output is available:
-                        enable the first real vscnr2-style recursive chroma
-                        blend, using previous filtered output as history.
+                        enable the vscnr2-style recursive chroma blend, using
+                        previous filtered output as history.
 
-                Frame 0 remains pass-through because prev_row is null.
+                Frame 0 writes current-source chroma because prev_row is null.
             */
             if (d->blend && prev_row != nullptr) {
                 const uint16_t previous_chroma = prev_row[x];
@@ -1739,13 +1740,18 @@ static void process_cnr3_chroma_plane_u16(
 }
 
 static bool process_cnr3_chroma_plane(
-    const Cnr3Data *d,
+    const Cnr3Data* d,
     int frame_number,
     int plane,
-    const VSFrame *src,
-    const VSFrame *prev_output,
-    VSFrame *dst,
-    const VSAPI *vsapi
+    const VSFrame* src,
+    const VSFrame* prev_output,
+    VSFrame* dst,
+    int shared_chroma_width,
+    int shared_chroma_height,
+    int bytes_per_sample,
+    const std::vector<int>& current_luma,
+    const std::vector<int>& previous_luma,
+    const VSAPI* vsapi
 ) {
     /*
         Chroma-plane processing function.
@@ -1755,9 +1761,12 @@ static bool process_cnr3_chroma_plane(
         For each U/V chroma plane, it:
             - validates the requested chroma plane
             - requires previous filtered output for frame N > 0
-            - builds current-source downsampled luma at chroma resolution
-            - builds previous-output downsampled luma at chroma resolution
+            - validates that the shared downsampled-luma buffers match this
+              chroma plane's dimensions
             - dispatches to the 8-bit or 10/12/16-bit per-sample path
+
+        The downsampled-luma buffers are built once per frame by
+        process_cnr3_frame() and shared by the U and V plane paths.
 
         Important note:
             Do not simply copy chroma from prev_output. Since prev_output is
@@ -1795,43 +1804,34 @@ static bool process_cnr3_chroma_plane(
         return false;
     }
 
-    const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
-
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
 
-    std::vector<int> current_luma;
-    std::vector<int> previous_luma;
-
-    if (!build_cnr3_downsampled_luma_buffer(
-        d,
-        src,
-        plane_width,
-        plane_height,
-        bytes_per_sample,
-        current_luma,
-        vsapi
-    )) {
+    if (
+        plane_width != shared_chroma_width ||
+        plane_height != shared_chroma_height
+        ) {
         return false;
     }
 
-    if (frame_number > 0) {
-        if (!build_cnr3_downsampled_luma_buffer(
-            d,
-            prev_output,
-            plane_width,
-            plane_height,
-            bytes_per_sample,
-            previous_luma,
-            vsapi
-        )) {
-            return false;
-        }
+    const size_t expected_luma_samples =
+        static_cast<size_t>(shared_chroma_width) *
+        static_cast<size_t>(shared_chroma_height);
+
+    if (current_luma.size() != expected_luma_samples) {
+        return false;
+    }
+
+    if (
+        frame_number > 0 &&
+        previous_luma.size() != expected_luma_samples
+        ) {
+        return false;
     }
 
     cnr3_debug_printf(
         d->debug && frame_number <= 2,
-        "CNR3 debug: process_cnr3_chroma_plane() instance=%d, frame=%d, plane=%c, using downsampled-luma guard buffer: chroma=%dx%d, subsampling=%d:%d, blend=%d\n",
+        "CNR3 debug: process_cnr3_chroma_plane() instance=%d, frame=%d, plane=%c, using shared downsampled-luma guard buffer: chroma=%dx%d, subsampling=%d:%d, blend=%d\n",
         d->instance_id,
         frame_number,
         plane == 1 ? 'U' : 'V',
@@ -1989,6 +1989,69 @@ static bool process_cnr3_frame(
         vsapi
     );
 
+    /*
+        Build downsampled-luma guard buffers once per output frame and share
+        them between U and V.
+
+        Plane 1 is used as the reference chroma geometry. For ordinary planar
+        YUV formats, U and V should have identical dimensions. Check that
+        explicitly before sharing the buffers so future format changes fail
+        clearly instead of silently using the wrong indexing.
+    */
+    const int chroma_width = vsapi->getFrameWidth(src, 1);
+    const int chroma_height = vsapi->getFrameHeight(src, 1);
+
+    const int v_chroma_width = vsapi->getFrameWidth(src, 2);
+    const int v_chroma_height = vsapi->getFrameHeight(src, 2);
+
+    if (
+        chroma_width != v_chroma_width ||
+        chroma_height != v_chroma_height
+        ) {
+        vsapi->setFilterError(
+            "CNR3: internal error: U and V plane dimensions do not match.",
+            frameCtx
+        );
+        return false;
+    }
+
+    std::vector<int> current_luma;
+    std::vector<int> previous_luma;
+
+    if (!build_cnr3_downsampled_luma_buffer(
+        d,
+        src,
+        chroma_width,
+        chroma_height,
+        bytes_per_sample,
+        current_luma,
+        vsapi
+    )) {
+        vsapi->setFilterError(
+            "CNR3: internal error while building current downsampled-luma buffer.",
+            frameCtx
+        );
+        return false;
+    }
+
+    if (frame_number > 0) {
+        if (!build_cnr3_downsampled_luma_buffer(
+            d,
+            prev_output,
+            chroma_width,
+            chroma_height,
+            bytes_per_sample,
+            previous_luma,
+            vsapi
+        )) {
+            vsapi->setFilterError(
+                "CNR3: internal error while building previous downsampled-luma buffer.",
+                frameCtx
+            );
+            return false;
+        }
+    }
+
     if (!process_cnr3_chroma_plane(
         d,
         frame_number,
@@ -1996,6 +2059,11 @@ static bool process_cnr3_frame(
         src,
         prev_output,
         dst,
+        chroma_width,
+        chroma_height,
+        bytes_per_sample,
+        current_luma,
+        previous_luma,
         vsapi
     )) {
         vsapi->setFilterError("CNR3: internal error while processing U plane.", frameCtx);
@@ -2009,6 +2077,11 @@ static bool process_cnr3_frame(
         src,
         prev_output,
         dst,
+        chroma_width,
+        chroma_height,
+        bytes_per_sample,
+        current_luma,
+        previous_luma,
         vsapi
     )) {
         vsapi->setFilterError("CNR3: internal error while processing V plane.", frameCtx);
@@ -2304,7 +2377,6 @@ static void VS_CC cnr3_create(
         the diagnostic read/table paths active while forcing chroma output to
         pass through unchanged.
     */
-    local.blend = get_optional_int(in, vsapi, "blend", 1) != 0;
     local.blend = get_optional_int(in, vsapi, "blend", 1) != 0;
 
     local.debug = get_optional_int(in, vsapi, "debug", 0) != 0;

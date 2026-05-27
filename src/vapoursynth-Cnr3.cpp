@@ -2269,7 +2269,11 @@ static bool process_cnr3_frame(
                 copied unchanged, because CNR3 is a chroma stabiliser.
 
             U/V:
-                routed through recursive chroma-plane stabilisation.
+                normally routed through recursive chroma-plane stabilisation.
+
+                If vscnr2-style scene-change detection fires, U/V are copied
+                from the current source frame and recursive blending is skipped
+                for that frame.
 
         Recursive precondition:
             frame 0 does not need a previous output frame.
@@ -2403,6 +2407,63 @@ static bool process_cnr3_frame(
             return false;
         }
     }
+
+    if (frame_number > 0) {
+        const Cnr3SceneChangeStats scene_stats =
+            detect_cnr3_scene_change(
+                d,
+                src,
+                prev_output,
+                chroma_width,
+                chroma_height,
+                bytes_per_sample,
+                current_luma,
+                previous_luma,
+                vsapi
+            );
+
+        cnr3_print_scene_change_debug_stats(
+            d,
+            frame_number,
+            scene_stats
+        );
+
+        if (scene_stats.scene_change) {
+            /*
+                vscnr2 returns the current source frame unchanged when scene
+                change detection fires. CNR3 has already copied Y unchanged,
+                so copy U and V from the current source and skip recursive
+                chroma blending for this output frame.
+            */
+            cnr3_debug_printf(
+                d->debug,
+                "CNR3 debug: instance=%d, frame=%d, scene change detected; "
+                "copying current source chroma and skipping recursive blend.\n",
+                d->instance_id,
+                frame_number
+            );
+
+            copy_plane_bytes(
+                src,
+                dst,
+                1,
+                bytes_per_sample,
+                vsapi
+            );
+
+            copy_plane_bytes(
+                src,
+                dst,
+                2,
+                bytes_per_sample,
+                vsapi
+            );
+
+            return true;
+        }
+    }
+
+    if (!process_cnr3_chroma_plane(
 
     if (!process_cnr3_chroma_plane(
         d,

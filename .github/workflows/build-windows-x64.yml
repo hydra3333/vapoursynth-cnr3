@@ -77,13 +77,22 @@ jobs:
             /link ^
             /LTCG
 
-      - name: Show build output
+      - name: Show build output and DLL exports
         shell: cmd
         run: |
+          echo === Build directory ===
           dir build
+          echo.
+          echo === Recursive build output ===
           dir /s build
+          echo.
+          echo === DLL machine / characteristics ===
           dumpbin /headers build\cnr3.dll | findstr /i "machine DLL"
+          echo.
+          echo === DLL exports ===
           dumpbin /exports build\cnr3.dll
+          echo.
+          echo === SHA256 ===
           certutil -hashfile build\cnr3.dll SHA256
 
       - name: Upload DLL artifact

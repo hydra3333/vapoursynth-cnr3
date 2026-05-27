@@ -1089,6 +1089,27 @@ static bool build_cnr3_downsampled_luma_buffer(
     return false;
 }
 
+struct Cnr3SceneChangeStats {
+    /*
+        Compact frame-level scene-change diagnostic.
+
+        This mirrors the vscnr2 diff_total/diff_max model:
+            - luma difference is calculated from the downsampled-luma buffers
+            - luma contribution is scaled by subSamplingW + subSamplingH
+            - chroma U/V differences are included only when scene_chroma is true
+
+        If diff_total exceeds diff_max, the frame is treated as a scene change.
+    */
+    bool evaluated = false;
+    bool scene_change = false;
+
+    int evaluated_rows = 0;
+    int64_t evaluated_samples = 0;
+
+    int64_t diff_total = 0;
+    int64_t diff_max = 0;
+};
+
 static Cnr3SceneChangeStats detect_cnr3_scene_change_u8(
     const Cnr3Data* d,
     const VSFrame* src,
@@ -1372,27 +1393,6 @@ static const std::vector<int> &cnr3_get_table_for_chroma_plane(
     */
     return (plane == 1) ? d->table_u : d->table_v;
 }
-
-struct Cnr3SceneChangeStats {
-    /*
-        Compact frame-level scene-change diagnostic.
-
-        This mirrors the vscnr2 diff_total/diff_max model:
-            - luma difference is calculated from the downsampled-luma buffers
-            - luma contribution is scaled by subSamplingW + subSamplingH
-            - chroma U/V differences are included only when scene_chroma is true
-
-        If diff_total exceeds diff_max, the frame is treated as a scene change.
-    */
-    bool evaluated = false;
-    bool scene_change = false;
-
-    int evaluated_rows = 0;
-    int64_t evaluated_samples = 0;
-
-    int64_t diff_total = 0;
-    int64_t diff_max = 0;
-};
 
 struct Cnr3ResponseDebugStats {
     /*
@@ -2464,8 +2464,6 @@ static bool process_cnr3_frame(
     }
 
     if (!process_cnr3_chroma_plane(
-
-    if (!process_cnr3_chroma_plane(
         d,
         frame_number,
         1,
@@ -2893,8 +2891,6 @@ static void VS_CC cnr3_create(
                 ) /
             100.0
             ) << (local.bits_per_sample - 8);
-
-    if (!build_cnr3_lookup_tables(local, out, vsapi)) {
 
     if (!build_cnr3_lookup_tables(local, out, vsapi)) {
         vsapi->freeNode(local.node);

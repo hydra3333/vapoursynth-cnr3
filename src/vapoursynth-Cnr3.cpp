@@ -2798,6 +2798,43 @@ static void VS_CC cnr3_create(
     local.vn_scaled = scale_8bit_parameter_to_bit_depth(local.vn, local.bits_per_sample);
     local.vm_scaled = scale_8bit_parameter_to_bit_depth(local.vm, local.bits_per_sample);
 
+    /*
+        vscnr2-style scene-change threshold.
+
+        vscnr2 uses:
+            max_pixel_diff = scene_chroma
+                ? (219 + 224 * 2) >> (subsw + subsh)
+                : 219
+
+            diff_max = (
+                scdthr * width * height * max_pixel_diff / 100.0
+            ) << (depth - 8)
+
+        CNR3 keeps that model. The threshold is compared against a per-frame
+        accumulated diff_total during process_cnr3_frame().
+    */
+    const int subsampling_shift =
+        local.vi->format.subSamplingW +
+        local.vi->format.subSamplingH;
+
+    const int max_pixel_diff =
+        (!local.scene_chroma)
+        ? 219
+        : ((219 + (224 * 2)) >> subsampling_shift);
+
+    local.scene_change_threshold =
+        static_cast<int64_t>(
+            (
+                local.scdthr *
+                static_cast<double>(local.vi->width) *
+                static_cast<double>(local.vi->height) *
+                static_cast<double>(max_pixel_diff)
+                ) /
+            100.0
+            ) << (local.bits_per_sample - 8);
+
+    if (!build_cnr3_lookup_tables(local, out, vsapi)) {
+
     if (!build_cnr3_lookup_tables(local, out, vsapi)) {
         vsapi->freeNode(local.node);
         return;

@@ -1,8 +1,71 @@
 /*
-	CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
 
-    CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive temporal
-    chroma-stabilisation model while using VapourSynth API4 only.
+        The in-development CNR3 implementation initially uses a strict streaming
+        cache policy:
+            - frame 0 initialises the previous-output state
+            - frame N requires output[N - 1] to have already been produced
+            - out-of-order frame requests are rejected with a clear error
+        During preliminary development/testing, use:
+            vspipe -r 1
+        This is a deliberate correctness-first API4 bridge. An upcoming cache
+        manager will relax the strict ordering requirement by adding reorder,
+        seek, checkpoint, or recomputation support. Until then, CNR3 must be
+        treated as a serial recursive filter.
+
+    Diagnostic output rule:
+        CNR3 must never write to stdout, debug/status messages must go to stderr.
+        VapourSynth errors must use mapSetError() or setFilterError().
+
+    SPDX-License-Identifier: AGPL-3.0-or-later
+*/
+
+/*
+    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
+
+    CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive
+    temporal chroma-stabilisation model while using VapourSynth API4 only.
+
+    Recursive processing and VapourSynth scheduling:
+        The Cnr2/vscnr2 algorithm is inherently temporal and recursive, which
+        requires in-order serial frame processing.
+
+        Processing of SOURCE frame N into OUTPUT N requires access to the already
+        filtered OUTPUT arising from previously processed SOURCE frame N - 1:
+            output[N] depends on both SOURCE[N] and OUTPUT[N - 1]
+
+        That makes the CNR2/vscnr2 algorithm naturally "serial".
+
+        Older VapourSynth-era recursive filters could sometimes rely on
+        compatibility-style scheduling parameters and assumptions. In
+        particular, 'fmFrameState' meant only one thread would call a filter's
+        getframe function at a time and only one frame would be processed at a
+        time.
+
+        However, VapourSynth API4 documentation says 'fmFrameState' is
+        for compatibility only and MUST NOT BE USED IN NEW FILTERS.
+
+        CNR3 therefore uses 'fmUnordered'.
+
+        In 'fmUnordered', only one thread can call this filter's getframe function
+        at a time, which protects CNR3's internal recursive state from
+        concurrent entry. HOWEVER, 'fmUnordered' does not guarantee in-order frame
+        processing. VapourSynth may STILL call CNR3's getframe for frames in a
+        NON-SERIAL ORDER, which effectively defeats  a recursive output[N - 1]
+        algorithm without special measures.
+
+        INITIAL REDEVELOPMENT APPROACH
+        The in-development CNR3 implementation initially uses a strict streaming
+        cache policy:
+            - frame 0 initialises the previous-output state
+            - frame N requires output[N - 1] to have already been produced
+            - out-of-order frame requests are rejected with a clear error
+
+            During preliminary development/testing, use:
+            vspipe -r 1
+        This is a deliberate correctness-first API4 bridge. An upcoming cache
+        manager will relax the strict ordering requirement by adding reorder,
+        seek, checkpoint, or recomputation support. Until then, CNR3 must be
+        treated as a serial recursive filter.
 
     Diagnostic output rule:
         CNR3 must never write to stdout, debug/status messages must go to stderr.

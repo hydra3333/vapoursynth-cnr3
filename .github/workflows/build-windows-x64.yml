@@ -80,7 +80,11 @@ jobs:
       - name: Show build output
         shell: cmd
         run: |
-          dir /s /b build
+          dir build
+          dir /s build
+          dumpbin /headers build\cnr3.dll | findstr /i "machine DLL"
+          dumpbin /exports build\cnr3.dll
+          certutil -hashfile build\cnr3.dll SHA256
 
       - name: Upload DLL artifact
         uses: actions/upload-artifact@v4

@@ -3,6 +3,8 @@ name: Build Windows x64 DLL
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -10,13 +12,22 @@ jobs:
   build-windows-x64:
     name: Build Windows x64 DLL
     runs-on: windows-2025-vs2026
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Configure MSVC developer command prompt
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      - name: Show MSVC version
+        shell: cmd
+        run: |
+          where cl
+          cl
+
       - name: Check for legacy VapourSynth API usage
         shell: pwsh
         run: |
@@ -52,12 +63,19 @@ jobs:
           cl ^
             /nologo ^
             /EHsc ^
-            /std:c++17 ^
+            /std:c++20 ^
+            /permissive- ^
             /O2 ^
+            /GL ^
             /LD ^
+            /MD ^
+            /DNOMINMAX ^
             /I third_party\vapoursynth\include ^
+            /Fo:build\ ^
             src\vapoursynth-Cnr3.cpp ^
-            /Fe:build\cnr3.dll
+            /Fe:build\cnr3.dll ^
+            /link ^
+            /LTCG
 
       - name: Show build output
         shell: cmd

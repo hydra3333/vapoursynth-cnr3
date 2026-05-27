@@ -273,6 +273,23 @@ struct Cnr3Data {
     bool scene_chroma = false;
 
     /*
+        vscnr2-style scene-change threshold.
+
+        This is calculated once in cnr3_create() from:
+            scdthr
+            frame width/height
+            bit depth
+            chroma subsampling
+            scene_chroma
+
+        During frame processing, accumulated frame difference greater than this
+        threshold causes CNR3 to output the current source frame unchanged for
+        that frame, matching the vscnr2 scene-change behaviour as closely as
+        practical in the current API4 structure.
+    */
+    int64_t scene_change_threshold = 0;
+
+    /*
         blend=true enables the first real vscnr2-style recursive chroma blend.
         blend=false keeps the current pass-through chroma output while still
                     running the diagnostic read/table paths.
@@ -1072,6 +1089,276 @@ static bool build_cnr3_downsampled_luma_buffer(
     return false;
 }
 
+static Cnr3SceneChangeStats detect_cnr3_scene_change_u8(
+    const Cnr3Data* d,
+    const VSFrame* src,
+    const VSFrame* prev_output,
+    int chroma_width,
+    int chroma_height,
+    const std::vector<int>& current_luma,
+    const std::vector<int>& previous_luma,
+    const VSAPI* vsapi
+) {
+    /*
+        Detect scene changes using a vscnr2-style diff_total/diff_max metric
+        for 8-bit clips.
+
+        vscnr2 accumulates, at chroma resolution:
+
+            diff_total += abs(diff_y << (subSamplingW + subSamplingH))
+
+        and, when scene_chroma is true:
+
+            diff_total += abs(diff_u) + abs(diff_v)
+
+        If diff_total exceeds diff_max, the frame is treated as a scene change.
+    */
+    Cnr3SceneChangeStats stats;
+    stats.diff_max = (d != nullptr) ? d->scene_change_threshold : 0;
+
+    if (
+        d == nullptr ||
+        src == nullptr ||
+        prev_output == nullptr ||
+        vsapi == nullptr ||
+        chroma_width <= 0 ||
+        chroma_height <= 0 ||
+        current_luma.size() != previous_luma.size() ||
+        current_luma.size() !=
+        static_cast<size_t>(chroma_width) * static_cast<size_t>(chroma_height)
+        ) {
+        return stats;
+    }
+
+    stats.evaluated = true;
+
+    const uint8_t* src_u = vsapi->getReadPtr(src, 1);
+    const uint8_t* src_v = vsapi->getReadPtr(src, 2);
+    const uint8_t* prev_u = vsapi->getReadPtr(prev_output, 1);
+    const uint8_t* prev_v = vsapi->getReadPtr(prev_output, 2);
+
+    const ptrdiff_t src_u_stride = vsapi->getStride(src, 1);
+    const ptrdiff_t src_v_stride = vsapi->getStride(src, 2);
+    const ptrdiff_t prev_u_stride = vsapi->getStride(prev_output, 1);
+    const ptrdiff_t prev_v_stride = vsapi->getStride(prev_output, 2);
+
+    const int subsampling_shift =
+        d->vi->format.subSamplingW + d->vi->format.subSamplingH;
+
+    int64_t diff_total = 0;
+
+    for (int y = 0; y < chroma_height; ++y) {
+        const uint8_t* src_u_row = src_u;
+        const uint8_t* src_v_row = src_v;
+        const uint8_t* prev_u_row = prev_u;
+        const uint8_t* prev_v_row = prev_v;
+
+        const size_t luma_row_offset =
+            static_cast<size_t>(y) * static_cast<size_t>(chroma_width);
+
+        for (int x = 0; x < chroma_width; ++x) {
+            const size_t luma_index =
+                luma_row_offset + static_cast<size_t>(x);
+
+            const int diff_y =
+                current_luma[luma_index] - previous_luma[luma_index];
+
+            diff_total += static_cast<int64_t>(
+                std::abs(diff_y << subsampling_shift)
+                );
+
+            if (d->scene_chroma) {
+                const int diff_u =
+                    static_cast<int>(src_u_row[x]) -
+                    static_cast<int>(prev_u_row[x]);
+
+                const int diff_v =
+                    static_cast<int>(src_v_row[x]) -
+                    static_cast<int>(prev_v_row[x]);
+
+                diff_total +=
+                    static_cast<int64_t>(std::abs(diff_u)) +
+                    static_cast<int64_t>(std::abs(diff_v));
+            }
+
+            ++stats.evaluated_samples;
+        }
+
+        ++stats.evaluated_rows;
+
+        if (diff_total > d->scene_change_threshold) {
+            stats.scene_change = true;
+            stats.diff_total = diff_total;
+            return stats;
+        }
+
+        src_u += src_u_stride;
+        src_v += src_v_stride;
+        prev_u += prev_u_stride;
+        prev_v += prev_v_stride;
+    }
+
+    stats.diff_total = diff_total;
+    return stats;
+}
+
+static Cnr3SceneChangeStats detect_cnr3_scene_change_u16(
+    const Cnr3Data* d,
+    const VSFrame* src,
+    const VSFrame* prev_output,
+    int chroma_width,
+    int chroma_height,
+    const std::vector<int>& current_luma,
+    const std::vector<int>& previous_luma,
+    const VSAPI* vsapi
+) {
+    /*
+        Detect scene changes using a vscnr2-style diff_total/diff_max metric
+        for 10/12/14/16-bit clips.
+
+        VapourSynth stores integer formats above 8-bit in 16-bit samples.
+    */
+    Cnr3SceneChangeStats stats;
+    stats.diff_max = (d != nullptr) ? d->scene_change_threshold : 0;
+
+    if (
+        d == nullptr ||
+        src == nullptr ||
+        prev_output == nullptr ||
+        vsapi == nullptr ||
+        chroma_width <= 0 ||
+        chroma_height <= 0 ||
+        current_luma.size() != previous_luma.size() ||
+        current_luma.size() !=
+        static_cast<size_t>(chroma_width) * static_cast<size_t>(chroma_height)
+        ) {
+        return stats;
+    }
+
+    stats.evaluated = true;
+
+    const uint8_t* src_u_base = vsapi->getReadPtr(src, 1);
+    const uint8_t* src_v_base = vsapi->getReadPtr(src, 2);
+    const uint8_t* prev_u_base = vsapi->getReadPtr(prev_output, 1);
+    const uint8_t* prev_v_base = vsapi->getReadPtr(prev_output, 2);
+
+    const ptrdiff_t src_u_stride = vsapi->getStride(src, 1);
+    const ptrdiff_t src_v_stride = vsapi->getStride(src, 2);
+    const ptrdiff_t prev_u_stride = vsapi->getStride(prev_output, 1);
+    const ptrdiff_t prev_v_stride = vsapi->getStride(prev_output, 2);
+
+    const int subsampling_shift =
+        d->vi->format.subSamplingW + d->vi->format.subSamplingH;
+
+    int64_t diff_total = 0;
+
+    for (int y = 0; y < chroma_height; ++y) {
+        const uint16_t* src_u_row =
+            reinterpret_cast<const uint16_t*>(src_u_base);
+
+        const uint16_t* src_v_row =
+            reinterpret_cast<const uint16_t*>(src_v_base);
+
+        const uint16_t* prev_u_row =
+            reinterpret_cast<const uint16_t*>(prev_u_base);
+
+        const uint16_t* prev_v_row =
+            reinterpret_cast<const uint16_t*>(prev_v_base);
+
+        const size_t luma_row_offset =
+            static_cast<size_t>(y) * static_cast<size_t>(chroma_width);
+
+        for (int x = 0; x < chroma_width; ++x) {
+            const size_t luma_index =
+                luma_row_offset + static_cast<size_t>(x);
+
+            const int diff_y =
+                current_luma[luma_index] - previous_luma[luma_index];
+
+            diff_total += static_cast<int64_t>(
+                std::abs(diff_y << subsampling_shift)
+                );
+
+            if (d->scene_chroma) {
+                const int diff_u =
+                    static_cast<int>(src_u_row[x]) -
+                    static_cast<int>(prev_u_row[x]);
+
+                const int diff_v =
+                    static_cast<int>(src_v_row[x]) -
+                    static_cast<int>(prev_v_row[x]);
+
+                diff_total +=
+                    static_cast<int64_t>(std::abs(diff_u)) +
+                    static_cast<int64_t>(std::abs(diff_v));
+            }
+
+            ++stats.evaluated_samples;
+        }
+
+        ++stats.evaluated_rows;
+
+        if (diff_total > d->scene_change_threshold) {
+            stats.scene_change = true;
+            stats.diff_total = diff_total;
+            return stats;
+        }
+
+        src_u_base += src_u_stride;
+        src_v_base += src_v_stride;
+        prev_u_base += prev_u_stride;
+        prev_v_base += prev_v_stride;
+    }
+
+    stats.diff_total = diff_total;
+    return stats;
+}
+
+static Cnr3SceneChangeStats detect_cnr3_scene_change(
+    const Cnr3Data* d,
+    const VSFrame* src,
+    const VSFrame* prev_output,
+    int chroma_width,
+    int chroma_height,
+    int bytes_per_sample,
+    const std::vector<int>& current_luma,
+    const std::vector<int>& previous_luma,
+    const VSAPI* vsapi
+) {
+    /*
+        Dispatch the vscnr2-style scene-change detector by storage width.
+    */
+    if (bytes_per_sample == 1) {
+        return detect_cnr3_scene_change_u8(
+            d,
+            src,
+            prev_output,
+            chroma_width,
+            chroma_height,
+            current_luma,
+            previous_luma,
+            vsapi
+        );
+    }
+
+    if (bytes_per_sample == 2) {
+        return detect_cnr3_scene_change_u16(
+            d,
+            src,
+            prev_output,
+            chroma_width,
+            chroma_height,
+            current_luma,
+            previous_luma,
+            vsapi
+        );
+    }
+
+    Cnr3SceneChangeStats stats;
+    stats.diff_max = (d != nullptr) ? d->scene_change_threshold : 0;
+    return stats;
+}
+
 static const std::vector<int> &cnr3_get_table_for_chroma_plane(
     const Cnr3Data *d,
     int plane
@@ -1085,6 +1372,27 @@ static const std::vector<int> &cnr3_get_table_for_chroma_plane(
     */
     return (plane == 1) ? d->table_u : d->table_v;
 }
+
+struct Cnr3SceneChangeStats {
+    /*
+        Compact frame-level scene-change diagnostic.
+
+        This mirrors the vscnr2 diff_total/diff_max model:
+            - luma difference is calculated from the downsampled-luma buffers
+            - luma contribution is scaled by subSamplingW + subSamplingH
+            - chroma U/V differences are included only when scene_chroma is true
+
+        If diff_total exceeds diff_max, the frame is treated as a scene change.
+    */
+    bool evaluated = false;
+    bool scene_change = false;
+
+    int evaluated_rows = 0;
+    int64_t evaluated_samples = 0;
+
+    int64_t diff_total = 0;
+    int64_t diff_max = 0;
+};
 
 struct Cnr3ResponseDebugStats {
     /*
@@ -1368,6 +1676,50 @@ static void cnr3_print_blend_debug_stats(
         weight_avg_percent,
         weight_min_percent,
         weight_max_percent
+    );
+}
+
+static void cnr3_print_scene_change_debug_stats(
+    const Cnr3Data* d,
+    int frame_number,
+    const Cnr3SceneChangeStats& stats
+) {
+    /*
+        Print one compact frame-level scene-change diagnostic line.
+
+        This is deliberately frame-level, not per-plane, because the vscnr2
+        scene-change decision is made from combined luma and optional U/V
+        difference totals before deciding whether to keep the current source
+        frame unchanged.
+    */
+    if (d == nullptr || !d->debug) {
+        return;
+    }
+
+    if (!stats.evaluated) {
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, frame=%d, scene-change stats: not evaluated.\n",
+            d->instance_id,
+            frame_number
+        );
+
+        return;
+    }
+
+    cnr3_debug_printf(
+        d->debug,
+        "CNR3 debug: instance=%d, frame=%d, scene-change stats: "
+        "rows=%d, samples=%lld, diff_total=%lld, diff_max=%lld, "
+        "scene_change=%d, scene_chroma=%d\n",
+        d->instance_id,
+        frame_number,
+        stats.evaluated_rows,
+        static_cast<long long>(stats.evaluated_samples),
+        static_cast<long long>(stats.diff_total),
+        static_cast<long long>(stats.diff_max),
+        stats.scene_change ? 1 : 0,
+        d->scene_chroma ? 1 : 0
     );
 }
 

@@ -2622,3 +2622,4 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(
         plugin
     );
 }
+

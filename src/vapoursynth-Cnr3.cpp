@@ -1889,6 +1889,12 @@ static void process_cnr3_chroma_plane_u8(
         }
     }
 
+    /*
+        Verbose per-plane response/blend diagnostics.
+
+        Useful when tuning response tables or checking blend strength. Normally
+        too noisy now that scene-change detection has its own frame-level debug.
+
     cnr3_print_response_debug_stats(
         d,
         frame_number,
@@ -1902,6 +1908,7 @@ static void process_cnr3_chroma_plane_u8(
         plane,
         blend_stats
     );
+    */
 }
 
 static void process_cnr3_chroma_plane_u16(
@@ -2076,6 +2083,12 @@ static void process_cnr3_chroma_plane_u16(
         }
     }
 
+    /*
+        Verbose per-plane response/blend diagnostics.
+
+        Useful when tuning response tables or checking blend strength. Normally
+        too noisy now that scene-change detection has its own frame-level debug.
+
     cnr3_print_response_debug_stats(
         d,
         frame_number,
@@ -2089,6 +2102,7 @@ static void process_cnr3_chroma_plane_u16(
         plane,
         blend_stats
     );
+    */
 }
 
 static bool process_cnr3_chroma_plane(
@@ -2181,6 +2195,12 @@ static bool process_cnr3_chroma_plane(
         return false;
     }
 
+    /*
+        Verbose per-plane geometry diagnostic.
+
+        Useful when changing luma-buffer sharing, chroma-plane dimensions, or
+        subsampling handling. Normally too noisy for scene-change testing.
+
     cnr3_debug_printf(
         d->debug && frame_number <= 2,
         "CNR3 debug: process_cnr3_chroma_plane() instance=%d, frame=%d, plane=%c, using shared downsampled-luma guard buffer: chroma=%dx%d, subsampling=%d:%d, blend=%d\n",
@@ -2193,6 +2213,7 @@ static bool process_cnr3_chroma_plane(
         d->vi->format.subSamplingH,
         d->blend ? 1 : 0
     );
+    */
 
     /*
         Chroma stabilisation stage.
@@ -2303,12 +2324,18 @@ static bool process_cnr3_frame(
     const VSFrame *prev_output = d->cache.prev_output;
 
     if (frame_number == 0) {
+        /*
+            Verbose normal-path diagnostic. Keep disabled unless debugging
+            frame-order or cache sequencing.
+
         cnr3_debug_printf(
             d->debug,
             "CNR3 debug: instance=%d, processing frame 0 using initial-copy path.\n",
             d->instance_id
         );
-    } else {
+        */
+    }
+    else {
         if (prev_output == nullptr) {
             cnr3_debug_printf(
                 d->debug,
@@ -2324,12 +2351,17 @@ static bool process_cnr3_frame(
             return false;
         }
 
+        /*
+            Verbose normal-path diagnostic. Keep disabled unless debugging
+            frame-order or cache sequencing.
+
         cnr3_debug_printf(
             d->debug,
             "CNR3 debug: instance=%d, processing frame=%d using recursive previous-output path.\n",
             d->instance_id,
             frame_number
         );
+        */
     }
 
     const int bytes_per_sample = (d->bits_per_sample + 7) / 8;
@@ -2713,6 +2745,10 @@ static const VSFrame *VS_CC cnr3_get_frame(
             vsapi
         );
 
+        /*
+            Verbose normal-path cache diagnostic. Keep disabled unless debugging
+            strict streaming, cache ownership, or future cache-manager behaviour.
+
         cnr3_debug_printf(
             d->debug,
             "CNR3 debug: instance=%d, processed frame: frame=%d, new_next_needed=%d, stored_prev_output=%s\n",
@@ -2721,6 +2757,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
             d->cache.next_needed,
             d->cache.prev_output != nullptr ? "yes" : "no"
         );
+        */
         
         vsapi->freeFrame(src);
 

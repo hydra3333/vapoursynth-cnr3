@@ -1685,25 +1685,43 @@ static void cnr3_print_scene_change_debug_stats(
     const Cnr3SceneChangeStats& stats
 ) {
     /*
-        Print one compact frame-level scene-change diagnostic line.
+        Print compact frame-level scene-change diagnostics.
 
-        This is deliberately frame-level, not per-plane, because the vscnr2
-        scene-change decision is made from combined luma and optional U/V
-        difference totals before deciding whether to keep the current source
-        frame unchanged.
+        Normal non-scene frames are deliberately quiet.
+
+        A line is printed only when:
+            - scene-change detection fires, or
+            - diff_total reaches at least 80% of diff_max.
+
+        The near-threshold case is useful while tuning scdthr because camera
+        wobble, zooms, field jitter, pans, or large object motion can approach
+        the vscnr2-style scene-change threshold without being true edit cuts.
     */
     if (d == nullptr || !d->debug) {
         return;
     }
 
     if (!stats.evaluated) {
+        /*
+            Verbose diagnostic. Usually disabled because frame 0 and unsupported
+            cases are expected to be quiet during normal testing.
+
         cnr3_debug_printf(
             d->debug,
             "CNR3 debug: instance=%d, frame=%d, scene-change stats: not evaluated.\n",
             d->instance_id,
             frame_number
         );
+        */
 
+        return;
+    }
+
+    const bool near_scene_change_threshold =
+        stats.diff_max > 0 &&
+        stats.diff_total >= (stats.diff_max * 80) / 100;
+
+    if (!stats.scene_change && !near_scene_change_threshold) {
         return;
     }
 
@@ -1711,13 +1729,20 @@ static void cnr3_print_scene_change_debug_stats(
         d->debug,
         "CNR3 debug: instance=%d, frame=%d, scene-change stats: "
         "rows=%d, samples=%lld, diff_total=%lld, diff_max=%lld, "
-        "scene_change=%d, scene_chroma=%d\n",
+        "threshold_percent=%.2f%%, scene_change=%d, scene_chroma=%d\n",
         d->instance_id,
         frame_number,
         stats.evaluated_rows,
         static_cast<long long>(stats.evaluated_samples),
         static_cast<long long>(stats.diff_total),
         static_cast<long long>(stats.diff_max),
+        stats.diff_max > 0
+        ? (
+            100.0 *
+            static_cast<double>(stats.diff_total) /
+            static_cast<double>(stats.diff_max)
+            )
+        : 0.0,
         stats.scene_change ? 1 : 0,
         d->scene_chroma ? 1 : 0
     );

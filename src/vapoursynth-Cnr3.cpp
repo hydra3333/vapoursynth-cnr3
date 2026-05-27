@@ -1,5 +1,5 @@
 /*
-    CNR3 - experimental VapourSynth API4 chroma stabiliser
+    CNR3 - VapourSynth API4 chroma stabiliser based on CNR2
 
     This is the initial API4 skeleton. It intentionally returns the source
     clip unchanged. Its purpose is to prove that the project can build a

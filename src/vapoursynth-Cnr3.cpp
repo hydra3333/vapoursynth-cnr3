@@ -1,14 +1,11 @@
 /*
-    CNR3 - VapourSynth API4 chroma stabiliser based on CNR2
+	CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
 
-    This is the initial API4 skeleton. It intentionally returns the source
-    clip unchanged. Its purpose is to prove that the project can build a
-    loadable VapourSynth plugin DLL before the recursive CNR3 algorithm is
-    connected.
+    CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive temporal
+    chroma-stabilisation model while using VapourSynth API4 only.
 
     Diagnostic output rule:
-        CNR3 must never write diagnostics to stdout.
-        Debug/status messages must go to stderr.
+        CNR3 must never write to stdout, debug/status messages must go to stderr.
         VapourSynth errors must use mapSetError() or setFilterError().
 
     SPDX-License-Identifier: AGPL-3.0-or-later
@@ -582,12 +579,12 @@ static void build_cnr3_weight_table(
             mode character 'o' means wide response, not enabled.
 
         A response value near strength means:
-            the current-vs-previous difference is small enough that the later
+            the current-vs-previous difference is small enough that the
             recursive chroma blend may strongly reuse previous filtered chroma.
 
         A response value near zero means:
-            the difference is large enough that the later recursive chroma
-            blend should mostly or entirely keep current source chroma.
+            the difference is large enough that the recursive chroma blend
+            should mostly or entirely keep current source chroma.
 
         Narrow response:
             The table falls away more quickly as abs(diff) increases.
@@ -604,7 +601,7 @@ static void build_cnr3_weight_table(
             - U and V use narrow response so actual chroma changes are handled
               more conservatively.
             - This matches the historical default while still making all three
-              planes participate in the later blend decision.
+              planes participate in the blend decision.
 
         Table storage:
             table[signed_diff + table_offset]
@@ -615,8 +612,7 @@ static void build_cnr3_weight_table(
         The table is signed because the vscnr2-style formula uses signed
         current-vs-previous differences when indexing the Y/U/V response
         tables. For cosine response curves the result is symmetric, but keeping
-        signed indexing avoids a later structural change when the real blend is
-        connected.
+        signed indexing keeps the lookup path aligned with the blend formula.
     */
 
     table.assign(static_cast<size_t>(table_size), 0);
@@ -1335,33 +1331,35 @@ static void cnr3_print_blend_debug_stats(
     );
 }
 
-static void process_cnr3_chroma_plane_passthrough_u8(
-    const Cnr3Data *d,
+static void process_cnr3_chroma_plane_u8(
+    const Cnr3Data* d,
     int frame_number,
-    const VSFrame *src,
-    const VSFrame *prev_output,
-    VSFrame *dst,
+    const VSFrame* src,
+    const VSFrame* prev_output,
+    VSFrame* dst,
     int plane,
-    const std::vector<int> &current_luma,
-    const std::vector<int> &previous_luma,
-    const VSAPI *vsapi
+    const std::vector<int>& current_luma,
+    const std::vector<int>& previous_luma,
+    const VSAPI* vsapi
 ) {
     /*
-        Temporary per-sample chroma loop for 8-bit integer clips.
+        Per-sample chroma processing loop for 8-bit integer clips.
 
-        This is deliberately still pass-through:
-            dst[x] = src[x]
+        For each U/V sample, this path:
+            - reads current source chroma
+            - reads previous filtered chroma when frame_number > 0
+            - calculates signed current-vs-previous chroma difference
+            - uses vscnr2-style downsampled-luma buffers for Y difference
+            - looks up Y and U/V response-table values
+            - optionally blends previous filtered chroma with current source
+              chroma when d->blend is true
 
-        Scaffold purpose:
-            - read current source chroma
-            - read previous filtered chroma when frame_number > 0
-            - calculate signed current-vs-previous chroma difference
-            - use vscnr2-style downsampled luma buffers for Y difference
-            - look up Y and U/V response-table values
-            - still write current source chroma unchanged
+        Frame 0 remains source-copy because there is no previous filtered
+        output frame.
 
-        This proves the real algorithm's read paths and table lookup paths
-        without yet letting previous-frame chroma affect the image.
+        blend=false is retained for maintenance/testing. It keeps the read,
+        difference, table, and diagnostic paths active while forcing chroma
+        output to pass through unchanged.
     */
     if (d == nullptr || src == nullptr || dst == nullptr || vsapi == nullptr) {
         return;
@@ -1451,13 +1449,14 @@ static void process_cnr3_chroma_plane_passthrough_u8(
                 Development behaviour:
 
                     blend=false:
-                        preserve the known-good pass-through output.
+                        force current-source chroma output while keeping
+                        diagnostics active.
 
                     blend=true and previous output is available:
-                        enable the first real vscnr2-style recursive chroma
-                        blend, using previous filtered output as history.
+                        enable the vscnr2-style recursive chroma blend, using
+                        previous filtered output as history.
 
-                Frame 0 remains pass-through because prev_row is null.
+                Frame 0 writes current-source chroma because prev_row is null.
             */
             if (d->blend && prev_row != nullptr) {
                 const uint8_t previous_chroma = prev_row[x];
@@ -1513,31 +1512,36 @@ static void process_cnr3_chroma_plane_passthrough_u8(
     );
 }
 
-static void process_cnr3_chroma_plane_passthrough_u16(
-    const Cnr3Data *d,
+static void process_cnr3_chroma_plane_u16(
+    const Cnr3Data* d,
     int frame_number,
-    const VSFrame *src,
-    const VSFrame *prev_output,
-    VSFrame *dst,
+    const VSFrame* src,
+    const VSFrame* prev_output,
+    VSFrame* dst,
     int plane,
-    const std::vector<int> &current_luma,
-    const std::vector<int> &previous_luma,
-    const VSAPI *vsapi
+    const std::vector<int>& current_luma,
+    const std::vector<int>& previous_luma,
+    const VSAPI* vsapi
 ) {
     /*
-        Temporary per-sample chroma loop for 10/12/16-bit integer clips.
+        Per-sample chroma processing loop for 10/12/16-bit integer clips.
 
         VapourSynth stores integer formats above 8-bit in 16-bit samples, so
         this path handles all currently accepted high-bit-depth inputs.
 
-        This is deliberately still pass-through:
-            dst[x] = src[x]
+        The high-bit-depth path follows the same structure as the 8-bit path:
+            - current source chroma
+            - previous filtered output chroma
+            - vscnr2-style downsampled-luma Y guard
+            - signed Y/U/V response-table lookups
+            - optional recursive blend when d->blend is true
 
-        Scaffold purpose:
-            prove the same current/previous read paths, vscnr2-style
-            downsampled-luma Y guard, and signed table lookups as the 8-bit
-            path, while preserving high-bit-depth pass-through output before
-            real blending is connected.
+        Frame 0 remains source-copy because there is no previous filtered
+        output frame.
+
+        blend=false is retained for maintenance/testing. It keeps the read,
+        difference, table, and diagnostic paths active while forcing chroma
+        output to pass through unchanged.
     */
     if (d == nullptr || src == nullptr || dst == nullptr || vsapi == nullptr) {
         return;
@@ -1706,31 +1710,26 @@ static bool process_cnr3_chroma_plane(
     /*
         Chroma-plane processing function.
 
-        Current behaviour:
-            copy the requested chroma plane from the current source frame.
+        This is the stable call site for recursive CNR3 chroma stabilisation.
 
-        Purpose:
-            this is now the stable call site for the real recursive CNR3 chroma
-            stabilisation algorithm.
+        For each U/V chroma plane, it:
+            - validates the requested chroma plane
+            - requires previous filtered output for frame N > 0
+            - builds current-source downsampled luma at chroma resolution
+            - builds previous-output downsampled luma at chroma resolution
+            - dispatches to the 8-bit or 10/12/16-bit per-sample path
 
         Important note:
-            Do not simply copy chroma from prev_output as a proof test. Since
-            prev_output is the previous filtered output, copying U/V from it
-            recursively causes chroma to remain effectively stuck at frame 0:
+            Do not simply copy chroma from prev_output. Since prev_output is
+            the previous filtered output, copying U/V from it directly would
+            recursively cause chroma to remain effectively stuck at frame 0:
 
                 output[1].UV = output[0].UV
                 output[2].UV = output[1].UV
                 output[3].UV = output[2].UV
 
-            That test proved prev_output was readable, but it badly distorted
-            colour and was reverted.
-
-        Intended future behaviour:
-            for each chroma sample in source frame N:
-                read current source chroma from source[N]
-                read previous filtered chroma from output[N - 1]
-                use Y/U/V guard tables to decide blend strength
-                write stabilised chroma to output[N]
+            The correct algorithm uses response-table weights to decide how
+            much previous filtered chroma may be reused at each chroma sample.
 
         Plane convention:
             plane 1 = U
@@ -1745,10 +1744,12 @@ static bool process_cnr3_chroma_plane(
     }
 
     /*
-        Keep this validation even though the current pass-through path does not
-        write from prev_output. The real recursive algorithm will need it, and
-        the frame-level function has already established this as part of the
-        recursive precondition.
+        Frame N > 0 requires the previous filtered output frame because the
+        recursive chroma blend uses output[N - 1] as its temporal history.
+
+        blend=false does not use previous chroma for output pixels, but keeping
+        the same precondition makes diagnostics and future maintenance paths
+        follow the same frame-ordering contract.
     */
     if (frame_number > 0 && prev_output == nullptr) {
         return false;
@@ -1802,24 +1803,20 @@ static bool process_cnr3_chroma_plane(
     );
 
     /*
-        Scaffold stage only.
+        Chroma stabilisation stage.
 
-        At this point, CNR3 intentionally still writes pass-through chroma.
-        The purpose of using per-sample loops now is to prove the exact loop
-        structure that the real recursive blend will later use.
-
-        This version now uses vscnr2-style downsampled-luma buffers at chroma
+        This version uses vscnr2-style downsampled-luma buffers at chroma
         resolution for the Y guard instead of one representative full-size luma
-        sample. That is important because the real-clip diagnostics showed the
-        luma guard doing much of the future blend gating.
+        sample. That is important because real-clip diagnostics showed the luma
+        guard doing much of the blend gating.
 
-        Future algorithm notes:
-            - frame 0 will initialise from current source chroma
-            - frame N > 0 will read prev_output chroma from output[N - 1]
-            - Y/U/V guard tables will decide how much previous filtered chroma
-              may be reused
-            - mode characters 'x' and 'o' must be treated as narrow and wide
-              guard response curves, not as disabled and enabled switches
+        Algorithm notes:
+            - frame 0 initialises from current source chroma
+            - frame N > 0 reads previous filtered chroma from output[N - 1]
+            - Y/U/V guard tables decide how much previous filtered chroma may
+              be reused
+            - mode characters 'x' and 'o' are narrow and wide guard response
+              curves, not disabled and enabled switches
 
         Why the historical default mode="oxx" can still make sense:
             - Y uses the wider response, so luma structure does not block
@@ -1828,13 +1825,9 @@ static bool process_cnr3_chroma_plane(
               more conservatively
             - this can give useful chroma shimmer reduction while reducing the
               risk of chroma lag, smearing, or ghosting around real motion
-
-        The lookup-table builder now uses the historical narrow/wide response
-        meaning of mode characters. Real chroma blending is still not connected
-        in this scaffold step.
     */
     if (bytes_per_sample == 1) {
-        process_cnr3_chroma_plane_passthrough_u8(
+        process_cnr3_chroma_plane_u8(
             d,
             frame_number,
             src,
@@ -1850,7 +1843,7 @@ static bool process_cnr3_chroma_plane(
     }
 
     if (bytes_per_sample == 2) {
-        process_cnr3_chroma_plane_passthrough_u16(
+        process_cnr3_chroma_plane_u16(
             d,
             frame_number,
             src,
@@ -1868,36 +1861,33 @@ static bool process_cnr3_chroma_plane(
     return false;
 }
 
-static bool process_cnr3_frame_passthrough_for_now(
-    const Cnr3Data *d,
+static bool process_cnr3_frame(
+    const Cnr3Data* d,
     int frame_number,
-    const VSFrame *src,
-    VSFrame *dst,
-    VSFrameContext *frameCtx,
-    const VSAPI *vsapi
+    const VSFrame* src,
+    VSFrame* dst,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi
 ) {
     /*
-        Temporary frame-processing function.
-
-        Current behaviour:
-            copy Y/U/V unchanged.
-
-        Purpose:
-            establish the stable structure where the real recursive CNR3
-            chroma processing will be inserted.
+        Frame-processing function.
 
         Processing structure:
             Y:
                 copied unchanged, because CNR3 is a chroma stabiliser.
 
             U/V:
-                routed through separate chroma-plane processing calls.
+                routed through recursive chroma-plane stabilisation.
 
         Recursive precondition:
             frame 0 does not need a previous output frame.
 
-            frame N > 0 must have d->cache.prev_output available, because the
-            real algorithm will use output[N - 1] when producing output[N].
+            frame N > 0 must have d->cache.prev_output available, because CNR3
+            uses output[N - 1] when producing output[N].
+
+        Strict streaming note:
+            until the fuller cache manager exists, frame requests must arrive
+            in strictly increasing order. Use vspipe -r 1 for current tests.
     */
     if (d == nullptr) {
         vsapi->setFilterError("CNR3: internal error: filter data is null.", frameCtx);
@@ -2179,7 +2169,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
             return nullptr;
         }
 
-        if (!process_cnr3_frame_passthrough_for_now(
+        if (!process_cnr3_frame(
             d,
             n,
             src,
@@ -2267,11 +2257,14 @@ static void VS_CC cnr3_create(
 
     /*
         Development/maintenance option.
+
         Default to recursive Cnr2-style chroma blending enabled.
+
         blend=false remains available for maintenance/testing because it keeps
         the diagnostic read/table paths active while forcing chroma output to
         pass through unchanged.
-   */
+    */
+    local.blend = get_optional_int(in, vsapi, "blend", 1) != 0;
     local.blend = get_optional_int(in, vsapi, "blend", 1) != 0;
 
     local.debug = get_optional_int(in, vsapi, "debug", 0) != 0;

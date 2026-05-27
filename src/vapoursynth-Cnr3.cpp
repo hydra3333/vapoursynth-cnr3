@@ -48,7 +48,7 @@
         CNR3 must never write to stdout, debug/status messages must go to stderr.
         VapourSynth errors must use mapSetError() or setFilterError().
 
-    SPDX-License-Identifier: AGPL-3.0-or-later 
+    SPDX-License-Identifier: AGPL-3.0-or-later
 */
 
 #include <algorithm>

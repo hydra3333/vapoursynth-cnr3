@@ -62,8 +62,9 @@
 #include <cmath>
 #include <vector>
 
+#include "VapourSynth4.h"
+#include "VSHelper4.h"
 #include "cnr3_common.h"
-#include "cnr3_cache.h"
 
 // -----------------------------------------------------------------------------
 //  API policy:
@@ -150,11 +151,7 @@ static void cnr3_debug_printf(
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// ---------------------// -----------------------------------------------------------------------------
-// Shared CNR3 data/cache types live in cnr3_common.h and cnr3_cache.h.
-// -----------------------------------------------------------------------------
-
-_print_cache_state(
+static void cnr3_debug_print_cache_state(
     const Cnr3Data* d,
     const char* where,
     int requested_frame
@@ -298,8 +295,6 @@ static int scale_8bit_parameter_to_bit_depth(
         (static_cast<int64_t>(value_8bit) * peak + 127) / 255
         );
 }
-
-
 
 static int get_cnr3_table_value_for_signed_diff(
     const std::vector<int>& table,

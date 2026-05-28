@@ -1323,7 +1323,13 @@ Current implementation:
     strict streaming one-previous-output API4 bridge, requiring vspipe -r 1.
 
 Planned design direction to confirm/refine:
-    per-instance cache manager with recent output back-cache, checkpointing,
-    jump-distance policy, cascade-drain/speculative refusal, recompute/recovery,
-    and explicit cache-clearing/eviction rules.
+    per-instance cache manager and lists with recent output back-cache, checkpointing,
+    jump-distance policy, cascade-drain/smart-speculative-refusal (eg perhaps
+    using lists like in-progress, recently-requested-and-speculatively-refused, etc
+    to attempt predict if/when the immediately prior output frame may become available
+    and lead to cascade-drain), recompute/recovery (eg perhaps when speculative refusal exhausion),
+    and explicit cache-clearing/eviction rules etc.  There is a draft proposed cache specifcation
+    whih is to be treated as a starting point and certainly not an end-point since explicit and well defined
+    rules talking care of all normal and edge cases must be well defined and logically analyzed/tested.
+
 ```

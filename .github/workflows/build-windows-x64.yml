@@ -73,6 +73,7 @@ jobs:
             /I third_party\vapoursynth\include ^
             /Fo:build\ ^
             src\vapoursynth-Cnr3.cpp ^
+            src\cnr3_cache.cpp ^
             /Fe:build\cnr3.dll ^
             /link ^
             /LTCG

@@ -63,6 +63,7 @@
 #include <vector>
 
 #include "cnr3_common.h"
+#include "cnr3_cache.h"
 
 // -----------------------------------------------------------------------------
 //  API policy:

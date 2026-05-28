@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VapourSynth4.h"
+#include "VSHelper4.h"
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager

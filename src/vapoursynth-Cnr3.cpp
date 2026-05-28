@@ -62,8 +62,7 @@
 #include <cmath>
 #include <vector>
 
-#include "VapourSynth4.h"
-#include "VSHelper4.h"
+#include "cnr3_common.h"
 
 // -----------------------------------------------------------------------------
 //  API policy:
@@ -85,7 +84,7 @@
 // Interlaced sources are usually have fields separated and processed separately
 // before re-interlacing or deinterlacing - which means 2 instances of this plugin.
 //
-static std::atomic<int> g_cnr3_next_instance_id{1};
+static std::atomic<int> g_cnr3_next_instance_id{ 1 };
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
@@ -93,7 +92,7 @@ static std::atomic<int> g_cnr3_next_instance_id{1};
 // -----------------------------------------------------------------------------
 
 static void cnr3_vfprintf_stderr(
-    const char *format,
+    const char* format,
     va_list args
 ) {
     /*
@@ -118,7 +117,7 @@ static void cnr3_vfprintf_stderr(
 
 static void cnr3_debug_printf(
     bool debug_enabled,
-    const char *format,
+    const char* format,
     ...
 ) {
     /*
@@ -150,169 +149,13 @@ static void cnr3_debug_printf(
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// CNR3 cache manager
-//
-// This section is intentionally self-contained so it can later move to:
-//     cnr3_cache.h
-//     cnr3_cache.cpp
+// ---------------------// -----------------------------------------------------------------------------
+// Shared CNR3 data/cache types live in cnr3_common.h and cnr3_cache.h.
 // -----------------------------------------------------------------------------
 
-struct Cnr3CacheManager {
-    /*
-        Minimal cache/state manager.
-
-        This is intentionally only the strict streaming subset of the future
-        cache manager design.
-
-        Invariant:
-            prev_output holds a read-only reference to output[next_needed - 1],
-            or nullptr before frame 0 has been processed.
-
-        Initial Policy A:
-            Only frame n == next_needed is accepted.
-
-        Future Policy C can extend this struct with:
-            reorder buffer
-            recent output cache
-            checkpoint store
-            recovery state
-            seek mode
-    */
-    const VSFrame *prev_output = nullptr;
-    int next_needed = 0;
-};
-// -----------------------------------------------------------------------------
-// END CNR3 cache manager
-// -----------------------------------------------------------------------------
-
-struct Cnr3Data {
-    VSNode *node = nullptr;
-    const VSVideoInfo *vi = nullptr;
-
-    // Human-readable ID used to distinguish simultaneous CNR3 filter instances.
-    int instance_id = 0;
-
-    std::string mode = "oxx";
-
-    /*
-        Public threshold parameters are always interpreted in 8-bit Cnr2/vscnr2-compatible units. 
-        For clips above 8-bit depth, CNR3 scales these values internally to the actual sample depth.
-    */
-    int ln = 35;
-    int lm = 192;
-    int un = 47;
-    int um = 255;
-    int vn = 47;
-    int vm = 255;
-
-    int bits_per_sample = 8;
-    int sample_peak = 255;
-
-    int ln_scaled = 35;
-    int lm_scaled = 192;
-    int un_scaled = 47;
-    int um_scaled = 255;
-    int vn_scaled = 47;
-    int vm_scaled = 255;
-
-    /*
-        Lookup tables used by the Cnr2/vscnr2-style weighting logic.
-
-        The public parameters are 8-bit-domain values. These tables are built
-        after those values have been scaled to the actual integer bit depth.
-
-        Important mode semantics:
-            'x' does not mean disabled.
-            'o' does not mean enabled.
-
-            'x' = narrow response curve.
-                  More sensitive to current-vs-previous differences.
-                  Blending will be reduced sooner as differences increase.
-                  This is safer but less aggressive.
-
-            'o' = wide response curve.
-                  Less sensitive to current-vs-previous differences.
-                  Blending remains allowed across a wider difference range.
-                  This gives stronger chroma stabilisation but has more risk
-                  of chroma lag, smearing, or ghosting around real motion.
-
-        Why the historical default mode="oxx" can still make sense:
-            Y uses the wider response, so luma structure does not block chroma
-            stabilisation too eagerly.
-
-            U and V use narrower responses, so actual chroma changes are
-            treated more conservatively.
-
-            This can give useful chroma shimmer reduction while reducing the
-            risk of dragging old chroma into genuinely changed areas.
-
-        Table index:
-            signed sample difference plus table_offset.
-
-            Example:
-                signed_diff = current_sample - previous_sample
-                table_index = signed_diff + table_offset
-
-        Table value:
-            0..sample_peak weighting value.
-
-        This matches the shape needed by the real vscnr2-style blend, where
-        Y and chroma table values are multiplied together before blending
-        previous filtered chroma with current source chroma.
-    */
-    int table_offset = 256;
-    int table_size = 513;
-
-    std::vector<int> table_y;
-    std::vector<int> table_u;
-    std::vector<int> table_v;
-
-    double scdthr = 10.0;
-
-    bool scene_chroma = false;
-
-    /*
-        vscnr2-style scene-change threshold.
-
-        This is calculated once in cnr3_create() from:
-            scdthr
-            frame width/height
-            bit depth
-            chroma subsampling
-            scene_chroma
-
-        During frame processing, accumulated frame difference greater than this
-        threshold causes CNR3 to output the current source frame unchanged for
-        that frame, matching the vscnr2 scene-change behaviour as closely as
-        practical in the current API4 structure.
-    */
-    int64_t scene_change_threshold = 0;
-
-    /*
-        blend=true enables the first real vscnr2-style recursive chroma blend.
-        blend=false keeps the current pass-through chroma output while still
-                    running the diagnostic read/table paths.
-
-        The option will remain for future maintenance/testing, and release behaviour
-        will default to Cnr2-style blending enabled.
-    */
-    bool blend = true;
-
-    /*
-        Frame ordering and recursive-state manager.
-
-        Currently this implements only strict streaming Policy A.
-        The struct shape deliberately leaves room for the future cache manager.
-    */
-    Cnr3CacheManager cache;
-
-    bool debug = false;
-};
-
-static void cnr3_debug_print_cache_state(
-    const Cnr3Data *d,
-    const char *where,
+_print_cache_state(
+    const Cnr3Data* d,
+    const char* where,
     int requested_frame
 ) {
     if (d == nullptr || !d->debug) {
@@ -335,9 +178,9 @@ static void cnr3_debug_print_cache_state(
 }
 
 static int64_t get_optional_int(
-    const VSMap *in,
-    const VSAPI *vsapi,
-    const char *name,
+    const VSMap* in,
+    const VSAPI* vsapi,
+    const char* name,
     int64_t default_value
 ) {
     int err = 0;
@@ -346,9 +189,9 @@ static int64_t get_optional_int(
 }
 
 static double get_optional_float(
-    const VSMap *in,
-    const VSAPI *vsapi,
-    const char *name,
+    const VSMap* in,
+    const VSAPI* vsapi,
+    const char* name,
     double default_value
 ) {
     int err = 0;
@@ -357,13 +200,13 @@ static double get_optional_float(
 }
 
 static std::string get_optional_data_string(
-    const VSMap *in,
-    const VSAPI *vsapi,
-    const char *name,
-    const char *default_value
+    const VSMap* in,
+    const VSAPI* vsapi,
+    const char* name,
+    const char* default_value
 ) {
     int err = 0;
-    const char *value = vsapi->mapGetData(in, name, 0, &err);
+    const char* value = vsapi->mapGetData(in, name, 0, &err);
     if (err || value == nullptr) {
         return std::string(default_value);
     }
@@ -372,9 +215,9 @@ static std::string get_optional_data_string(
 }
 
 static bool validate_cnr3_format(
-    const VSVideoInfo *vi,
-    VSMap *out,
-    const VSAPI *vsapi
+    const VSVideoInfo* vi,
+    VSMap* out,
+    const VSAPI* vsapi
 ) {
     if (vi == nullptr) {
         vsapi->mapSetError(out, "CNR3: internal error: video info is null.");
@@ -452,27 +295,13 @@ static int scale_8bit_parameter_to_bit_depth(
 
     return static_cast<int>(
         (static_cast<int64_t>(value_8bit) * peak + 127) / 255
-    );
+        );
 }
 
-static int clamp_int(
-    int value,
-    int low,
-    int high
-) {
-    if (value < low) {
-        return low;
-    }
 
-    if (value > high) {
-        return high;
-    }
-
-    return value;
-}
 
 static int get_cnr3_table_value_for_signed_diff(
-    const std::vector<int> &table,
+    const std::vector<int>& table,
     int table_offset,
     int signed_diff
 ) {
@@ -612,13 +441,13 @@ static int blend_cnr3_chroma_sample(
             weight * static_cast<int64_t>(previous_filtered_sample) +
             (shift - weight) * static_cast<int64_t>(current_sample) +
             shift1
-        ) >> shift2;
+            ) >> shift2;
 
     return static_cast<int>(blended);
 }
 
 static void build_cnr3_weight_table(
-    std::vector<int> &table,
+    std::vector<int>& table,
     int table_offset,
     int table_size,
     int sample_peak,
@@ -674,8 +503,8 @@ static void build_cnr3_weight_table(
 
     table.assign(static_cast<size_t>(table_size), 0);
 
-    threshold = clamp_int(threshold, 0, sample_peak);
-    strength = clamp_int(strength, 0, sample_peak);
+    threshold = cnr3_clamp_int(threshold, 0, sample_peak);
+    strength = cnr3_clamp_int(strength, 0, sample_peak);
 
     if (threshold == 0) {
         table[static_cast<size_t>(table_offset)] = strength;
@@ -712,8 +541,9 @@ static void build_cnr3_weight_table(
                 (
                     static_cast<double>(threshold) *
                     static_cast<double>(threshold)
-                );
-        } else {
+                    );
+        }
+        else {
             /*
                 Narrow response.
 
@@ -734,7 +564,7 @@ static void build_cnr3_weight_table(
         const double half_strength =
             static_cast<double>(strength / 2);
 
-        const int value = clamp_int(
+        const int value = cnr3_clamp_int(
             static_cast<int>(half_strength * (1.0 + std::cos(angle))),
             0,
             sample_peak
@@ -745,9 +575,9 @@ static void build_cnr3_weight_table(
 }
 
 static bool build_cnr3_lookup_tables(
-    Cnr3Data &d,
-    VSMap *out,
-    const VSAPI *vsapi
+    Cnr3Data& d,
+    VSMap* out,
+    const VSAPI* vsapi
 ) {
     /*
         mode is a 3-character string:
@@ -811,7 +641,7 @@ static bool build_cnr3_lookup_tables(
         d.table_y.size() != static_cast<size_t>(d.table_size) ||
         d.table_u.size() != static_cast<size_t>(d.table_size) ||
         d.table_v.size() != static_cast<size_t>(d.table_size)
-    ) {
+        ) {
         vsapi->mapSetError(out, "CNR3: internal error: lookup-table size mismatch.");
         return false;
     }
@@ -820,14 +650,14 @@ static bool build_cnr3_lookup_tables(
 }
 
 static void copy_plane_bytes(
-    const VSFrame *src,
-    VSFrame *dst,
+    const VSFrame* src,
+    VSFrame* dst,
     int plane,
     int bytes_per_sample,
-    const VSAPI *vsapi
+    const VSAPI* vsapi
 ) {
-    const uint8_t *srcp = vsapi->getReadPtr(src, plane);
-    uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+    const uint8_t* srcp = vsapi->getReadPtr(src, plane);
+    uint8_t* dstp = vsapi->getWritePtr(dst, plane);
 
     const ptrdiff_t src_stride = vsapi->getStride(src, plane);
     const ptrdiff_t dst_stride = vsapi->getStride(dst, plane);
@@ -848,10 +678,10 @@ static void copy_plane_bytes(
 }
 
 static void copy_all_planes_unchanged(
-    const VSFrame *src,
-    VSFrame *dst,
+    const VSFrame* src,
+    VSFrame* dst,
     int bytes_per_sample,
-    const VSAPI *vsapi
+    const VSAPI* vsapi
 ) {
     copy_plane_bytes(src, dst, 0, bytes_per_sample, vsapi);
     copy_plane_bytes(src, dst, 1, bytes_per_sample, vsapi);
@@ -859,12 +689,12 @@ static void copy_all_planes_unchanged(
 }
 
 static void build_cnr3_downsampled_luma_buffer_u8(
-    const Cnr3Data *d,
-    const VSFrame *frame,
+    const Cnr3Data* d,
+    const VSFrame* frame,
     int chroma_width,
     int chroma_height,
-    std::vector<int> &luma_buffer,
-    const VSAPI *vsapi
+    std::vector<int>& luma_buffer,
+    const VSAPI* vsapi
 ) {
     /*
         Build a luma buffer at chroma resolution for 8-bit clips.
@@ -903,33 +733,33 @@ static void build_cnr3_downsampled_luma_buffer_u8(
     const int luma_height = vsapi->getFrameHeight(frame, 0);
 
     for (int y = 0; y < chroma_height; ++y) {
-        const int y0 = clamp_int(
+        const int y0 = cnr3_clamp_int(
             y << d->vi->format.subSamplingH,
             0,
             luma_height - 1
         );
 
-        const int y1 = clamp_int(
+        const int y1 = cnr3_clamp_int(
             y0 + d->vi->format.subSamplingH,
             0,
             luma_height - 1
         );
 
-        const uint8_t *row0 = src_luma + y0 * src_luma_stride;
-        const uint8_t *row1 = src_luma + y1 * src_luma_stride;
+        const uint8_t* row0 = src_luma + y0 * src_luma_stride;
+        const uint8_t* row1 = src_luma + y1 * src_luma_stride;
 
-        int *dst_row =
+        int* dst_row =
             luma_buffer.data() +
             static_cast<size_t>(y) * static_cast<size_t>(chroma_width);
 
         for (int x = 0; x < chroma_width; ++x) {
-            const int x0 = clamp_int(
+            const int x0 = cnr3_clamp_int(
                 x << d->vi->format.subSamplingW,
                 0,
                 luma_width - 1
             );
 
-            const int x1 = clamp_int(
+            const int x1 = cnr3_clamp_int(
                 x0 + 1,
                 0,
                 luma_width - 1
@@ -942,18 +772,18 @@ static void build_cnr3_downsampled_luma_buffer_u8(
                     static_cast<int>(row1[x0]) +
                     static_cast<int>(row1[x1]) +
                     2
-                ) >> 2;
+                    ) >> 2;
         }
     }
 }
 
 static void build_cnr3_downsampled_luma_buffer_u16(
-    const Cnr3Data *d,
-    const VSFrame *frame,
+    const Cnr3Data* d,
+    const VSFrame* frame,
     int chroma_width,
     int chroma_height,
-    std::vector<int> &luma_buffer,
-    const VSAPI *vsapi
+    std::vector<int>& luma_buffer,
+    const VSAPI* vsapi
 ) {
     /*
         Build a luma buffer at chroma resolution for 10/12/16-bit clips.
@@ -979,40 +809,40 @@ static void build_cnr3_downsampled_luma_buffer_u16(
     const int luma_height = vsapi->getFrameHeight(frame, 0);
 
     for (int y = 0; y < chroma_height; ++y) {
-        const int y0 = clamp_int(
+        const int y0 = cnr3_clamp_int(
             y << d->vi->format.subSamplingH,
             0,
             luma_height - 1
         );
 
-        const int y1 = clamp_int(
+        const int y1 = cnr3_clamp_int(
             y0 + d->vi->format.subSamplingH,
             0,
             luma_height - 1
         );
 
-        const uint16_t *row0 =
-            reinterpret_cast<const uint16_t *>(
+        const uint16_t* row0 =
+            reinterpret_cast<const uint16_t*>(
                 src_luma_base + y0 * src_luma_stride
-            );
+                );
 
-        const uint16_t *row1 =
-            reinterpret_cast<const uint16_t *>(
+        const uint16_t* row1 =
+            reinterpret_cast<const uint16_t*>(
                 src_luma_base + y1 * src_luma_stride
-            );
+                );
 
-        int *dst_row =
+        int* dst_row =
             luma_buffer.data() +
             static_cast<size_t>(y) * static_cast<size_t>(chroma_width);
 
         for (int x = 0; x < chroma_width; ++x) {
-            const int x0 = clamp_int(
+            const int x0 = cnr3_clamp_int(
                 x << d->vi->format.subSamplingW,
                 0,
                 luma_width - 1
             );
 
-            const int x1 = clamp_int(
+            const int x1 = cnr3_clamp_int(
                 x0 + 1,
                 0,
                 luma_width - 1
@@ -1025,19 +855,19 @@ static void build_cnr3_downsampled_luma_buffer_u16(
                     static_cast<int>(row1[x0]) +
                     static_cast<int>(row1[x1]) +
                     2
-                ) >> 2;
+                    ) >> 2;
         }
     }
 }
 
 static bool build_cnr3_downsampled_luma_buffer(
-    const Cnr3Data *d,
-    const VSFrame *frame,
+    const Cnr3Data* d,
+    const VSFrame* frame,
     int chroma_width,
     int chroma_height,
     int bytes_per_sample,
-    std::vector<int> &luma_buffer,
-    const VSAPI *vsapi
+    std::vector<int>& luma_buffer,
+    const VSAPI* vsapi
 ) {
     /*
         Dispatch helper for the temporary scaffold and later blend path.
@@ -1056,7 +886,7 @@ static bool build_cnr3_downsampled_luma_buffer(
         vsapi == nullptr ||
         chroma_width <= 0 ||
         chroma_height <= 0
-    ) {
+        ) {
         return false;
     }
 
@@ -1380,8 +1210,8 @@ static Cnr3SceneChangeStats detect_cnr3_scene_change(
     return stats;
 }
 
-static const std::vector<int> &cnr3_get_table_for_chroma_plane(
-    const Cnr3Data *d,
+static const std::vector<int>& cnr3_get_table_for_chroma_plane(
+    const Cnr3Data* d,
     int plane
 ) {
     /*
@@ -1419,7 +1249,7 @@ struct Cnr3ResponseDebugStats {
 };
 
 static void cnr3_update_response_debug_stats(
-    Cnr3ResponseDebugStats &stats,
+    Cnr3ResponseDebugStats& stats,
     int y_response,
     int chroma_response
 ) {
@@ -1442,10 +1272,10 @@ static void cnr3_update_response_debug_stats(
 }
 
 static void cnr3_print_response_debug_stats(
-    const Cnr3Data *d,
+    const Cnr3Data* d,
     int frame_number,
     int plane,
-    const Cnr3ResponseDebugStats &stats
+    const Cnr3ResponseDebugStats& stats
 ) {
     /*
         Print one compact diagnostic line per frame and chroma plane.
@@ -1550,7 +1380,7 @@ struct Cnr3BlendDebugStats {
 };
 
 static void cnr3_update_blend_debug_stats(
-    Cnr3BlendDebugStats &stats,
+    Cnr3BlendDebugStats& stats,
     int64_t weight,
     int64_t max_possible_weight
 ) {
@@ -1571,7 +1401,7 @@ static void cnr3_update_blend_debug_stats(
     if (
         max_possible_weight > 0 &&
         weight >= (max_possible_weight * 95) / 100
-    ) {
+        ) {
         ++stats.near_max_weight_samples;
     }
 
@@ -1581,7 +1411,8 @@ static void cnr3_update_blend_debug_stats(
         stats.weight_min = weight;
         stats.weight_max = weight;
         stats.have_weight = true;
-    } else {
+    }
+    else {
         if (weight < stats.weight_min) {
             stats.weight_min = weight;
         }
@@ -1593,10 +1424,10 @@ static void cnr3_update_blend_debug_stats(
 }
 
 static void cnr3_print_blend_debug_stats(
-    const Cnr3Data *d,
+    const Cnr3Data* d,
     int frame_number,
     int plane,
-    const Cnr3BlendDebugStats &stats
+    const Cnr3BlendDebugStats& stats
 ) {
     /*
         Print one compact blend-strength diagnostic line per frame and chroma
@@ -1636,7 +1467,7 @@ static void cnr3_print_blend_debug_stats(
         (
             active *
             static_cast<double>(weight_scale)
-        );
+            );
 
     const double weight_min_percent =
         100.0 *
@@ -1782,10 +1613,10 @@ static void process_cnr3_chroma_plane_u8(
         return;
     }
 
-    const uint8_t *srcp = vsapi->getReadPtr(src, plane);
-    uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+    const uint8_t* srcp = vsapi->getReadPtr(src, plane);
+    uint8_t* dstp = vsapi->getWritePtr(dst, plane);
 
-    const uint8_t *prevp =
+    const uint8_t* prevp =
         (frame_number > 0 && prev_output != nullptr) ?
         vsapi->getReadPtr(prev_output, plane) :
         nullptr;
@@ -1799,7 +1630,7 @@ static void process_cnr3_chroma_plane_u8(
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
 
-    const std::vector<int> &chroma_table =
+    const std::vector<int>& chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
 
     const int64_t max_possible_blend_weight =
@@ -1812,10 +1643,10 @@ static void process_cnr3_chroma_plane_u8(
     Cnr3BlendDebugStats blend_stats;
 
     for (int y = 0; y < plane_height; ++y) {
-        const uint8_t *src_row = srcp;
-        uint8_t *dst_row = dstp;
+        const uint8_t* src_row = srcp;
+        uint8_t* dst_row = dstp;
 
-        const uint8_t *prev_row =
+        const uint8_t* prev_row =
             (prevp != nullptr) ? prevp : nullptr;
 
         const size_t luma_row_offset =
@@ -1899,13 +1730,14 @@ static void process_cnr3_chroma_plane_u8(
                 );
 
                 dst_row[x] = static_cast<uint8_t>(
-                    clamp_int(blended_chroma, 0, d->sample_peak)
-                );
-            } else {
+                    cnr3_clamp_int(blended_chroma, 0, d->sample_peak)
+                    );
+            }
+            else {
                 dst_row[x] = current_chroma;
             }
         }
-        
+
         srcp += src_stride;
         dstp += dst_stride;
 
@@ -1971,10 +1803,10 @@ static void process_cnr3_chroma_plane_u16(
         return;
     }
 
-    const uint8_t *srcp = vsapi->getReadPtr(src, plane);
-    uint8_t *dstp = vsapi->getWritePtr(dst, plane);
+    const uint8_t* srcp = vsapi->getReadPtr(src, plane);
+    uint8_t* dstp = vsapi->getWritePtr(dst, plane);
 
-    const uint8_t *prevp =
+    const uint8_t* prevp =
         (frame_number > 0 && prev_output != nullptr) ?
         vsapi->getReadPtr(prev_output, plane) :
         nullptr;
@@ -1988,7 +1820,7 @@ static void process_cnr3_chroma_plane_u16(
     const int plane_width = vsapi->getFrameWidth(src, plane);
     const int plane_height = vsapi->getFrameHeight(src, plane);
 
-    const std::vector<int> &chroma_table =
+    const std::vector<int>& chroma_table =
         cnr3_get_table_for_chroma_plane(d, plane);
 
     const int64_t max_possible_blend_weight =
@@ -2001,15 +1833,15 @@ static void process_cnr3_chroma_plane_u16(
     Cnr3BlendDebugStats blend_stats;
 
     for (int y = 0; y < plane_height; ++y) {
-        const uint16_t *src_row =
-            reinterpret_cast<const uint16_t *>(srcp);
+        const uint16_t* src_row =
+            reinterpret_cast<const uint16_t*>(srcp);
 
-        uint16_t *dst_row =
-            reinterpret_cast<uint16_t *>(dstp);
+        uint16_t* dst_row =
+            reinterpret_cast<uint16_t*>(dstp);
 
-        const uint16_t *prev_row =
+        const uint16_t* prev_row =
             (prevp != nullptr) ?
-            reinterpret_cast<const uint16_t *>(prevp) :
+            reinterpret_cast<const uint16_t*>(prevp) :
             nullptr;
 
         const size_t luma_row_offset =
@@ -2093,9 +1925,10 @@ static void process_cnr3_chroma_plane_u16(
                 );
 
                 dst_row[x] = static_cast<uint16_t>(
-                    clamp_int(blended_chroma, 0, d->sample_peak)
-                );
-            } else {
+                    cnr3_clamp_int(blended_chroma, 0, d->sample_peak)
+                    );
+            }
+            else {
                 dst_row[x] = current_chroma;
             }
         }
@@ -2346,7 +2179,7 @@ static bool process_cnr3_frame(
         return false;
     }
 
-    const VSFrame *prev_output = d->cache.prev_output;
+    const VSFrame* prev_output = d->cache.prev_output;
 
     if (frame_number == 0) {
         /*
@@ -2562,78 +2395,39 @@ static bool process_cnr3_frame(
 // -----------------------------------------------------------------------------
 // CNR3 cache manager
 // -----------------------------------------------------------------------------
-static void cnr3_cache_clear(
-    Cnr3CacheManager &cache,
-    const VSAPI *vsapi
-) {
-    if (cache.prev_output != nullptr) {
-        vsapi->freeFrame(cache.prev_output);
-        cache.prev_output = nullptr;
-    }
-
-    cache.next_needed = 0;
-}
-
 static void VS_CC cnr3_free(
-    void *instanceData,
-    VSCore *core,
-    const VSAPI *vsapi
+    void* instanceData,
+    VSCore* core,
+    const VSAPI* vsapi
 ) {
     (void)core;
 
-    Cnr3Data *d = static_cast<Cnr3Data *>(instanceData);
+    Cnr3Data* d = static_cast<Cnr3Data*>(instanceData);
 
     if (d != nullptr) {
         if (d->node != nullptr) {
             vsapi->freeNode(d->node);
             d->node = nullptr;
         }
-        
+
         cnr3_cache_clear(d->cache, vsapi);
-        
+
         delete d;
     }
 }
 
-static void cnr3_cache_store_output_frame(
-    Cnr3CacheManager &cache,
-    const VSFrame *output_frame,
-    int frame_number,
-    const VSAPI *vsapi
-) {
-    if (cache.prev_output != nullptr) {
-        vsapi->freeFrame(cache.prev_output);
-        cache.prev_output = nullptr;
-    }
-
-    /*
-        addFrameRef() keeps an additional reference to the frame. It does not
-        deep-copy pixel data. That is fine here because VapourSynth frames are
-        immutable after being returned.
-
-        The stored reference must later be released with freeFrame().
-    */
-    cache.prev_output = vsapi->addFrameRef(output_frame);
-
-    /*
-        In strict streaming mode, after output frame N has been produced,
-        the next frame we can correctly accept is N + 1.
-    */
-    cache.next_needed = frame_number + 1;
-}
-
-static const VSFrame *VS_CC cnr3_get_frame(
+static const VSFrame* VS_CC cnr3_get_frame(
     int n,
     int activationReason,
-    void *instanceData,
-    void **frameData,
-    VSFrameContext *frameCtx,
-    VSCore *core,
-    const VSAPI *vsapi
+    void* instanceData,
+    void** frameData,
+    VSFrameContext* frameCtx,
+    VSCore* core,
+    const VSAPI* vsapi
 ) {
     (void)frameData;
 
-    Cnr3Data *d = static_cast<Cnr3Data *>(instanceData);
+    Cnr3Data* d = static_cast<Cnr3Data*>(instanceData);
 
     if (activationReason == arInitial) {
         /*
@@ -2669,7 +2463,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
         );
         */
 
-        const VSFrame *src = vsapi->getFrameFilter(n, d->node, frameCtx);
+        const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
         if (src == nullptr) {
             vsapi->setFilterError("CNR3: failed to retrieve source frame.", frameCtx);
@@ -2736,7 +2530,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
         );
         */
 
-        VSFrame *dst = vsapi->newVideoFrame(
+        VSFrame* dst = vsapi->newVideoFrame(
             &d->vi->format,
             d->vi->width,
             d->vi->height,
@@ -2783,7 +2577,7 @@ static const VSFrame *VS_CC cnr3_get_frame(
             d->cache.prev_output != nullptr ? "yes" : "no"
         );
         */
-        
+
         vsapi->freeFrame(src);
 
         return dst;
@@ -2795,11 +2589,11 @@ static const VSFrame *VS_CC cnr3_get_frame(
 // -----------------------------------------------------------------------------
 
 static void VS_CC cnr3_create(
-    const VSMap *in,
-    VSMap *out,
-    void *userData,
-    VSCore *core,
-    const VSAPI *vsapi
+    const VSMap* in,
+    VSMap* out,
+    void* userData,
+    VSCore* core,
+    const VSAPI* vsapi
 ) {
     (void)userData;
 
@@ -2875,7 +2669,7 @@ static void VS_CC cnr3_create(
         local.um < 0 ||
         local.vn < 0 ||
         local.vm < 0
-    ) {
+        ) {
         vsapi->freeNode(local.node);
         vsapi->mapSetError(out, "CNR3: threshold parameters must be non-negative.");
         return;
@@ -2886,7 +2680,7 @@ static void VS_CC cnr3_create(
         vsapi->mapSetError(out, "CNR3: scdthr must be non-negative.");
         return;
     }
-   
+
     local.bits_per_sample = local.vi->format.bitsPerSample;
     local.sample_peak = (1 << local.bits_per_sample) - 1;
 
@@ -3077,7 +2871,7 @@ static void VS_CC cnr3_create(
             )
         );
     }
-    Cnr3Data *data = new Cnr3Data(local);
+    Cnr3Data* data = new Cnr3Data(local);
 
     VSFilterDependency deps[] = {
         {data->node, rpGeneral}
@@ -3098,8 +2892,8 @@ static void VS_CC cnr3_create(
 }
 
 VS_EXTERNAL_API(void) VapourSynthPluginInit2(
-    VSPlugin *plugin,
-    const VSPLUGINAPI *vspapi
+    VSPlugin* plugin,
+    const VSPLUGINAPI* vspapi
 ) {
     vspapi->configPlugin(
         "org.vapoursynth.cnr3",

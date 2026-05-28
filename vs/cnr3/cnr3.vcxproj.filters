@@ -21,9 +21,18 @@
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_cache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\vapoursynth-Cnr3.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_cache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

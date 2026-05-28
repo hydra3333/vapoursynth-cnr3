@@ -19,10 +19,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\src\cnr3_cache.h" />
+    <ClInclude Include="..\..\src\cnr3_common.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VapourSynth4.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\src\cnr3_cache.cpp" />
     <ClCompile Include="..\..\src\vapoursynth-Cnr3.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

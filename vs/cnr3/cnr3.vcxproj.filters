@@ -27,12 +27,18 @@
     <ClInclude Include="..\..\src\cnr3_common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_response_tables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\vapoursynth-Cnr3.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\cnr3_cache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_response_tables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

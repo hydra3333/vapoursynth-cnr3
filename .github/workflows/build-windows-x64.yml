@@ -74,6 +74,7 @@ jobs:
             /Fo:build\ ^
             src\vapoursynth-Cnr3.cpp ^
             src\cnr3_cache.cpp ^
+            src\cnr3_response_tables.cpp ^
             /Fe:build\cnr3.dll ^
             /link ^
             /LTCG

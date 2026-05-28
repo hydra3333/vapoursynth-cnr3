@@ -21,11 +21,16 @@
   <ItemGroup>
     <ClInclude Include="..\..\src\cnr3_cache.h" />
     <ClInclude Include="..\..\src\cnr3_common.h" />
+    <ClInclude Include="..\..\src\cnr3_response_tables.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VapourSynth4.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\cnr3_cache.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_response_tables.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>

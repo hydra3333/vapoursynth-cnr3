@@ -31,7 +31,7 @@ and appears to be more recently updated version.
 
 ### Requirements:
 
-- Vapoursynth R76+ with pythin 3.13+ (possibly portable versions).
+- Vapoursynth R76+ with python 3.14+ (possibly portable versions).
 
 - Microsoft VisualC++ Redistributable Package 2026.
 

@@ -11,6 +11,15 @@
 // -----------------------------------------------------------------------------
 // CNR3 cache manager - v005 design structures
 //
+// CRITICAL DESIGN RULE:
+//      The cache-manager specification has the critical rule that
+//      ALL CACHES MUST ALWAYS BE STRICTLY ORDERED BY FRAME NUMBER and
+//      all cache-related operations must STRICTLY use only frame-number ordering.
+//      Everything touching frame/checkpoint cache state MUST COMPLY with this rule
+//      at all times, specifically including: every operation touching
+//      output frame cache state, checkpoint cache state, cache indexes,
+//      checkpoint lookup, pruning, promotion, and pin_count handling.
+// 
 // This file contains only the data structures and constants for the future
 // v005 output-frame cache manager.
 //
@@ -132,6 +141,52 @@ bool cnr3_cache_manager_contains_output_frame(
 void cnr3_cache_manager_clear(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager lookup helpers - Phase 2B
+//
+// These helpers perform frame-number ordered lookups only.
+//
+// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// is later wired into Cnr3Data and cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_find_output_frame(
+    const Cnr3CacheManagerV005& cache,
+    int frame_number,
+    const VSFrame*& output_frame
+);
+
+/*
+    Find the nearest prior checkpoint for requested_frame_number.
+
+    CRITICAL v005 cache-manager ordering rule:
+        "nearest prior checkpoint" means the checkpoint with the highest
+        frame number that is strictly less than requested_frame_number.
+
+    It does not mean most recently inserted, most recently used, most recently
+    written, or nearest by any container/insertion/cache-recency order.
+
+    Returns true if such a checkpoint exists.
+
+    On success:
+        checkpoint_frame_number receives the checkpoint frame number.
+        checkpoint_frame receives the cached checkpoint frame pointer.
+
+    On failure:
+        checkpoint_frame_number is set to -1.
+        checkpoint_frame is set to nullptr.
+*/
+bool cnr3_cache_manager_find_nearest_prior_checkpoint(
+    const Cnr3CacheManagerV005& cache,
+    int requested_frame_number,
+    int& checkpoint_frame_number,
+    const VSFrame*& checkpoint_frame
+);
+
+bool cnr3_cache_manager_should_promote_checkpoint(
+    int frame_number
 );
 
 // -----------------------------------------------------------------------------

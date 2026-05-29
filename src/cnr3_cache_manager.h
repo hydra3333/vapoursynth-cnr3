@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -94,6 +95,44 @@ struct Cnr3CacheManagerV005 {
 
     int highest_cached_frame_number = -1;
 };
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager helper functions - Phase 2A
+//
+// These helpers are intentionally limited to safe cache state inspection and
+// teardown/release support.
+//
+// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// is later wired into Cnr3Data and cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+int cnr3_cache_manager_get_non_checkpoint_overflow_limit();
+
+bool cnr3_cache_manager_is_empty(
+    const Cnr3CacheManagerV005& cache
+);
+
+std::size_t cnr3_cache_manager_get_non_checkpoint_count(
+    const Cnr3CacheManagerV005& cache
+);
+
+std::size_t cnr3_cache_manager_get_checkpoint_count(
+    const Cnr3CacheManagerV005& cache
+);
+
+std::size_t cnr3_cache_manager_get_total_cached_frame_count(
+    const Cnr3CacheManagerV005& cache
+);
+
+bool cnr3_cache_manager_contains_output_frame(
+    const Cnr3CacheManagerV005& cache,
+    int frame_number
+);
+
+void cnr3_cache_manager_clear(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+);
 
 // -----------------------------------------------------------------------------
 // END CNR3 cache manager - v005 design structures

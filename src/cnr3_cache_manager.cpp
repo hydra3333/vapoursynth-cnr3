@@ -272,7 +272,8 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
     /*
         Thread safety:
             Locks cache.cache_mutex internally. Reads mutable cache-manager state:
-            cache.checkpoint_pool.
+            cache.checkpoint_pool. Writes diagnostic statistics if corrupt
+            checkpoint state is detected.
         Caller requirement:
             Caller must not already hold cache.cache_mutex.
     */
@@ -288,10 +289,15 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
         recently written, or nearest by any container/insertion/cache-recency
         order.
 
-        std::map is ordered by frame number. lower_bound(requested_frame_number)
-        finds the first checkpoint whose frame number is not less than the
-        requested frame. Stepping one entry backward therefore gives the
-        highest checkpoint frame number strictly less than requested_frame_number.
+        This implementation scans checkpoint_pool in reverse frame-number order.
+        checkpoint_pool is std::map<int, Cnr3CheckpointSlot>, so reverse
+        iteration visits the highest frame numbers first.
+
+        The first checkpoint whose frame number is strictly less than
+        requested_frame_number is therefore the nearest prior checkpoint.
+
+        This is intentionally chosen for maintainability and clarity. The
+        checkpoint pool is small, so the cost of reverse scanning is negligible.
 
         This public helper returns the checkpoint frame number only. It does not
         return a raw checkpoint frame pointer, because returning a non-retained
@@ -302,25 +308,26 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    if (cache.checkpoint_pool.empty()) {
-        return false;
+    for (
+        auto found = cache.checkpoint_pool.rbegin();
+        found != cache.checkpoint_pool.rend();
+        ++found
+        ) {
+        if (found->first >= requested_frame_number) {
+            continue;
+        }
+
+        if (found->second.frame == nullptr) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.checkpoint_null_frame_errors;
+            return false;
+        }
+
+        checkpoint_frame_number = found->first;
+        return true;
     }
 
-    auto found = cache.checkpoint_pool.lower_bound(requested_frame_number);
-
-    if (found == cache.checkpoint_pool.begin()) {
-        return false;
-    }
-
-    --found;
-
-    if (found->second.frame == nullptr) {
-        return false;
-    }
-
-    checkpoint_frame_number = found->first;
-
-    return true;
+    return false;
 }
 
 bool cnr3_cache_manager_should_promote_checkpoint(

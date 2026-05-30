@@ -150,6 +150,9 @@ struct Cnr3CacheManagerStats {
     int64_t checkpoint_unpin_successes = 0;
     int64_t checkpoint_unpin_failures = 0;
     int64_t checkpoint_unpin_underflow_errors = 0;
+
+    int64_t cache_integrity_errors = 0;
+    int64_t checkpoint_null_frame_errors = 0;
 };
 
 // -----------------------------------------------------------------------------

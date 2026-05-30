@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -130,6 +131,28 @@ constexpr int CNR3_CHECKPOINT_MAX_RETAIN = 16;
 constexpr int CNR3_CHECKPOINT_MIN_RETAIN = 6;
 
 // -----------------------------------------------------------------------------
+// CNR3 cache manager statistics
+//
+// These counters are used to assess cache-manager behaviour and detect problems
+// such as missed unpin paths, failed pin/unpin attempts, and cache thrashing.
+//
+// Statistics are mutable cache-manager state. Any helper that reads or writes
+// these counters must follow the same cache_mutex locking rules as the cache
+// pools and cache index.
+// -----------------------------------------------------------------------------
+
+struct Cnr3CacheManagerStats {
+    int64_t checkpoint_pin_attempts = 0;
+    int64_t checkpoint_pin_successes = 0;
+    int64_t checkpoint_pin_failures = 0;
+
+    int64_t checkpoint_unpin_attempts = 0;
+    int64_t checkpoint_unpin_successes = 0;
+    int64_t checkpoint_unpin_failures = 0;
+    int64_t checkpoint_unpin_underflow_errors = 0;
+};
+
+// -----------------------------------------------------------------------------
 // CNR3 checkpoint slot
 //
 // A checkpoint slot owns one retained VS frame reference.
@@ -189,6 +212,8 @@ struct Cnr3CacheManagerV005 {
     std::mutex cache_mutex;
 
     int highest_cached_frame_number = -1;
+
+    Cnr3CacheManagerStats stats;
 };
 
 // -----------------------------------------------------------------------------
@@ -263,6 +288,23 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
 
 bool cnr3_cache_manager_should_promote_checkpoint(
     int frame_number
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager statistics helpers - Phase 2C.1
+//
+// These helpers manage the v005 cache-manager statistics counters.
+//
+// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// is later wired into Cnr3Data and cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+void cnr3_cache_manager_reset_stats(
+    Cnr3CacheManagerV005& cache
+);
+
+Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
+    Cnr3CacheManagerV005& cache
 );
 
 // -----------------------------------------------------------------------------

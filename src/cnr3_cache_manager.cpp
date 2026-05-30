@@ -1,7 +1,7 @@
 #include "cnr3_cache_manager.h"
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager - v005 helper functions
+// CNR3 cache manager - v005
 //
 // CRITICAL DESIGN RULE:
 //      The cache-manager specification has the critical rule that
@@ -352,4 +352,36 @@ bool cnr3_cache_manager_should_promote_checkpoint(
     }
 
     return ((frame_number % CNR3_CHECKPOINT_INTERVAL) == 0);
+}
+
+void cnr3_cache_manager_reset_stats(
+    Cnr3CacheManagerV005& cache
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Writes mutable cache-manager
+            state: cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    cache.stats = Cnr3CacheManagerStats{};
+}
+
+Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
+    Cnr3CacheManagerV005& cache
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager
+            state: cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    return cache.stats;
 }

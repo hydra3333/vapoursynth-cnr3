@@ -385,3 +385,131 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
 
     return cache.stats;
 }
+
+bool cnr3_cache_manager_pin_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int checkpoint_frame_number
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.checkpoint_pool and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.checkpoint_pin_attempts;
+
+    auto found = cache.checkpoint_pool.find(checkpoint_frame_number);
+
+    if (found == cache.checkpoint_pool.end()) {
+        ++cache.stats.checkpoint_pin_failures;
+        return false;
+    }
+
+    Cnr3CheckpointSlot& slot = found->second;
+
+    if (slot.frame == nullptr) {
+        ++cache.stats.checkpoint_pin_failures;
+        return false;
+    }
+
+    ++slot.pin_count;
+    ++cache.stats.checkpoint_pin_successes;
+
+    return true;
+}
+
+bool cnr3_cache_manager_unpin_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int checkpoint_frame_number
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.checkpoint_pool and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.checkpoint_unpin_attempts;
+
+    auto found = cache.checkpoint_pool.find(checkpoint_frame_number);
+
+    if (found == cache.checkpoint_pool.end()) {
+        ++cache.stats.checkpoint_unpin_failures;
+        return false;
+    }
+
+    Cnr3CheckpointSlot& slot = found->second;
+
+    if (slot.frame == nullptr) {
+        ++cache.stats.checkpoint_unpin_failures;
+        return false;
+    }
+
+    if (slot.pin_count <= 0) {
+        ++cache.stats.checkpoint_unpin_failures;
+        ++cache.stats.checkpoint_unpin_underflow_errors;
+        return false;
+    }
+
+    --slot.pin_count;
+    ++cache.stats.checkpoint_unpin_successes;
+
+    return true;
+}
+
+bool cnr3_cache_manager_has_pinned_checkpoints(
+    Cnr3CacheManagerV005& cache
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.checkpoint_pool.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    for (const auto& entry : cache.checkpoint_pool) {
+        const Cnr3CheckpointSlot& slot = entry.second;
+
+        if (slot.pin_count > 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+int64_t cnr3_cache_manager_get_total_pin_count(
+    Cnr3CacheManagerV005& cache
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.checkpoint_pool.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    int64_t total_pin_count = 0;
+
+    for (const auto& entry : cache.checkpoint_pool) {
+        const Cnr3CheckpointSlot& slot = entry.second;
+
+        if (slot.pin_count > 0) {
+            total_pin_count += slot.pin_count;
+        }
+    }
+
+    return total_pin_count;
+}

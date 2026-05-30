@@ -307,6 +307,37 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
     Cnr3CacheManagerV005& cache
 );
 
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager checkpoint pin helpers - Phase 2C.2
+//
+// These helpers manage checkpoint pin_count values.
+//
+// pin_count protects a checkpoint_pool slot from pruning while an in-flight
+// invocation depends on that checkpoint.
+//
+// pin_count is not a VapourSynth frame reference. It does not call addFrameRef()
+// and it does not call freeFrame().
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_pin_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int checkpoint_frame_number
+);
+
+bool cnr3_cache_manager_unpin_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int checkpoint_frame_number
+);
+
+bool cnr3_cache_manager_has_pinned_checkpoints(
+    Cnr3CacheManagerV005& cache
+);
+
+int64_t cnr3_cache_manager_get_total_pin_count(
+    Cnr3CacheManagerV005& cache
+);
+
 // -----------------------------------------------------------------------------
 // END CNR3 cache manager - v005 design structures
 // -----------------------------------------------------------------------------

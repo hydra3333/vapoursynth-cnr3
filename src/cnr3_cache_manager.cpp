@@ -106,6 +106,14 @@
 
 int cnr3_cache_manager_get_non_checkpoint_overflow_limit() {
     /*
+        Thread safety:
+            Does not lock. Reads only compile-time constants and does not read
+            or write mutable cache-manager state.
+        Caller requirement:
+            None.
+    */
+
+    /*
         The v005 design has a nominal non-checkpoint capacity plus a small
         overflow allowance. The overflow allowance gives the cache room to
         absorb bursts during out-of-order request patterns before pruning.
@@ -120,8 +128,17 @@ int cnr3_cache_manager_get_non_checkpoint_overflow_limit() {
 }
 
 bool cnr3_cache_manager_is_empty(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 ) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
     return (
         cache.non_checkpoint_pool.empty() &&
         cache.checkpoint_pool.empty() &&
@@ -130,20 +147,50 @@ bool cnr3_cache_manager_is_empty(
 }
 
 std::size_t cnr3_cache_manager_get_non_checkpoint_count(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 ) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.non_checkpoint_pool.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
     return cache.non_checkpoint_pool.size();
 }
 
 std::size_t cnr3_cache_manager_get_checkpoint_count(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 ) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.checkpoint_pool.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
     return cache.checkpoint_pool.size();
 }
 
 std::size_t cnr3_cache_manager_get_total_cached_frame_count(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 ) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.non_checkpoint_pool and cache.checkpoint_pool.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
     return (
         cache.non_checkpoint_pool.size() +
         cache.checkpoint_pool.size()
@@ -151,9 +198,19 @@ std::size_t cnr3_cache_manager_get_total_cached_frame_count(
 }
 
 bool cnr3_cache_manager_contains_output_frame(
-    const Cnr3CacheManagerV005& cache,
+    Cnr3CacheManagerV005& cache,
     int frame_number
 ) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.cache_index.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
     return (cache.cache_index.find(frame_number) != cache.cache_index.end());
 }
 
@@ -161,6 +218,16 @@ void cnr3_cache_manager_clear(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 ) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Writes mutable cache-manager state
+            and releases all cache-owned VS frame references.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
     /*
         Release every VS frame reference owned by the v005 cache manager.
 
@@ -197,40 +264,19 @@ void cnr3_cache_manager_clear(
     cache.highest_cached_frame_number = -1;
 }
 
-bool cnr3_cache_manager_find_output_frame(
-    const Cnr3CacheManagerV005& cache,
-    int frame_number,
-    const VSFrame*& output_frame
+bool cnr3_cache_manager_find_nearest_prior_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int requested_frame_number,
+    int& checkpoint_frame_number
 ) {
     /*
-        Find any cached output frame by frame number.
-
-        This searches cache_index, which is the fast lookup table across both:
-            non_checkpoint_pool
-            checkpoint_pool
-
-        cache_index does not own frame references. It only aliases the owning
-        references held in the two ordered pools.
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state:
+            cache.checkpoint_pool.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
     */
 
-    output_frame = nullptr;
-
-    const auto found = cache.cache_index.find(frame_number);
-
-    if (found == cache.cache_index.end()) {
-        return false;
-    }
-
-    output_frame = found->second;
-    return (output_frame != nullptr);
-}
-
-bool cnr3_cache_manager_find_nearest_prior_checkpoint(
-    const Cnr3CacheManagerV005& cache,
-    int requested_frame_number,
-    int& checkpoint_frame_number,
-    const VSFrame*& checkpoint_frame
-) {
     /*
         Find the nearest prior checkpoint for requested_frame_number.
 
@@ -246,10 +292,15 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
         finds the first checkpoint whose frame number is not less than the
         requested frame. Stepping one entry backward therefore gives the
         highest checkpoint frame number strictly less than requested_frame_number.
+
+        This public helper returns the checkpoint frame number only. It does not
+        return a raw checkpoint frame pointer, because returning a non-retained
+        cached pointer after unlocking would be unsafe.
     */
 
     checkpoint_frame_number = -1;
-    checkpoint_frame = nullptr;
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
     if (cache.checkpoint_pool.empty()) {
         return false;
@@ -263,15 +314,26 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
 
     --found;
 
-    checkpoint_frame_number = found->first;
-    checkpoint_frame = found->second.frame;
+    if (found->second.frame == nullptr) {
+        return false;
+    }
 
-    return (checkpoint_frame != nullptr);
+    checkpoint_frame_number = found->first;
+
+    return true;
 }
 
 bool cnr3_cache_manager_should_promote_checkpoint(
     int frame_number
 ) {
+    /*
+        Thread safety:
+            Does not lock. Reads only function parameters and compile-time
+            constants. Does not read or write mutable cache-manager state.
+        Caller requirement:
+            None.
+    */
+
     /*
         v005 checkpoint promotion rule.
 

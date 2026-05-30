@@ -36,7 +36,7 @@
 //          - cache index updates
 //          - future debug/statistics counters stored inside the cache manager
 //
-//      All non-static cnr3_cache_manager_* functions MUST be thread-safe     
+//      All non-static cnr3_cache_manager_* functions MUST be thread-safe
 //      and lock internally if/as appropriate, unless their name ends in _externally_locked.
 //
 //      A helper whose name ends in _externally_locked MUST be called only while
@@ -204,23 +204,23 @@ struct Cnr3CacheManagerV005 {
 int cnr3_cache_manager_get_non_checkpoint_overflow_limit();
 
 bool cnr3_cache_manager_is_empty(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 );
 
 std::size_t cnr3_cache_manager_get_non_checkpoint_count(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 );
 
 std::size_t cnr3_cache_manager_get_checkpoint_count(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 );
 
 std::size_t cnr3_cache_manager_get_total_cached_frame_count(
-    const Cnr3CacheManagerV005& cache
+    Cnr3CacheManagerV005& cache
 );
 
 bool cnr3_cache_manager_contains_output_frame(
-    const Cnr3CacheManagerV005& cache,
+    Cnr3CacheManagerV005& cache,
     int frame_number
 );
 
@@ -238,37 +238,27 @@ void cnr3_cache_manager_clear(
 // is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_find_output_frame(
-    const Cnr3CacheManagerV005& cache,
-    int frame_number,
-    const VSFrame*& output_frame
-);
-
 /*
     Find the nearest prior checkpoint for requested_frame_number.
 
-    CRITICAL v005 cache-manager ordering rule:
+    Critical v005 cache-manager ordering rule:
         "nearest prior checkpoint" means the checkpoint with the highest
         frame number that is strictly less than requested_frame_number.
 
     It does not mean most recently inserted, most recently used, most recently
     written, or nearest by any container/insertion/cache-recency order.
 
-    Returns true if such a checkpoint exists.
+    This public helper returns only the checkpoint frame number. It deliberately
+    does not return a raw cached VSFrame pointer.
 
-    On success:
-        checkpoint_frame_number receives the checkpoint frame number.
-        checkpoint_frame receives the cached checkpoint frame pointer.
-
-    On failure:
-        checkpoint_frame_number is set to -1.
-        checkpoint_frame is set to nullptr.
+    Thread safety:
+        Locks cache.cache_mutex internally.
+        Caller must not already hold cache.cache_mutex.
 */
 bool cnr3_cache_manager_find_nearest_prior_checkpoint(
-    const Cnr3CacheManagerV005& cache,
+    Cnr3CacheManagerV005& cache,
     int requested_frame_number,
-    int& checkpoint_frame_number,
-    const VSFrame*& checkpoint_frame
+    int& checkpoint_frame_number
 );
 
 bool cnr3_cache_manager_should_promote_checkpoint(

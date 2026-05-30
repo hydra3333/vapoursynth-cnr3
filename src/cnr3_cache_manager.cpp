@@ -651,8 +651,6 @@ static bool cnr3_cache_manager_validate_invariants_externally_locked(
             number present in either owning pool, or -1 if both pools are empty.
     */
 
-    std::lock_guard<std::mutex> lock(cache.cache_mutex);
-
     ++cache.stats.cache_validation_attempts;
 
     bool valid = true;

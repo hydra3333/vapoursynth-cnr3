@@ -854,3 +854,96 @@ bool cnr3_cache_manager_remove_output_frame(
         vsapi
     );
 }
+
+bool cnr3_cache_manager_prune_non_checkpoint_pool(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.non_checkpoint_pool, cache.cache_index,
+            cache.highest_cached_frame_number, and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Prune only the non-checkpoint output-frame pool.
+
+        Option B pruning policy:
+            Let non_checkpoint_pool grow up to the overflow limit.
+
+            If non_checkpoint_pool.size() exceeds the overflow limit, prune the
+            oldest non-checkpoint frames first until non_checkpoint_pool.size()
+            is back to CNR3_OUTPUT_CACHE_CAPACITY.
+
+        Ordering rule:
+            non_checkpoint_pool is std::map<int, const VSFrame *>, ordered by
+            frame number. begin() is therefore the lowest/oldest cached
+            non-checkpoint frame number.
+
+        Ownership rule:
+            Frame removal is delegated to
+            cnr3_cache_manager_remove_output_frame_externally_locked(), which
+            removes the cache_index alias, erases exactly one owning pool entry,
+            and releases exactly one cache-owned VSFrame reference with
+            vsapi->freeFrame().
+
+        Checkpoint rule:
+            This helper does not choose or prune checkpoints.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.non_checkpoint_prune_attempts;
+
+    if (vsapi == nullptr) {
+        ++cache.stats.non_checkpoint_prune_remove_failures;
+        return false;
+    }
+
+    const int overflow_limit =
+        cnr3_cache_manager_get_non_checkpoint_overflow_limit();
+
+    if (
+        cache.non_checkpoint_pool.size() <=
+        static_cast<std::size_t>(overflow_limit)
+        ) {
+        ++cache.stats.non_checkpoint_prune_skipped_below_overflow;
+        return true;
+    }
+
+    ++cache.stats.non_checkpoint_prune_runs;
+
+    bool all_removes_succeeded = true;
+
+    while (
+        cache.non_checkpoint_pool.size() >
+        static_cast<std::size_t>(CNR3_OUTPUT_CACHE_CAPACITY)
+        ) {
+        if (cache.non_checkpoint_pool.empty()) {
+            break;
+        }
+
+        const int frame_number_to_remove =
+            cache.non_checkpoint_pool.begin()->first;
+
+        const bool removed =
+            cnr3_cache_manager_remove_output_frame_externally_locked(
+                cache,
+                frame_number_to_remove,
+                vsapi
+            );
+
+        if (!removed) {
+            ++cache.stats.non_checkpoint_prune_remove_failures;
+            all_removes_succeeded = false;
+            break;
+        }
+
+        ++cache.stats.non_checkpoint_prune_removed_frames;
+    }
+
+    return all_removes_succeeded;
+}

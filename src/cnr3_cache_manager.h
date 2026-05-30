@@ -177,6 +177,12 @@ struct Cnr3CacheManagerStats {
 
     int64_t non_checkpoint_remove_successes = 0;
     int64_t checkpoint_remove_successes = 0;
+
+    int64_t non_checkpoint_prune_attempts = 0;
+    int64_t non_checkpoint_prune_runs = 0;
+    int64_t non_checkpoint_prune_skipped_below_overflow = 0;
+    int64_t non_checkpoint_prune_removed_frames = 0;
+    int64_t non_checkpoint_prune_remove_failures = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -399,6 +405,24 @@ bool cnr3_cache_manager_store_output_frame(
 bool cnr3_cache_manager_remove_output_frame(
     Cnr3CacheManagerV005& cache,
     int frame_number,
+    const VSAPI* vsapi
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager non-checkpoint pruning helpers - Phase 2E.1b
+//
+// These helpers prune only non_checkpoint_pool.
+//
+// Option B policy:
+//     Let non_checkpoint_pool grow up to the overflow limit.
+//     If it exceeds the overflow limit, prune oldest non-checkpoint frames first
+//     until non_checkpoint_pool.size() is back to CNR3_OUTPUT_CACHE_CAPACITY.
+//
+// Checkpoints are not pruned by these helpers.
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_prune_non_checkpoint_pool(
+    Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 );
 

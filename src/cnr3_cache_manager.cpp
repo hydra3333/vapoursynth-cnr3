@@ -104,6 +104,17 @@
 // The existing strict-streaming cache remains active.
 // -----------------------------------------------------------------------------
 
+static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+);
+
+static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+);
+
+
 static bool cnr3_cache_manager_remove_output_frame_externally_locked(
     Cnr3CacheManagerV005& cache,
     int frame_number,
@@ -862,10 +873,55 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
     /*
         Thread safety:
             Locks cache.cache_mutex internally. Reads and writes mutable
-            cache-manager state: cache.non_checkpoint_pool, cache.cache_index,
-            cache.highest_cached_frame_number, and cache.stats.
+            cache-manager state through
+            cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked().
         Caller requirement:
             Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    return cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+        cache,
+        vsapi
+    );
+}
+
+bool cnr3_cache_manager_prune_checkpoint_pool(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state through
+            cnr3_cache_manager_prune_checkpoint_pool_externally_locked().
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    return cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+        cache,
+        vsapi
+    );
+}
+
+static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Does not lock internally.
+        Caller requirement:
+            Requires a lock to be applied by the caller before calling this
+            function; i.e. the caller MUST already hold cache.cache_mutex.
+        Expected callers:
+            cnr3_cache_manager_prune_non_checkpoint_pool().
+            Future combined prune helpers that need to prune multiple pools while
+            holding one cache-manager critical section.
     */
 
     /*
@@ -893,8 +949,6 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
         Checkpoint rule:
             This helper does not choose or prune checkpoints.
     */
-
-    std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
     ++cache.stats.non_checkpoint_prune_attempts;
 
@@ -948,17 +1002,20 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
     return all_removes_succeeded;
 }
 
-bool cnr3_cache_manager_prune_checkpoint_pool(
+static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 ) {
     /*
         Thread safety:
-            Locks cache.cache_mutex internally. Reads and writes mutable
-            cache-manager state: cache.checkpoint_pool, cache.cache_index,
-            cache.highest_cached_frame_number, and cache.stats.
+            Does not lock internally.
         Caller requirement:
-            Caller must not already hold cache.cache_mutex.
+            Requires a lock to be applied by the caller before calling this
+            function; i.e. the caller MUST already hold cache.cache_mutex.
+        Expected callers:
+            cnr3_cache_manager_prune_checkpoint_pool().
+            Future combined prune helpers that need to prune multiple pools while
+            holding one cache-manager critical section.
     */
 
     /*
@@ -987,8 +1044,6 @@ bool cnr3_cache_manager_prune_checkpoint_pool(
             and releases exactly one cache-owned VSFrame reference with
             vsapi->freeFrame().
     */
-
-    std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
     ++cache.stats.checkpoint_prune_attempts;
 
@@ -1073,3 +1128,4 @@ bool cnr3_cache_manager_prune_checkpoint_pool(
 
     return all_removes_succeeded;
 }
+

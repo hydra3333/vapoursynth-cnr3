@@ -131,6 +131,29 @@ constexpr int CNR3_CHECKPOINT_MAX_RETAIN = 16;
 constexpr int CNR3_CHECKPOINT_MIN_RETAIN = 6;
 
 // -----------------------------------------------------------------------------
+// CNR3 cache manager development diagnostics
+//
+// These switches are compile-time controls for extra validation and diagnostics
+// intended for development and maintenance.
+//
+// Code guarded by if constexpr using these constants is compiled out of the
+// generated executable code when the relevant constant is false.
+//
+// These diagnostics must not be required for correctness. Correctness must come
+// from the cache-manager ownership, locking, pruning, and index/pool invariants.
+// -----------------------------------------------------------------------------
+
+constexpr bool CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS = true;
+
+/*
+    Defaults to CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS, but may be set independently
+    if post-mutation validation needs to be enabled or disabled separately from
+    other development diagnostics.
+*/
+constexpr bool CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION =
+                      CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
+
+// -----------------------------------------------------------------------------
 // CNR3 cache manager statistics
 //
 // These counters are used to assess cache-manager behaviour and detect problems

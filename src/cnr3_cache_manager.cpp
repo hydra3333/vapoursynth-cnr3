@@ -1069,6 +1069,12 @@ bool cnr3_cache_manager_store_output_frame(
         ++cache.stats.non_checkpoint_store_successes;
     }
 
+    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -1088,11 +1094,23 @@ bool cnr3_cache_manager_remove_output_frame(
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    return cnr3_cache_manager_remove_output_frame_externally_locked(
-        cache,
-        frame_number,
-        vsapi
-    );
+    const bool removed =
+        cnr3_cache_manager_remove_output_frame_externally_locked(
+            cache,
+            frame_number,
+            vsapi
+        );
+
+    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if (
+            removed &&
+            !cnr3_cache_manager_validate_invariants_externally_locked(cache)
+            ) {
+            return false;
+        }
+    }
+
+    return removed;
 }
 
 bool cnr3_cache_manager_prune_non_checkpoint_pool(
@@ -1196,6 +1214,13 @@ bool cnr3_cache_manager_prune_after_store(
         return false;
     }
 
+    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            ++cache.stats.prune_after_store_failures;
+            return false;
+        }
+    }
+
     ++cache.stats.prune_after_store_successes;
     return true;
 }
@@ -1289,6 +1314,12 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
         }
 
         ++cache.stats.non_checkpoint_prune_removed_frames;
+
+        if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+            if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                return false;
+            }
+        }
     }
 
     return all_removes_succeeded;
@@ -1394,6 +1425,12 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
             else {
                 ++cache.stats.checkpoint_prune_removed_frames;
                 removed_one_checkpoint = true;
+
+                if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+                    if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                        return false;
+                    }
+                }
             }
 
             /*

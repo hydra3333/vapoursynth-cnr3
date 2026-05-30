@@ -183,6 +183,15 @@ struct Cnr3CacheManagerStats {
     int64_t non_checkpoint_prune_skipped_below_overflow = 0;
     int64_t non_checkpoint_prune_removed_frames = 0;
     int64_t non_checkpoint_prune_remove_failures = 0;
+
+    int64_t checkpoint_prune_attempts = 0;
+    int64_t checkpoint_prune_runs = 0;
+    int64_t checkpoint_prune_skipped_below_max_retain = 0;
+    int64_t checkpoint_prune_removed_frames = 0;
+    int64_t checkpoint_prune_remove_failures = 0;
+    int64_t checkpoint_prune_skipped_frame_zero = 0;
+    int64_t checkpoint_prune_skipped_pinned = 0;
+    int64_t checkpoint_prune_no_eligible_frames = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -422,6 +431,29 @@ bool cnr3_cache_manager_remove_output_frame(
 // -----------------------------------------------------------------------------
 
 bool cnr3_cache_manager_prune_non_checkpoint_pool(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager checkpoint pruning helpers - Phase 2E.2
+//
+// These helpers prune only checkpoint_pool.
+//
+// Checkpoint pruning policy:
+//     If checkpoint_pool.size() exceeds CNR3_CHECKPOINT_MAX_RETAIN, prune the
+//     oldest eligible checkpoints first until checkpoint_pool.size() is back to
+//     CNR3_CHECKPOINT_MIN_RETAIN.
+//
+//     Frame 0 is never pruned.
+//     Checkpoints with pin_count > 0 are never pruned.
+//
+// Actual frame removal is delegated to the shared remove helper so that
+// cache_index erasure, owning-pool erasure, and freeFrame() release remain
+// centralised.
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_prune_checkpoint_pool(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 );

@@ -947,3 +947,129 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
 
     return all_removes_succeeded;
 }
+
+bool cnr3_cache_manager_prune_checkpoint_pool(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.checkpoint_pool, cache.cache_index,
+            cache.highest_cached_frame_number, and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Prune only the checkpoint output-frame pool.
+
+        Checkpoint pruning policy:
+            If checkpoint_pool.size() exceeds CNR3_CHECKPOINT_MAX_RETAIN, prune
+            the oldest eligible checkpoints first until checkpoint_pool.size()
+            is back to CNR3_CHECKPOINT_MIN_RETAIN.
+
+        Eligibility rules:
+            Frame 0 is never pruned because it is the last-resort checkpoint.
+
+            A checkpoint with pin_count > 0 is never pruned because an in-flight
+            invocation still depends on that checkpoint slot.
+
+        Ordering rule:
+            checkpoint_pool is std::map<int, Cnr3CheckpointSlot>, ordered by
+            frame number. begin() is therefore the lowest/oldest checkpoint
+            frame number.
+
+        Ownership rule:
+            Frame removal is delegated to
+            cnr3_cache_manager_remove_output_frame_externally_locked(), which
+            removes the cache_index alias, erases exactly one owning pool entry,
+            and releases exactly one cache-owned VSFrame reference with
+            vsapi->freeFrame().
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.checkpoint_prune_attempts;
+
+    if (vsapi == nullptr) {
+        ++cache.stats.checkpoint_prune_remove_failures;
+        return false;
+    }
+
+    if (
+        cache.checkpoint_pool.size() <=
+        static_cast<std::size_t>(CNR3_CHECKPOINT_MAX_RETAIN)
+        ) {
+        ++cache.stats.checkpoint_prune_skipped_below_max_retain;
+        return true;
+    }
+
+    ++cache.stats.checkpoint_prune_runs;
+
+    bool all_removes_succeeded = true;
+
+    while (
+        cache.checkpoint_pool.size() >
+        static_cast<std::size_t>(CNR3_CHECKPOINT_MIN_RETAIN)
+        ) {
+        bool removed_one_checkpoint = false;
+
+        for (
+            auto found = cache.checkpoint_pool.begin();
+            found != cache.checkpoint_pool.end();
+            ++found
+            ) {
+            const int frame_number_to_remove = found->first;
+            const Cnr3CheckpointSlot& slot = found->second;
+
+            if (frame_number_to_remove == 0) {
+                ++cache.stats.checkpoint_prune_skipped_frame_zero;
+                continue;
+            }
+
+            if (slot.pin_count > 0) {
+                ++cache.stats.checkpoint_prune_skipped_pinned;
+                continue;
+            }
+
+            const bool removed =
+                cnr3_cache_manager_remove_output_frame_externally_locked(
+                    cache,
+                    frame_number_to_remove,
+                    vsapi
+                );
+
+            if (!removed) {
+                ++cache.stats.checkpoint_prune_remove_failures;
+                all_removes_succeeded = false;
+            }
+            else {
+                ++cache.stats.checkpoint_prune_removed_frames;
+                removed_one_checkpoint = true;
+            }
+
+            /*
+                The remove helper erases from checkpoint_pool, invalidating the
+                iterator used by this loop. Break and restart from begin().
+            */
+            break;
+        }
+
+        if (!removed_one_checkpoint) {
+            /*
+                The pool still exceeds the target size, but every remaining
+                checkpoint is either frame 0 or pinned, or a removal failed.
+                Stop rather than looping forever.
+            */
+            ++cache.stats.checkpoint_prune_no_eligible_frames;
+            break;
+        }
+
+        if (!all_removes_succeeded) {
+            break;
+        }
+    }
+
+    return all_removes_succeeded;
+}

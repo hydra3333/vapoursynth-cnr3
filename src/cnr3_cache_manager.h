@@ -165,6 +165,18 @@ struct Cnr3CacheManagerStats {
 
     int64_t non_checkpoint_store_successes = 0;
     int64_t checkpoint_store_successes = 0;
+
+    int64_t cache_remove_attempts = 0;
+    int64_t cache_remove_successes = 0;
+    int64_t cache_remove_failures = 0;
+    int64_t cache_remove_not_found_failures = 0;
+    int64_t cache_remove_invalid_input_errors = 0;
+    int64_t cache_remove_pinned_checkpoint_rejections = 0;
+    int64_t cache_remove_pool_inconsistency_errors = 0;
+    int64_t cache_remove_index_inconsistency_errors = 0;
+
+    int64_t non_checkpoint_remove_successes = 0;
+    int64_t checkpoint_remove_successes = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -369,6 +381,24 @@ bool cnr3_cache_manager_store_output_frame(
     Cnr3CacheManagerV005& cache,
     int frame_number,
     const VSFrame* output_frame,
+    const VSAPI* vsapi
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager remove helpers - Phase 2D.2
+//
+// These helpers remove output frames from the v005 cache manager.
+//
+// Remove helpers release cache-owned VSFrame references with vsapi->freeFrame().
+// They must remove the non-owning cache_index alias and exactly one owning pool
+// entry.
+//
+// Pinned checkpoints must not be removed.
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_remove_output_frame(
+    Cnr3CacheManagerV005& cache,
+    int frame_number,
     const VSAPI* vsapi
 );
 

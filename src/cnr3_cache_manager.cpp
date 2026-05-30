@@ -669,3 +669,164 @@ bool cnr3_cache_manager_store_output_frame(
 
     return true;
 }
+
+bool cnr3_cache_manager_remove_output_frame(
+    Cnr3CacheManagerV005& cache,
+    int frame_number,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.non_checkpoint_pool, cache.checkpoint_pool,
+            cache.cache_index, cache.highest_cached_frame_number, and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Remove one cached output frame from the v005 cache manager.
+
+        Ownership rule:
+            A cached output frame must be owned by exactly one of:
+                cache.non_checkpoint_pool
+                cache.checkpoint_pool
+
+            cache.cache_index does not own the frame reference. It only aliases
+            the owning pool's frame pointer.
+
+            On successful removal, this function removes the cache_index alias,
+            erases exactly one owning pool entry, and releases exactly one
+            cache-owned reference with vsapi->freeFrame().
+
+        Pinned checkpoint rule:
+            A checkpoint with pin_count > 0 must not be removed. The in-flight
+            invocation that pinned it still depends on that checkpoint slot.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.cache_remove_attempts;
+
+    if (frame_number < 0 || vsapi == nullptr) {
+        ++cache.stats.cache_remove_failures;
+        ++cache.stats.cache_remove_invalid_input_errors;
+        return false;
+    }
+
+    const auto index_found = cache.cache_index.find(frame_number);
+
+    if (index_found == cache.cache_index.end()) {
+        ++cache.stats.cache_remove_failures;
+        ++cache.stats.cache_remove_not_found_failures;
+        return false;
+    }
+
+    const VSFrame* indexed_frame = index_found->second;
+
+    if (indexed_frame == nullptr) {
+        ++cache.stats.cache_remove_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_remove_index_inconsistency_errors;
+        return false;
+    }
+
+    auto non_checkpoint_found = cache.non_checkpoint_pool.find(frame_number);
+    auto checkpoint_found = cache.checkpoint_pool.find(frame_number);
+
+    const bool in_non_checkpoint_pool =
+        (non_checkpoint_found != cache.non_checkpoint_pool.end());
+
+    const bool in_checkpoint_pool =
+        (checkpoint_found != cache.checkpoint_pool.end());
+
+    if (in_non_checkpoint_pool == in_checkpoint_pool) {
+        /*
+            Either neither owning pool contains the indexed frame, or both pools
+            contain the same frame number. Both states violate the ownership
+            invariant.
+        */
+        ++cache.stats.cache_remove_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_remove_pool_inconsistency_errors;
+        return false;
+    }
+
+    const VSFrame* owned_frame = nullptr;
+
+    if (in_checkpoint_pool) {
+        Cnr3CheckpointSlot& slot = checkpoint_found->second;
+
+        if (slot.pin_count > 0) {
+            ++cache.stats.cache_remove_failures;
+            ++cache.stats.cache_remove_pinned_checkpoint_rejections;
+            return false;
+        }
+
+        owned_frame = slot.frame;
+
+        if (owned_frame == nullptr) {
+            ++cache.stats.cache_remove_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.checkpoint_null_frame_errors;
+            ++cache.stats.cache_remove_pool_inconsistency_errors;
+            return false;
+        }
+
+        if (owned_frame != indexed_frame) {
+            ++cache.stats.cache_remove_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_remove_index_inconsistency_errors;
+            return false;
+        }
+
+        cache.cache_index.erase(index_found);
+        cache.checkpoint_pool.erase(checkpoint_found);
+        vsapi->freeFrame(owned_frame);
+
+        ++cache.stats.cache_remove_successes;
+        ++cache.stats.checkpoint_remove_successes;
+    }
+    else {
+        owned_frame = non_checkpoint_found->second;
+
+        if (owned_frame == nullptr) {
+            ++cache.stats.cache_remove_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_remove_pool_inconsistency_errors;
+            return false;
+        }
+
+        if (owned_frame != indexed_frame) {
+            ++cache.stats.cache_remove_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_remove_index_inconsistency_errors;
+            return false;
+        }
+
+        cache.cache_index.erase(index_found);
+        cache.non_checkpoint_pool.erase(non_checkpoint_found);
+        vsapi->freeFrame(owned_frame);
+
+        ++cache.stats.cache_remove_successes;
+        ++cache.stats.non_checkpoint_remove_successes;
+    }
+
+    if (frame_number == cache.highest_cached_frame_number) {
+        cache.highest_cached_frame_number = -1;
+
+        for (const auto& entry : cache.non_checkpoint_pool) {
+            if (entry.first > cache.highest_cached_frame_number) {
+                cache.highest_cached_frame_number = entry.first;
+            }
+        }
+
+        for (const auto& entry : cache.checkpoint_pool) {
+            if (entry.first > cache.highest_cached_frame_number) {
+                cache.highest_cached_frame_number = entry.first;
+            }
+        }
+    }
+
+    return true;
+}

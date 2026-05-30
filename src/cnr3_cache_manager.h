@@ -159,6 +159,16 @@ struct Cnr3CacheManagerStats {
     int64_t cache_clear_failures = 0;
     int64_t cache_clear_null_vsapi_failures = 0;
 
+    int64_t cache_validation_attempts = 0;
+    int64_t cache_validation_successes = 0;
+    int64_t cache_validation_failures = 0;
+    int64_t cache_validation_cache_index_missing_pool_entry_errors = 0;
+    int64_t cache_validation_pool_missing_cache_index_errors = 0;
+    int64_t cache_validation_dual_pool_ownership_errors = 0;
+    int64_t cache_validation_null_frame_errors = 0;
+    int64_t cache_validation_negative_pin_count_errors = 0;
+    int64_t cache_validation_highest_frame_number_errors = 0;
+
     int64_t cache_store_attempts = 0;
     int64_t cache_store_successes = 0;
     int64_t cache_store_failures = 0;
@@ -357,6 +367,22 @@ void cnr3_cache_manager_reset_stats(
 );
 
 Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
+    Cnr3CacheManagerV005& cache
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager validation helpers - Phase 2G.1
+//
+// These helpers validate internal cache-manager invariants.
+//
+// They are intended for development, maintenance, debug diagnostics, and future
+// runtime sanity checks.
+//
+// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// is later wired into Cnr3Data and cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_validate_invariants(
     Cnr3CacheManagerV005& cache
 );
 

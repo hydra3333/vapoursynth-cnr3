@@ -589,6 +589,37 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
     return cache.stats;
 }
 
+// -----------------------------------------------------------------------------
+// CNR3 cache manager statistics helpers - Phase 2C.1
+//
+// These helpers manage the v005 cache-manager statistics counters.
+//
+// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// is later wired into Cnr3Data and cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+void cnr3_cache_manager_reset_stats(
+    Cnr3CacheManagerV005& cache
+);
+
+Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
+    Cnr3CacheManagerV005& cache
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager validation helpers - Phase 2G.1
+//
+// These helpers validate internal cache-manager invariants.
+//
+// They are intended for development, maintenance, debug diagnostics, and future
+// runtime sanity checks. They do not change current CNR3 runtime behaviour until
+// the v005 cache manager is later wired into Cnr3Data and cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_validate_invariants(
+    Cnr3CacheManagerV005& cache
+);
+
 bool cnr3_cache_manager_pin_checkpoint(
     Cnr3CacheManagerV005& cache,
     int checkpoint_frame_number

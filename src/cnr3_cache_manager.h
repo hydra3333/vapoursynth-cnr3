@@ -386,7 +386,6 @@ bool cnr3_cache_manager_validate_invariants(
     Cnr3CacheManagerV005& cache
 );
 
-
 // -----------------------------------------------------------------------------
 // CNR3 cache manager checkpoint pin helpers - Phase 2C.2
 //

@@ -114,6 +114,9 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
     const VSAPI* vsapi
 );
 
+static bool cnr3_cache_manager_validate_invariants_externally_locked(
+    Cnr3CacheManagerV005& cache
+);
 
 static bool cnr3_cache_manager_remove_output_frame_externally_locked(
     Cnr3CacheManagerV005& cache,
@@ -589,36 +592,208 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
     return cache.stats;
 }
 
-// -----------------------------------------------------------------------------
-// CNR3 cache manager statistics helpers - Phase 2C.1
-//
-// These helpers manage the v005 cache-manager statistics counters.
-//
-// They do not change current CNR3 runtime behaviour until the v005 cache manager
-// is later wired into Cnr3Data and cnr3_get_frame().
-// -----------------------------------------------------------------------------
-
-void cnr3_cache_manager_reset_stats(
-    Cnr3CacheManagerV005& cache
-);
-
-Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
-    Cnr3CacheManagerV005& cache
-);
-
-// -----------------------------------------------------------------------------
-// CNR3 cache manager validation helpers - Phase 2G.1
-//
-// These helpers validate internal cache-manager invariants.
-//
-// They are intended for development, maintenance, debug diagnostics, and future
-// runtime sanity checks. They do not change current CNR3 runtime behaviour until
-// the v005 cache manager is later wired into Cnr3Data and cnr3_get_frame().
-// -----------------------------------------------------------------------------
-
 bool cnr3_cache_manager_validate_invariants(
     Cnr3CacheManagerV005& cache
-);
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state through
+            cnr3_cache_manager_validate_invariants_externally_locked().
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    return cnr3_cache_manager_validate_invariants_externally_locked(
+        cache
+    );
+}
+
+static bool cnr3_cache_manager_validate_invariants_externally_locked(
+    Cnr3CacheManagerV005& cache
+) {
+    /*
+        Thread safety:
+            Does not lock internally.
+        Caller requirement:
+            Requires a lock to be applied by the caller before calling this
+            function; i.e. the caller MUST already hold cache.cache_mutex.
+        Expected callers:
+            cnr3_cache_manager_validate_invariants().
+            Future compound cache-manager helpers that need to validate
+            invariants while holding one cache-manager critical section.
+    */
+
+    /*
+        Validate core cache-manager invariants.
+
+        Ownership/index invariants:
+            Every frame number in cache_index must exist in exactly one owning pool.
+
+            Every frame number in non_checkpoint_pool must exist in cache_index.
+
+            Every frame number in checkpoint_pool must exist in cache_index.
+
+            No frame number may exist in both owning pools.
+
+            cache_index is non-owning. It must alias the VSFrame pointer owned by
+            the corresponding owning pool.
+
+        Frame-reference invariants:
+            Owning pool frame pointers must not be nullptr.
+
+            checkpoint pin_count must never be negative.
+
+        Highest-frame invariant:
+            highest_cached_frame_number must match the actual highest frame
+            number present in either owning pool, or -1 if both pools are empty.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.cache_validation_attempts;
+
+    bool valid = true;
+
+    int actual_highest_cached_frame_number = -1;
+
+    for (const auto& entry : cache.non_checkpoint_pool) {
+        const int frame_number = entry.first;
+        const VSFrame* pool_frame = entry.second;
+
+        if (frame_number > actual_highest_cached_frame_number) {
+            actual_highest_cached_frame_number = frame_number;
+        }
+
+        if (pool_frame == nullptr) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_null_frame_errors;
+            valid = false;
+        }
+
+        if (cache.checkpoint_pool.find(frame_number) != cache.checkpoint_pool.end()) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_dual_pool_ownership_errors;
+            valid = false;
+        }
+
+        const auto index_found = cache.cache_index.find(frame_number);
+
+        if (index_found == cache.cache_index.end()) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_pool_missing_cache_index_errors;
+            valid = false;
+        }
+        else if (index_found->second != pool_frame) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_pool_missing_cache_index_errors;
+            valid = false;
+        }
+    }
+
+    for (const auto& entry : cache.checkpoint_pool) {
+        const int frame_number = entry.first;
+        const Cnr3CheckpointSlot& slot = entry.second;
+
+        if (frame_number > actual_highest_cached_frame_number) {
+            actual_highest_cached_frame_number = frame_number;
+        }
+
+        if (slot.frame == nullptr) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_null_frame_errors;
+            ++cache.stats.checkpoint_null_frame_errors;
+            valid = false;
+        }
+
+        if (slot.pin_count < 0) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_negative_pin_count_errors;
+            valid = false;
+        }
+
+        if (cache.non_checkpoint_pool.find(frame_number) != cache.non_checkpoint_pool.end()) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_dual_pool_ownership_errors;
+            valid = false;
+        }
+
+        const auto index_found = cache.cache_index.find(frame_number);
+
+        if (index_found == cache.cache_index.end()) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_pool_missing_cache_index_errors;
+            valid = false;
+        }
+        else if (index_found->second != slot.frame) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_pool_missing_cache_index_errors;
+            valid = false;
+        }
+    }
+
+    for (const auto& entry : cache.cache_index) {
+        const int frame_number = entry.first;
+        const VSFrame* indexed_frame = entry.second;
+
+        const auto non_checkpoint_found =
+            cache.non_checkpoint_pool.find(frame_number);
+
+        const auto checkpoint_found =
+            cache.checkpoint_pool.find(frame_number);
+
+        const bool in_non_checkpoint_pool =
+            (non_checkpoint_found != cache.non_checkpoint_pool.end());
+
+        const bool in_checkpoint_pool =
+            (checkpoint_found != cache.checkpoint_pool.end());
+
+        if (indexed_frame == nullptr) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_null_frame_errors;
+            valid = false;
+        }
+
+        if (in_non_checkpoint_pool == in_checkpoint_pool) {
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_validation_cache_index_missing_pool_entry_errors;
+            valid = false;
+            continue;
+        }
+
+        if (in_non_checkpoint_pool) {
+            if (non_checkpoint_found->second != indexed_frame) {
+                ++cache.stats.cache_integrity_errors;
+                ++cache.stats.cache_validation_cache_index_missing_pool_entry_errors;
+                valid = false;
+            }
+        }
+        else {
+            if (checkpoint_found->second.frame != indexed_frame) {
+                ++cache.stats.cache_integrity_errors;
+                ++cache.stats.cache_validation_cache_index_missing_pool_entry_errors;
+                valid = false;
+            }
+        }
+    }
+
+    if (cache.highest_cached_frame_number != actual_highest_cached_frame_number) {
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_validation_highest_frame_number_errors;
+        valid = false;
+    }
+
+    if (valid) {
+        ++cache.stats.cache_validation_successes;
+    }
+    else {
+        ++cache.stats.cache_validation_failures;
+    }
+
+    return valid;
+}
 
 bool cnr3_cache_manager_pin_checkpoint(
     Cnr3CacheManagerV005& cache,

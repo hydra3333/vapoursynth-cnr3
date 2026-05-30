@@ -795,6 +795,90 @@ static bool cnr3_cache_manager_validate_invariants_externally_locked(
     return valid;
 }
 
+bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int requested_frame_number,
+    int& checkpoint_frame_number
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.checkpoint_pool and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Atomically find and pin the nearest prior checkpoint.
+
+        Critical safety rule:
+            Future runtime code must not perform this as separate public calls:
+
+                find nearest prior checkpoint
+                unlock
+                later pin checkpoint
+
+            That sequence is unsafe because another cache operation could prune
+            the selected checkpoint between the find and the pin.
+
+        This helper performs both operations while holding cache.cache_mutex:
+            1. Find the nearest prior checkpoint by strict frame-number order.
+            2. Verify that the checkpoint slot has a valid frame pointer.
+            3. Increment that checkpoint slot's pin_count.
+            4. Return only the checkpoint frame number.
+
+        This helper does not return a raw VSFrame pointer. The checkpoint slot is
+        protected from pruning by pin_count, not by an extra addFrameRef().
+    */
+
+    checkpoint_frame_number = -1;
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.checkpoint_find_and_pin_attempts;
+
+    for (
+        auto found = cache.checkpoint_pool.rbegin();
+        found != cache.checkpoint_pool.rend();
+        ++found
+        ) {
+        if (found->first >= requested_frame_number) {
+            continue;
+        }
+
+        Cnr3CheckpointSlot& slot = found->second;
+
+        if (slot.frame == nullptr) {
+            ++cache.stats.checkpoint_find_and_pin_failures;
+            ++cache.stats.checkpoint_find_and_pin_null_frame_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.checkpoint_null_frame_errors;
+            return false;
+        }
+
+        ++slot.pin_count;
+
+        checkpoint_frame_number = found->first;
+
+        ++cache.stats.checkpoint_find_and_pin_successes;
+        ++cache.stats.checkpoint_pin_attempts;
+        ++cache.stats.checkpoint_pin_successes;
+
+        if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+            if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    ++cache.stats.checkpoint_find_and_pin_failures;
+    ++cache.stats.checkpoint_find_and_pin_no_prior_checkpoint_failures;
+
+    return false;
+}
+
 bool cnr3_cache_manager_pin_checkpoint(
     Cnr3CacheManagerV005& cache,
     int checkpoint_frame_number

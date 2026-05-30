@@ -169,6 +169,12 @@ struct Cnr3CacheManagerStats {
     int64_t checkpoint_pin_successes = 0;
     int64_t checkpoint_pin_failures = 0;
 
+    int64_t checkpoint_find_and_pin_attempts = 0;
+    int64_t checkpoint_find_and_pin_successes = 0;
+    int64_t checkpoint_find_and_pin_failures = 0;
+    int64_t checkpoint_find_and_pin_no_prior_checkpoint_failures = 0;
+    int64_t checkpoint_find_and_pin_null_frame_failures = 0;
+
     int64_t checkpoint_unpin_attempts = 0;
     int64_t checkpoint_unpin_successes = 0;
     int64_t checkpoint_unpin_failures = 0;
@@ -419,7 +425,16 @@ bool cnr3_cache_manager_validate_invariants(
 //
 // pin_count is not a VapourSynth frame reference. It does not call addFrameRef()
 // and it does not call freeFrame().
+// 
+// Phase 2H.1 adds atomic find-and-pin support so future runtime code does not
+// perform an unsafe find/unlock/pin sequence.
 // -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
+    Cnr3CacheManagerV005& cache,
+    int requested_frame_number,
+    int& checkpoint_frame_number
+);
 
 bool cnr3_cache_manager_pin_checkpoint(
     Cnr3CacheManagerV005& cache,

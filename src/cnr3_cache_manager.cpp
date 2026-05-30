@@ -48,6 +48,56 @@
 //              Full fmParallel algorithm correctness still needs later
 //              condition variables and active-computation state.
 // 
+// EXTERNAL FRAME REFERENCE SAFETY:
+//      The cache manager stores VSFrame pointers that are owned by VapourSynth
+//      and protected by VapourSynth reference counting.
+//
+//      There are two distinct reference-ownership cases:
+//
+//      1. Cache-owned frame references:
+//          Every VSFrame pointer stored in non_checkpoint_pool or checkpoint_pool
+//          MUST be a cache-owned reference obtained with vsapi->addFrameRef().
+//          This ensures that VapourSynth does not dispose of the frame while it
+//          is still referenced by the pointer in our cache.
+//
+//          Every cache-owned frame reference MUST be released exactly once with
+//          vsapi->freeFrame() when that cache slot is pruned, when the cache is
+//          cleared, or when the owning CNR3 filter instance is destroyed.
+//
+//          To be clear:
+//              cache_index does not own frame references.
+//              It only aliases frame pointers owned by either
+//              non_checkpoint_pool or checkpoint_pool.
+//
+//      2. Caller-owned temporary frame references:
+//          If a public cache-manager helper returns a cached VSFrame pointer
+//          after releasing cache.cache_mutex, it MUST return a caller-owned
+//          temporary reference obtained with vsapi->addFrameRef().
+//          This ensures that VapourSynth does not dispose of the frame while
+//          the caller-owned temporary reference is still held by the caller.
+//
+//          The helper name MUST make this explicit, for example:
+//              cnr3_cache_manager_find_output_frame_and_add_ref()
+//
+//          The caller MUST release that caller-owned temporary reference exactly
+//          once with vsapi->freeFrame() on every success, error, and early-exit
+//          path.
+//
+//      A helper that returns a raw borrowed cached VSFrame pointer without taking
+//      addFrameRef() MUST have a name ending in _externally_locked.
+//
+//      A raw borrowed pointer returned by an _externally_locked helper is valid
+//      only while the caller already holds cache.cache_mutex and only while the
+//      relevant cache slot remains protected from change or pruning. It must not
+//      be stored or used after the caller releases cache.cache_mutex unless the
+//      caller first takes its own addFrameRef().
+//
+//      Special note on pin_count:
+//          pin_count is not a VapourSynth frame reference.
+//          It does not call addFrameRef() and it does not call freeFrame().
+//          It only prevents a checkpoint_pool slot from being pruned while
+//          an in-flight invocation depends on that checkpoint.
+// 
 // Phase 2A adds only safe cache state inspection and teardown/release helpers.
 //
 // These helpers are not wired into current runtime behaviour yet.

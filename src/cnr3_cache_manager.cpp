@@ -908,6 +908,69 @@ bool cnr3_cache_manager_prune_checkpoint_pool(
     );
 }
 
+bool cnr3_cache_manager_prune_after_store(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state through the non-checkpoint and checkpoint
+            prune helpers' _externally_locked implementations.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Run the standard post-store pruning pass.
+
+        Pruning order:
+            1. Prune non_checkpoint_pool using the Option B overflow policy.
+            2. Prune checkpoint_pool using checkpoint retain/pin rules.
+
+        Both pruning steps run under one cache_mutex critical section. This keeps
+        the combined post-store pruning pass internally consistent and avoids
+        deadlocking on public helpers that would otherwise lock internally.
+
+        Actual frame removal is delegated to
+        cnr3_cache_manager_remove_output_frame_externally_locked(), so
+        cache_index erasure, owning-pool erasure, and freeFrame() release remain
+        centralised.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.prune_after_store_attempts;
+
+    const bool non_checkpoint_prune_ok =
+        cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+            cache,
+            vsapi
+        );
+
+    const bool checkpoint_prune_ok =
+        cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+            cache,
+            vsapi
+        );
+
+    if (!non_checkpoint_prune_ok) {
+        ++cache.stats.prune_after_store_non_checkpoint_failures;
+    }
+
+    if (!checkpoint_prune_ok) {
+        ++cache.stats.prune_after_store_checkpoint_failures;
+    }
+
+    if (!non_checkpoint_prune_ok || !checkpoint_prune_ok) {
+        ++cache.stats.prune_after_store_failures;
+        return false;
+    }
+
+    ++cache.stats.prune_after_store_successes;
+    return true;
+}
+
 static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
@@ -1128,4 +1191,3 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
 
     return all_removes_succeeded;
 }
-

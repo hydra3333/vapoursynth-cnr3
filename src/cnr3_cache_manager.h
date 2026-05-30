@@ -192,6 +192,12 @@ struct Cnr3CacheManagerStats {
     int64_t checkpoint_prune_skipped_frame_zero = 0;
     int64_t checkpoint_prune_skipped_pinned = 0;
     int64_t checkpoint_prune_no_eligible_frames = 0;
+
+    int64_t prune_after_store_attempts = 0;
+    int64_t prune_after_store_successes = 0;
+    int64_t prune_after_store_failures = 0;
+    int64_t prune_after_store_non_checkpoint_failures = 0;
+    int64_t prune_after_store_checkpoint_failures = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -454,6 +460,21 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
 // -----------------------------------------------------------------------------
 
 bool cnr3_cache_manager_prune_checkpoint_pool(
+    Cnr3CacheManagerV005& cache,
+    const VSAPI* vsapi
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager combined pruning helpers - Phase 2E.3b
+//
+// These helpers run the standard post-store pruning pass.
+//
+// The combined prune-after-store helper exists so later runtime code can call
+// one public helper after storing output frames, while the cache manager keeps
+// the detailed pruning sequence and locking policy internal.
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_prune_after_store(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 );

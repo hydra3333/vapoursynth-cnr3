@@ -153,6 +153,18 @@ struct Cnr3CacheManagerStats {
 
     int64_t cache_integrity_errors = 0;
     int64_t checkpoint_null_frame_errors = 0;
+
+    int64_t cache_store_attempts = 0;
+    int64_t cache_store_successes = 0;
+    int64_t cache_store_failures = 0;
+    int64_t cache_store_duplicate_rejections = 0;
+    int64_t cache_store_invalid_input_errors = 0;
+    int64_t cache_store_add_ref_failures = 0;
+    int64_t cache_store_pool_inconsistency_errors = 0;
+    int64_t cache_store_index_inconsistency_errors = 0;
+
+    int64_t non_checkpoint_store_successes = 0;
+    int64_t checkpoint_store_successes = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -339,6 +351,25 @@ bool cnr3_cache_manager_has_pinned_checkpoints(
 
 int64_t cnr3_cache_manager_get_total_pin_count(
     Cnr3CacheManagerV005& cache
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager store helpers - Phase 2D.1
+//
+// These helpers insert output frames into the v005 cache manager.
+//
+// Store helpers take cache-owned VSFrame references with vsapi->addFrameRef().
+// Those references must later be released exactly once by pruning, clearing, or
+// teardown using vsapi->freeFrame().
+//
+// No pruning is performed in Phase 2D.1.
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_store_output_frame(
+    Cnr3CacheManagerV005& cache,
+    int frame_number,
+    const VSFrame* output_frame,
+    const VSAPI* vsapi
 );
 
 // -----------------------------------------------------------------------------

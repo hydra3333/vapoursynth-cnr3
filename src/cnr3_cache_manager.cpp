@@ -520,3 +520,152 @@ int64_t cnr3_cache_manager_get_total_pin_count(
 
     return total_pin_count;
 }
+
+bool cnr3_cache_manager_store_output_frame(
+    Cnr3CacheManagerV005& cache,
+    int frame_number,
+    const VSFrame* output_frame,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.non_checkpoint_pool, cache.checkpoint_pool,
+            cache.cache_index, cache.highest_cached_frame_number, and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Store one output frame in the v005 cache manager.
+
+        Ownership rule:
+            On successful insertion, this function takes one cache-owned
+            reference using vsapi->addFrameRef(output_frame).
+
+            That cache-owned reference is owned by exactly one of:
+                cache.non_checkpoint_pool
+                cache.checkpoint_pool
+
+            cache.cache_index does not own the reference. It only aliases the
+            owning pool's frame pointer.
+
+            The cache-owned reference must later be released exactly once by
+            pruning, clearing, or teardown.
+
+        Promotion rule:
+            cnr3_cache_manager_should_promote_checkpoint(frame_number) decides
+            whether the frame is stored in checkpoint_pool or non_checkpoint_pool.
+
+        Duplicate rule:
+            If frame_number is already present in cache_index, no addFrameRef()
+            is taken and the function returns false.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.cache_store_attempts;
+
+    if (frame_number < 0 || output_frame == nullptr || vsapi == nullptr) {
+        ++cache.stats.cache_store_failures;
+        ++cache.stats.cache_store_invalid_input_errors;
+        return false;
+    }
+
+    if (cache.cache_index.find(frame_number) != cache.cache_index.end()) {
+        ++cache.stats.cache_store_failures;
+        ++cache.stats.cache_store_duplicate_rejections;
+        return false;
+    }
+
+    const bool should_promote_to_checkpoint =
+        cnr3_cache_manager_should_promote_checkpoint(frame_number);
+
+    const VSFrame* retained_frame = vsapi->addFrameRef(output_frame);
+
+    if (retained_frame == nullptr) {
+        ++cache.stats.cache_store_failures;
+        ++cache.stats.cache_store_add_ref_failures;
+        return false;
+    }
+
+    if (should_promote_to_checkpoint) {
+        Cnr3CheckpointSlot slot;
+        slot.frame = retained_frame;
+        slot.pin_count = 0;
+
+        const auto pool_insert_result =
+            cache.checkpoint_pool.emplace(frame_number, slot);
+
+        if (!pool_insert_result.second) {
+            /*
+                This should be impossible because cache_index said the frame was
+                not present. Treat it as cache-manager corruption and release
+                the retained reference immediately to avoid a leak.
+            */
+            vsapi->freeFrame(retained_frame);
+
+            ++cache.stats.cache_store_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_store_pool_inconsistency_errors;
+            return false;
+        }
+    }
+    else {
+        const auto pool_insert_result =
+            cache.non_checkpoint_pool.emplace(frame_number, retained_frame);
+
+        if (!pool_insert_result.second) {
+            /*
+                This should be impossible because cache_index said the frame was
+                not present. Treat it as cache-manager corruption and release
+                the retained reference immediately to avoid a leak.
+            */
+            vsapi->freeFrame(retained_frame);
+
+            ++cache.stats.cache_store_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.cache_store_pool_inconsistency_errors;
+            return false;
+        }
+    }
+
+    const auto index_insert_result =
+        cache.cache_index.emplace(frame_number, retained_frame);
+
+    if (!index_insert_result.second) {
+        /*
+            This should be impossible because cache_index was checked before
+            insertion. Remove the owning pool entry and release the retained
+            reference to keep ownership balanced.
+        */
+        if (should_promote_to_checkpoint) {
+            cache.checkpoint_pool.erase(frame_number);
+        }
+        else {
+            cache.non_checkpoint_pool.erase(frame_number);
+        }
+
+        vsapi->freeFrame(retained_frame);
+
+        ++cache.stats.cache_store_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_store_index_inconsistency_errors;
+        return false;
+    }
+
+    if (frame_number > cache.highest_cached_frame_number) {
+        cache.highest_cached_frame_number = frame_number;
+    }
+
+    ++cache.stats.cache_store_successes;
+
+    if (should_promote_to_checkpoint) {
+        ++cache.stats.checkpoint_store_successes;
+    }
+    else {
+        ++cache.stats.non_checkpoint_store_successes;
+    }
+
+    return true;
+}

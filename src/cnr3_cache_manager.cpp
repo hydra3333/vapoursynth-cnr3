@@ -387,7 +387,7 @@ bool cnr3_cache_manager_contains_output_frame(
     return (cache.cache_index.find(frame_number) != cache.cache_index.end());
 }
 
-void cnr3_cache_manager_clear(
+bool cnr3_cache_manager_clear(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 ) {
@@ -401,6 +401,8 @@ void cnr3_cache_manager_clear(
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
+    ++cache.stats.cache_clear_attempts;
+
     /*
         Release every VS frame reference owned by the v005 cache manager.
 
@@ -410,7 +412,25 @@ void cnr3_cache_manager_clear(
 
         cache_index contains non-owning aliases only. Those pointers must not be
         released separately.
+
+        Safety rule:
+            If the cache owns any frame references, vsapi must be available so
+            those references can be released with freeFrame(). Clearing non-empty
+            pools without freeFrame() would leak the cache-owned references.
     */
+
+    const bool cache_has_owned_frames =
+        (
+            !cache.non_checkpoint_pool.empty() ||
+            !cache.checkpoint_pool.empty()
+            );
+
+    if (vsapi == nullptr && cache_has_owned_frames) {
+        ++cache.stats.cache_clear_failures;
+        ++cache.stats.cache_clear_null_vsapi_failures;
+        ++cache.stats.cache_integrity_errors;
+        return false;
+    }
 
     if (vsapi != nullptr) {
         for (const auto& entry : cache.non_checkpoint_pool) {
@@ -435,6 +455,9 @@ void cnr3_cache_manager_clear(
     cache.cache_index.clear();
 
     cache.highest_cached_frame_number = -1;
+
+    ++cache.stats.cache_clear_successes;
+    return true;
 }
 
 bool cnr3_cache_manager_find_nearest_prior_checkpoint(
@@ -983,7 +1006,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
             cnr3_cache_manager_prune_non_checkpoint_pool().
-            Future combined prune helpers that need to prune multiple pools while
+            Combined prune helpers that need to prune multiple pools while
             holding one cache-manager critical section.
     */
 
@@ -1077,7 +1100,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
             cnr3_cache_manager_prune_checkpoint_pool().
-            Future combined prune helpers that need to prune multiple pools while
+            Combined prune helpers that need to prune multiple pools while
             holding one cache-manager critical section.
     */
 

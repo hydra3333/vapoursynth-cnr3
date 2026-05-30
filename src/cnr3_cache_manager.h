@@ -154,6 +154,11 @@ struct Cnr3CacheManagerStats {
     int64_t cache_integrity_errors = 0;
     int64_t checkpoint_null_frame_errors = 0;
 
+    int64_t cache_clear_attempts = 0;
+    int64_t cache_clear_successes = 0;
+    int64_t cache_clear_failures = 0;
+    int64_t cache_clear_null_vsapi_failures = 0;
+
     int64_t cache_store_attempts = 0;
     int64_t cache_store_successes = 0;
     int64_t cache_store_failures = 0;
@@ -297,7 +302,7 @@ bool cnr3_cache_manager_contains_output_frame(
     int frame_number
 );
 
-void cnr3_cache_manager_clear(
+bool cnr3_cache_manager_clear(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
 );

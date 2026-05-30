@@ -12,6 +12,42 @@
 //      output frame cache state, checkpoint cache state, cache indexes,
 //      checkpoint lookup, pruning, promotion, and pin_count handling.
 // 
+// THREAD SAFETY:
+//      Any code path that reads or writes mutable cache-manager state may run
+//      while another thread is also interacting with the same CNR3 filter instance.
+//
+//      Therefore, any code path that reads or writes mutable cache-manager state
+//      MUST hold the cache manager's per-instance cache_mutex while doing so.
+//
+//      This applies to at least:
+//          - cnr3_cache_manager_* helper functions
+//          - cnr3_get_frame() code that directly touches cache-manager state
+//          - pruning code
+//          - checkpoint promotion code
+//          - pin_count handling
+//          - cache index updates
+//          - future debug/statistics counters stored inside the cache manager
+//
+//      All non-static cnr3_cache_manager_* functions MUST be thread-safe     
+//      and lock internally if/as appropriate, unless their name ends in _externally_locked.
+//
+//      A helper whose name ends in _externally_locked MUST be called only while
+//      the caller already holds the cache manager's per-instance cache_mutex.
+//
+//      All cache-manager code must be designed around this policy:
+//          VapourSynth mode: fmUnordered:
+//              Safe, even though only one callback enters at a time.
+//          VapourSynth mode: fmParallelRequests:
+//              Safe with concurrent arInitial readers/pinners and serial
+//              arAllFramesReady writer.
+//          VapourSynth mode: fmParallel:
+//              Direct cache-manager metadata access and cache-manager helpers
+//              remain thread-safe under concurrent arInitial/arAllFramesReady
+//              calls, provided all mutable cache-manager state is accessed only
+//              while holding the per-instance cache_mutex.
+//              Full fmParallel algorithm correctness still needs later
+//              condition variables and active-computation state.
+// 
 // Phase 2A adds only safe cache state inspection and teardown/release helpers.
 //
 // These helpers are not wired into current runtime behaviour yet.

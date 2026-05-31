@@ -1742,6 +1742,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
         static_cast<std::size_t>(CNR3_CHECKPOINT_MIN_RETAIN)
         ) {
         bool removed_one_checkpoint = false;
+        bool remove_failed = false;
 
         for (
             auto found = cache.checkpoint_pool.begin();
@@ -1771,6 +1772,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
             if (!removed) {
                 ++cache.stats.checkpoint_prune_remove_failures;
                 all_removes_succeeded = false;
+                remove_failed = true;
             }
             else {
                 ++cache.stats.checkpoint_prune_removed_frames;
@@ -1785,17 +1787,23 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
             }
 
             /*
-                The remove helper erases from checkpoint_pool, invalidating the
-                iterator used by this loop. Break and restart from begin().
+                The remove helper erases from checkpoint_pool on success,
+                invalidating the iterator used by this loop.
+
+                On success, break and restart from begin().
+
+                On failure, also break because pruning has failed and the caller
+                should see checkpoint_prune_remove_failures rather than the loop
+                continuing past a failed remove attempt.
             */
             break;
         }
 
-        if (!removed_one_checkpoint) {
+        if (!removed_one_checkpoint && !remove_failed) {
             /*
                 The pool still exceeds the target size, but every remaining
-                checkpoint is either frame 0 or pinned, or a removal failed.
-                Stop rather than looping forever.
+                checkpoint is either frame 0 or pinned. No eligible removable
+                checkpoint was found in this pass.
             */
             ++cache.stats.checkpoint_prune_no_eligible_frames;
             break;

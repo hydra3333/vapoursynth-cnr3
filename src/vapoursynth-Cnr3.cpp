@@ -2182,6 +2182,14 @@ static void VS_CC cnr3_free(
 
         cnr3_cache_clear(d->cache, vsapi);
 
+        if (!cnr3_cache_manager_clear(d->cache_manager_v005, vsapi)) {
+            cnr3_debug_printf(
+                d->debug,
+                "CNR3 debug: instance=%d, cache_manager_v005 clear failed during cnr3_free.\n",
+                d->instance_id
+            );
+        }
+
         delete d;
     }
 }
@@ -2367,7 +2375,8 @@ static void VS_CC cnr3_create(
 ) {
     (void)userData;
 
-    Cnr3Data local;
+    Cnr3Data* data = new Cnr3Data();
+    Cnr3Data& local = *data;
 
     // an ID to identify and track instances
     local.instance_id = g_cnr3_next_instance_id.fetch_add(1);
@@ -2377,6 +2386,7 @@ static void VS_CC cnr3_create(
 
     if (err || local.node == nullptr) {
         vsapi->mapSetError(out, "CNR3: clip is required.");
+        delete data;
         return;
     }
 
@@ -2384,12 +2394,16 @@ static void VS_CC cnr3_create(
 
     if (local.vi == nullptr) {
         vsapi->freeNode(local.node);
+        local.node = nullptr;
         vsapi->mapSetError(out, "CNR3: failed to get video info.");
+        delete data;
         return;
     }
 
     if (!validate_cnr3_format(local.vi, out, vsapi)) {
         vsapi->freeNode(local.node);
+        local.node = nullptr;
+        delete data;
         return;
     }
 
@@ -2420,14 +2434,18 @@ static void VS_CC cnr3_create(
 
     if (local.mode.size() != 3) {
         vsapi->freeNode(local.node);
+        local.node = nullptr;
         vsapi->mapSetError(out, "CNR3: mode must be a 3-character string, for example \"oxx\".");
+        delete data;
         return;
     }
 
     for (const char c : local.mode) {
         if (c != 'o' && c != 'x') {
             vsapi->freeNode(local.node);
+            local.node = nullptr;
             vsapi->mapSetError(out, "CNR3: mode may contain only 'o' and 'x' characters.");
+            delete data;
             return;
         }
     }
@@ -2441,13 +2459,17 @@ static void VS_CC cnr3_create(
         local.vm < 0
         ) {
         vsapi->freeNode(local.node);
+        local.node = nullptr;
         vsapi->mapSetError(out, "CNR3: threshold parameters must be non-negative.");
+        delete data;
         return;
     }
 
     if (local.scdthr < 0.0) {
         vsapi->freeNode(local.node);
+        local.node = nullptr;
         vsapi->mapSetError(out, "CNR3: scdthr must be non-negative.");
+        delete data;
         return;
     }
 
@@ -2520,6 +2542,8 @@ static void VS_CC cnr3_create(
 
     if (!build_cnr3_lookup_tables(local, out, vsapi)) {
         vsapi->freeNode(local.node);
+        local.node = nullptr;
+        delete data;
         return;
     }
 
@@ -2641,7 +2665,6 @@ static void VS_CC cnr3_create(
             )
         );
     }
-    Cnr3Data* data = new Cnr3Data(local);
 
     VSFilterDependency deps[] = {
         {data->node, rpGeneral}

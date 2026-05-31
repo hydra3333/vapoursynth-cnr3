@@ -8,6 +8,7 @@
 #include "VSHelper4.h"
 
 #include "cnr3_cache.h"
+#include "cnr3_cache_manager.h"
 
 // -----------------------------------------------------------------------------
 // Small shared mechanical helpers
@@ -157,6 +158,18 @@ struct Cnr3Data {
         The struct shape deliberately leaves room for the future cache manager.
     */
     Cnr3CacheManager cache;
+
+    /*
+    Future v005 output-frame cache manager.
+
+    Phase 3A only makes this cache manager owned by the CNR3 filter instance.
+    It is deliberately not used by cnr3_get_frame() yet, so current runtime
+    behaviour remains unchanged.
+
+    This cache manager must remain per-instance/per-source and must never be
+    global or shared between CNR3 instances.
+    */
+    Cnr3CacheManagerV005 cache_manager_v005;
 
     bool debug = false;
 };

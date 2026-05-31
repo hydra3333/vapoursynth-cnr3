@@ -8,6 +8,7 @@
 #include "VSHelper4.h"
 
 #include "cnr3_build_config.h"
+#include "cnr3_memory_diagnostics.h"
 #include "cnr3_cache.h"
 #include "cnr3_cache_manager.h"
 
@@ -171,6 +172,14 @@ struct Cnr3Data {
         global or shared between CNR3 instances.
     */
     Cnr3CacheManagerV005 cache_manager_v005;
+
+    /*
+    Per-instance memory diagnostics accumulator.
+
+    This records process/system memory observations for development
+    diagnostics. It does not affect frame processing.
+    */
+    Cnr3MemoryStats memory_stats;
 
     bool debug = false;
 };

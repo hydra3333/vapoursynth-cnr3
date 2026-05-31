@@ -66,6 +66,7 @@
 #include "VSHelper4.h"
 
 #include "cnr3_build_config.h"
+#include "cnr3_memory_diagnostics.h"
 #include "cnr3_common.h"
 #include "cnr3_response_tables.h"
 
@@ -2285,6 +2286,13 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
+        cnr3_memory_record_and_print_snapshot(
+            d->memory_stats,
+            d->debug,
+            d->instance_id,
+            "before cnr3_free cleanup"
+        );
+
         cnr3_cache_clear(d->cache, vsapi);
 
         if (!cnr3_cache_manager_clear(d->cache_manager_v005, vsapi)) {
@@ -2294,6 +2302,20 @@ static void VS_CC cnr3_free(
                 d->instance_id
             );
         }
+
+        cnr3_memory_record_and_print_snapshot(
+            d->memory_stats,
+            d->debug,
+            d->instance_id,
+            "after cnr3_free cache cleanup"
+        );
+
+        cnr3_memory_print_summary(
+            d->memory_stats,
+            d->debug,
+            d->instance_id,
+            "before Cnr3Data delete"
+        );
 
         delete d;
     }
@@ -2773,6 +2795,13 @@ static void VS_CC cnr3_create(
 
     cnr3_debug_print_cache_manager_v005_summary(
         data,
+        "after cnr3_create configuration before createVideoFilter"
+    );
+
+    cnr3_memory_record_and_print_snapshot(
+        data->memory_stats,
+        data->debug,
+        data->instance_id,
         "after cnr3_create configuration before createVideoFilter"
     );
 

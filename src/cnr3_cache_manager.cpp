@@ -1418,6 +1418,7 @@ bool cnr3_cache_manager_store_output_frame(
 
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            ++cache.stats.cache_store_post_validation_failures;
             return false;
         }
     }
@@ -1453,6 +1454,7 @@ bool cnr3_cache_manager_remove_output_frame(
             removed &&
             !cnr3_cache_manager_validate_invariants_externally_locked(cache)
             ) {
+            ++cache.stats.cache_remove_post_validation_failures;
             return false;
         }
     }
@@ -1563,7 +1565,7 @@ bool cnr3_cache_manager_prune_after_store(
 
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
-            ++cache.stats.prune_after_store_failures;
+            ++cache.stats.prune_after_store_post_validation_failures;
             return false;
         }
     }
@@ -1664,6 +1666,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
 
         if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
             if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                ++cache.stats.non_checkpoint_prune_post_validation_failures;
                 return false;
             }
         }
@@ -1775,6 +1778,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
 
                 if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
                     if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                        ++cache.stats.checkpoint_prune_post_validation_failures;
                         return false;
                     }
                 }

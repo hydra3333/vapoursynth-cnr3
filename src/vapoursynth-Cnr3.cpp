@@ -236,8 +236,10 @@ static void cnr3_debug_print_cache_manager_v005_summary(
         "store=%lld/%lld/%lld, remove=%lld/%lld/%lld, "
         "prune_after_store=%lld/%lld/%lld, "
         "find_and_pin=%lld/%lld/%lld, unpin=%lld/%lld/%lld, "
-        "validation=%lld/%lld/%lld, integrity_errors=%lld\n",
-        d->instance_id,
+        "validation=%lld/%lld/%lld, integrity_errors=%lld, "
+        "post_validation_failures: store=%lld, remove=%lld, "
+        "non_checkpoint_prune=%lld, checkpoint_prune=%lld, "
+        "prune_after_store=%lld\n", d->instance_id,
         where,
         static_cast<unsigned long long>(snapshot.non_checkpoint_count),
         static_cast<unsigned long long>(snapshot.checkpoint_count),
@@ -264,8 +266,12 @@ static void cnr3_debug_print_cache_manager_v005_summary(
         static_cast<long long>(stats.cache_validation_attempts),
         static_cast<long long>(stats.cache_validation_successes),
         static_cast<long long>(stats.cache_validation_failures),
-        static_cast<long long>(stats.cache_integrity_errors)
-    );
+        static_cast<long long>(stats.cache_integrity_errors),
+        static_cast<long long>(stats.cache_store_post_validation_failures),
+        static_cast<long long>(stats.cache_remove_post_validation_failures),
+        static_cast<long long>(stats.non_checkpoint_prune_post_validation_failures),
+        static_cast<long long>(stats.checkpoint_prune_post_validation_failures),
+        static_cast<long long>(stats.prune_after_store_post_validation_failures));
 }
 
 static int64_t get_optional_int(

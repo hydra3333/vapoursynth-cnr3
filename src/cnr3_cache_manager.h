@@ -206,6 +206,7 @@ struct Cnr3CacheManagerStats {
     int64_t cache_store_add_ref_failures = 0;
     int64_t cache_store_pool_inconsistency_errors = 0;
     int64_t cache_store_index_inconsistency_errors = 0;
+    int64_t cache_store_post_validation_failures = 0;
 
     int64_t non_checkpoint_store_successes = 0;
     int64_t checkpoint_store_successes = 0;
@@ -218,6 +219,7 @@ struct Cnr3CacheManagerStats {
     int64_t cache_remove_pinned_checkpoint_rejections = 0;
     int64_t cache_remove_pool_inconsistency_errors = 0;
     int64_t cache_remove_index_inconsistency_errors = 0;
+    int64_t cache_remove_post_validation_failures = 0;
 
     int64_t non_checkpoint_remove_successes = 0;
     int64_t checkpoint_remove_successes = 0;
@@ -227,6 +229,7 @@ struct Cnr3CacheManagerStats {
     int64_t non_checkpoint_prune_skipped_below_overflow = 0;
     int64_t non_checkpoint_prune_removed_frames = 0;
     int64_t non_checkpoint_prune_remove_failures = 0;
+    int64_t non_checkpoint_prune_post_validation_failures = 0;
 
     int64_t checkpoint_prune_attempts = 0;
     int64_t checkpoint_prune_runs = 0;
@@ -236,12 +239,14 @@ struct Cnr3CacheManagerStats {
     int64_t checkpoint_prune_skipped_frame_zero = 0;
     int64_t checkpoint_prune_skipped_pinned = 0;
     int64_t checkpoint_prune_no_eligible_frames = 0;
+    int64_t checkpoint_prune_post_validation_failures = 0;
 
     int64_t prune_after_store_attempts = 0;
     int64_t prune_after_store_successes = 0;
     int64_t prune_after_store_failures = 0;
     int64_t prune_after_store_non_checkpoint_failures = 0;
     int64_t prune_after_store_checkpoint_failures = 0;
+    int64_t prune_after_store_post_validation_failures = 0;
 };
 
 // -----------------------------------------------------------------------------

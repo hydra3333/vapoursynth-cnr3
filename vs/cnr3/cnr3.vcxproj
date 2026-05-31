@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\src\cnr3_build_config.h" />
     <ClInclude Include="..\..\src\cnr3_cache.h" />
     <ClInclude Include="..\..\src\cnr3_cache_manager.h" />
     <ClInclude Include="..\..\src\cnr3_common.h" />

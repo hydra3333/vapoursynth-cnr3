@@ -7,6 +7,7 @@
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 
+#include "cnr3_build_config.h"
 #include "cnr3_cache.h"
 #include "cnr3_cache_manager.h"
 

@@ -1,3 +1,4 @@
+#include "cnr3_build_config.h"
 #include "cnr3_response_tables.h"
 
 #include <cmath>

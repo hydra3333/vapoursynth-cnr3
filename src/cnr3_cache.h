@@ -3,6 +3,8 @@
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 
+#include "cnr3_build_config.h"
+
 // -----------------------------------------------------------------------------
 // CNR3 cache manager
 //

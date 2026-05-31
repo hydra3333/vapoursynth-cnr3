@@ -1,3 +1,4 @@
+#include "cnr3_build_config.h"
 #include "cnr3_cache.h"
 
 void cnr3_cache_clear(

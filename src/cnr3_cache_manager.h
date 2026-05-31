@@ -9,6 +9,8 @@
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 
+#include "cnr3_build_config.h"
+
 // -----------------------------------------------------------------------------
 // CNR3 cache manager - v005 design structures
 //
@@ -143,15 +145,13 @@ constexpr int CNR3_CHECKPOINT_MIN_RETAIN = 6;
 // from the cache-manager ownership, locking, pruning, and index/pool invariants.
 // -----------------------------------------------------------------------------
 
-constexpr bool CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS = true;
-
 /*
     Defaults to CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS, but may be set independently
     if post-mutation validation needs to be enabled or disabled separately from
-    other development diagnostics.
+    other cache-manager development diagnostics.
 */
 constexpr bool CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION =
-    CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
+CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager statistics

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cnr3_build_config.h"
 #include "cnr3_common.h"
 
 // -----------------------------------------------------------------------------

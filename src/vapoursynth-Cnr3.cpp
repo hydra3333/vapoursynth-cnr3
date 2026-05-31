@@ -64,6 +64,8 @@
 
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
+
+#include "cnr3_build_config.h"
 #include "cnr3_common.h"
 #include "cnr3_response_tables.h"
 

@@ -30,7 +30,7 @@ constexpr bool CNR3_DEV_DIAGNOSTICS = true;
     other CNR3 development diagnostics.
 */
 constexpr bool CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS =
-CNR3_DEV_DIAGNOSTICS;
+    CNR3_DEV_DIAGNOSTICS;
 
 /*
     Memory diagnostics.
@@ -42,4 +42,4 @@ CNR3_DEV_DIAGNOSTICS;
     behaviour with process and system memory use.
 */
 constexpr bool CNR3_MEMORY_DIAGNOSTICS =
-CNR3_DEV_DIAGNOSTICS;
+    CNR3_DEV_DIAGNOSTICS;

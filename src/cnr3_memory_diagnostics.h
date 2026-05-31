@@ -72,26 +72,31 @@ struct Cnr3MemoryStats {
     uint64_t sample_count = 0;
 
     bool have_process_working_set = false;
+    uint64_t process_working_set_sample_count = 0;
     uint64_t process_working_set_min_bytes = 0;
     uint64_t process_working_set_max_bytes = 0;
     long double process_working_set_sum_bytes = 0.0L;
 
     bool have_process_private_usage = false;
+    uint64_t process_private_usage_sample_count = 0;
     uint64_t process_private_usage_min_bytes = 0;
     uint64_t process_private_usage_max_bytes = 0;
     long double process_private_usage_sum_bytes = 0.0L;
 
     bool have_system_avail_phys = false;
+    uint64_t system_avail_phys_sample_count = 0;
     uint64_t system_avail_phys_min_bytes = 0;
     uint64_t system_avail_phys_max_bytes = 0;
     long double system_avail_phys_sum_bytes = 0.0L;
 
     bool have_system_used_phys = false;
+    uint64_t system_used_phys_sample_count = 0;
     uint64_t system_used_phys_min_bytes = 0;
     uint64_t system_used_phys_max_bytes = 0;
     long double system_used_phys_sum_bytes = 0.0L;
 
     bool have_commit_total = false;
+    uint64_t commit_total_sample_count = 0;
     uint64_t commit_total_min_bytes = 0;
     uint64_t commit_total_max_bytes = 0;
     long double commit_total_sum_bytes = 0.0L;

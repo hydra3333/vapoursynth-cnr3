@@ -17,6 +17,21 @@ static double cnr3_memory_bytes_to_mb(
     return static_cast<double>(bytes) / (1024.0 * 1024.0);
 }
 
+static double cnr3_memory_average_bytes_to_mb(
+    long double sum_bytes,
+    uint64_t sample_count
+) {
+    if (sample_count == 0) {
+        return 0.0;
+    }
+
+    return cnr3_memory_bytes_to_mb(
+        static_cast<uint64_t>(
+            sum_bytes / static_cast<long double>(sample_count)
+            )
+    );
+}
+
 static uint64_t cnr3_memory_pages_to_bytes(
     SIZE_T pages,
     SIZE_T page_size
@@ -28,11 +43,14 @@ static uint64_t cnr3_memory_pages_to_bytes(
 
 static void cnr3_memory_update_min_max_sum(
     bool& have_value,
+    uint64_t& sample_count,
     uint64_t& min_bytes,
     uint64_t& max_bytes,
     long double& sum_bytes,
     uint64_t value_bytes
 ) {
+    ++sample_count;
+
     if (!have_value) {
         have_value = true;
         min_bytes = value_bytes;
@@ -220,6 +238,7 @@ void cnr3_memory_accumulate_snapshot(
         if (snapshot.process_ok) {
             cnr3_memory_update_min_max_sum(
                 stats.have_process_working_set,
+                stats.process_working_set_sample_count,
                 stats.process_working_set_min_bytes,
                 stats.process_working_set_max_bytes,
                 stats.process_working_set_sum_bytes,
@@ -228,6 +247,7 @@ void cnr3_memory_accumulate_snapshot(
 
             cnr3_memory_update_min_max_sum(
                 stats.have_process_private_usage,
+                stats.process_private_usage_sample_count,
                 stats.process_private_usage_min_bytes,
                 stats.process_private_usage_max_bytes,
                 stats.process_private_usage_sum_bytes,
@@ -238,6 +258,7 @@ void cnr3_memory_accumulate_snapshot(
         if (snapshot.global_ok) {
             cnr3_memory_update_min_max_sum(
                 stats.have_system_avail_phys,
+                stats.system_avail_phys_sample_count,
                 stats.system_avail_phys_min_bytes,
                 stats.system_avail_phys_max_bytes,
                 stats.system_avail_phys_sum_bytes,
@@ -246,6 +267,7 @@ void cnr3_memory_accumulate_snapshot(
 
             cnr3_memory_update_min_max_sum(
                 stats.have_system_used_phys,
+                stats.system_used_phys_sample_count,
                 stats.system_used_phys_min_bytes,
                 stats.system_used_phys_max_bytes,
                 stats.system_used_phys_sum_bytes,
@@ -256,6 +278,7 @@ void cnr3_memory_accumulate_snapshot(
         if (snapshot.performance_ok) {
             cnr3_memory_update_min_max_sum(
                 stats.have_commit_total,
+                stats.commit_total_sample_count,
                 stats.commit_total_min_bytes,
                 stats.commit_total_max_bytes,
                 stats.commit_total_sum_bytes,
@@ -381,9 +404,6 @@ void cnr3_memory_print_summary(
             return;
         }
 
-        const long double sample_count =
-            static_cast<long double>(stats.sample_count);
-
         std::fprintf(
             stderr,
             "CNR3 debug: instance=%d, %s: memory summary: samples=%llu, "
@@ -399,10 +419,9 @@ void cnr3_memory_print_summary(
             ? cnr3_memory_bytes_to_mb(stats.process_working_set_min_bytes)
             : 0.0,
             stats.have_process_working_set
-            ? cnr3_memory_bytes_to_mb(
-                static_cast<uint64_t>(
-                    stats.process_working_set_sum_bytes / sample_count
-                    )
+            ? cnr3_memory_average_bytes_to_mb(
+                stats.process_working_set_sum_bytes,
+                stats.process_working_set_sample_count
             )
             : 0.0,
             stats.have_process_working_set
@@ -412,10 +431,9 @@ void cnr3_memory_print_summary(
             ? cnr3_memory_bytes_to_mb(stats.process_private_usage_min_bytes)
             : 0.0,
             stats.have_process_private_usage
-            ? cnr3_memory_bytes_to_mb(
-                static_cast<uint64_t>(
-                    stats.process_private_usage_sum_bytes / sample_count
-                    )
+            ? cnr3_memory_average_bytes_to_mb(
+                stats.process_private_usage_sum_bytes,
+                stats.process_private_usage_sample_count
             )
             : 0.0,
             stats.have_process_private_usage
@@ -425,10 +443,9 @@ void cnr3_memory_print_summary(
             ? cnr3_memory_bytes_to_mb(stats.system_avail_phys_min_bytes)
             : 0.0,
             stats.have_system_avail_phys
-            ? cnr3_memory_bytes_to_mb(
-                static_cast<uint64_t>(
-                    stats.system_avail_phys_sum_bytes / sample_count
-                    )
+            ? cnr3_memory_average_bytes_to_mb(
+                stats.system_avail_phys_sum_bytes,
+                stats.system_avail_phys_sample_count
             )
             : 0.0,
             stats.have_system_avail_phys
@@ -438,23 +455,22 @@ void cnr3_memory_print_summary(
             ? cnr3_memory_bytes_to_mb(stats.system_used_phys_min_bytes)
             : 0.0,
             stats.have_system_used_phys
-            ? cnr3_memory_bytes_to_mb(
-                static_cast<uint64_t>(
-                    stats.system_used_phys_sum_bytes / sample_count
-                    )
+            ? cnr3_memory_average_bytes_to_mb(
+                stats.system_used_phys_sum_bytes,
+                stats.system_used_phys_sample_count
             )
             : 0.0,
             stats.have_system_used_phys
             ? cnr3_memory_bytes_to_mb(stats.system_used_phys_max_bytes)
             : 0.0,
+
             stats.have_commit_total
             ? cnr3_memory_bytes_to_mb(stats.commit_total_min_bytes)
             : 0.0,
             stats.have_commit_total
-            ? cnr3_memory_bytes_to_mb(
-                static_cast<uint64_t>(
-                    stats.commit_total_sum_bytes / sample_count
-                    )
+            ? cnr3_memory_average_bytes_to_mb(
+                stats.commit_total_sum_bytes,
+                stats.commit_total_sample_count
             )
             : 0.0,
             stats.have_commit_total

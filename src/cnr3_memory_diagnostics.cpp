@@ -407,6 +407,8 @@ void cnr3_memory_print_summary(
         std::fprintf(
             stderr,
             "CNR3 debug: instance=%d, %s: memory summary: samples=%llu, "
+            "metric_samples: working_set=%llu, private_usage=%llu, "
+            "avail_phys=%llu, used_phys=%llu, commit_total=%llu, "
             "process_working_set_mb min/avg/max=%.2f/%.2f/%.2f, "
             "process_private_usage_mb min/avg/max=%.2f/%.2f/%.2f, "
             "system_avail_phys_mb min/avg/max=%.2f/%.2f/%.2f, "
@@ -415,6 +417,11 @@ void cnr3_memory_print_summary(
             instance_id,
             where,
             static_cast<unsigned long long>(stats.sample_count),
+            static_cast<unsigned long long>(stats.process_working_set_sample_count),
+            static_cast<unsigned long long>(stats.process_private_usage_sample_count),
+            static_cast<unsigned long long>(stats.system_avail_phys_sample_count),
+            static_cast<unsigned long long>(stats.system_used_phys_sample_count),
+            static_cast<unsigned long long>(stats.commit_total_sample_count),
             stats.have_process_working_set
             ? cnr3_memory_bytes_to_mb(stats.process_working_set_min_bytes)
             : 0.0,

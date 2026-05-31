@@ -182,7 +182,8 @@ static void cnr3_debug_print_cache_manager_v005_summary(
 ) {
     /*
         Thread safety:
-            Uses public cache-manager helpers. Each helper locks internally.
+            Uses cnr3_cache_manager_get_debug_snapshot(), which locks the cache
+            manager once and returns a coherent passive snapshot.
 
         Caller requirement:
             Caller must not already hold d->cache_manager_v005.cache_mutex.
@@ -198,6 +199,10 @@ static void cnr3_debug_print_cache_manager_v005_summary(
         Diagnostic context:
             The where argument is deliberately included in the output line so
             logs show exactly when the snapshot was taken.
+
+        Snapshot behaviour:
+            This diagnostic summary is passive. Printing it does not increment
+            cache-manager validation counters.
     */
 
     if (d == nullptr || !d->debug || where == nullptr) {
@@ -207,45 +212,40 @@ static void cnr3_debug_print_cache_manager_v005_summary(
     Cnr3CacheManagerV005& cache =
         const_cast<Cnr3CacheManagerV005&>(d->cache_manager_v005);
 
-    const std::size_t non_checkpoint_count =
-        cnr3_cache_manager_get_non_checkpoint_count(cache);
+    Cnr3CacheManagerDebugSnapshot snapshot;
 
-    const std::size_t checkpoint_count =
-        cnr3_cache_manager_get_checkpoint_count(cache);
+    if (!cnr3_cache_manager_get_debug_snapshot(cache, snapshot)) {
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, %s: cache_manager_v005 summary unavailable.\n",
+            d->instance_id,
+            where
+        );
 
-    const std::size_t total_cached_frame_count =
-        cnr3_cache_manager_get_total_cached_frame_count(cache);
+        return;
+    }
 
-    const bool has_pinned_checkpoints =
-        cnr3_cache_manager_has_pinned_checkpoints(cache);
-
-    const int64_t total_pin_count =
-        cnr3_cache_manager_get_total_pin_count(cache);
-
-    const bool invariants_ok =
-        cnr3_cache_manager_validate_invariants(cache);
-
-    const Cnr3CacheManagerStats stats =
-        cnr3_cache_manager_get_stats_snapshot(cache);
+    const Cnr3CacheManagerStats& stats = snapshot.stats;
 
     cnr3_debug_printf(
         d->debug,
         "CNR3 debug: instance=%d, %s: cache_manager_v005 summary: "
         "active=0, non_checkpoint_count=%llu, checkpoint_count=%llu, "
-        "total_cached_frame_count=%llu, has_pinned_checkpoints=%d, "
-        "total_pin_count=%lld, invariants_ok=%d, "
+        "total_cached_frame_count=%llu, highest_cached_frame_number=%d, "
+        "has_pinned_checkpoints=%d, total_pin_count=%lld, invariants_ok=%d, "
         "store=%lld/%lld/%lld, remove=%lld/%lld/%lld, "
         "prune_after_store=%lld/%lld/%lld, "
         "find_and_pin=%lld/%lld/%lld, unpin=%lld/%lld/%lld, "
         "validation=%lld/%lld/%lld, integrity_errors=%lld\n",
         d->instance_id,
         where,
-        static_cast<unsigned long long>(non_checkpoint_count),
-        static_cast<unsigned long long>(checkpoint_count),
-        static_cast<unsigned long long>(total_cached_frame_count),
-        has_pinned_checkpoints ? 1 : 0,
-        static_cast<long long>(total_pin_count),
-        invariants_ok ? 1 : 0,
+        static_cast<unsigned long long>(snapshot.non_checkpoint_count),
+        static_cast<unsigned long long>(snapshot.checkpoint_count),
+        static_cast<unsigned long long>(snapshot.total_cached_frame_count),
+        snapshot.highest_cached_frame_number,
+        snapshot.has_pinned_checkpoints ? 1 : 0,
+        static_cast<long long>(snapshot.total_pin_count),
+        snapshot.invariants_ok ? 1 : 0,
         static_cast<long long>(stats.cache_store_attempts),
         static_cast<long long>(stats.cache_store_successes),
         static_cast<long long>(stats.cache_store_failures),

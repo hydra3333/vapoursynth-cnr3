@@ -104,6 +104,10 @@
 // The existing strict-streaming cache remains active.
 // -----------------------------------------------------------------------------
 
+static bool cnr3_cache_manager_check_invariants_externally_locked(
+    Cnr3CacheManagerV005& cache
+);
+
 static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
     Cnr3CacheManagerV005& cache,
     const VSAPI* vsapi
@@ -592,6 +596,63 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
     return cache.stats;
 }
 
+bool cnr3_cache_manager_get_debug_snapshot(
+    Cnr3CacheManagerV005& cache,
+    Cnr3CacheManagerDebugSnapshot& snapshot
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager
+            state and copies a coherent diagnostic snapshot.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        Collect one passive debug snapshot while holding cache.cache_mutex once.
+
+        This avoids a mixed-time summary where counts, pin state, validation
+        result, and statistics might come from different moments.
+
+        The invariant check used here is passive. It does not increment
+        validation counters or integrity counters.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    snapshot = Cnr3CacheManagerDebugSnapshot{};
+
+    snapshot.non_checkpoint_count = cache.non_checkpoint_pool.size();
+    snapshot.checkpoint_count = cache.checkpoint_pool.size();
+    snapshot.total_cached_frame_count =
+        snapshot.non_checkpoint_count + snapshot.checkpoint_count;
+
+    snapshot.highest_cached_frame_number =
+        cache.highest_cached_frame_number;
+
+    int64_t total_pin_count = 0;
+    bool has_pinned_checkpoints = false;
+
+    for (const auto& entry : cache.checkpoint_pool) {
+        const Cnr3CheckpointSlot& slot = entry.second;
+
+        if (slot.pin_count > 0) {
+            has_pinned_checkpoints = true;
+            total_pin_count += static_cast<int64_t>(slot.pin_count);
+        }
+    }
+
+    snapshot.has_pinned_checkpoints = has_pinned_checkpoints;
+    snapshot.total_pin_count = total_pin_count;
+
+    snapshot.invariants_ok =
+        cnr3_cache_manager_check_invariants_externally_locked(cache);
+
+    snapshot.stats = cache.stats;
+
+    return true;
+}
+
 bool cnr3_cache_manager_validate_invariants(
     Cnr3CacheManagerV005& cache
 ) {
@@ -791,6 +852,139 @@ static bool cnr3_cache_manager_validate_invariants_externally_locked(
     }
 
     return valid;
+}
+
+static bool cnr3_cache_manager_check_invariants_externally_locked(
+    Cnr3CacheManagerV005& cache
+) {
+    /*
+        Thread safety:
+            Does not lock internally.
+        Caller requirement:
+            Requires a lock to be applied by the caller before calling this
+            function; i.e. the caller MUST already hold cache.cache_mutex.
+        Expected callers:
+            cnr3_cache_manager_get_debug_snapshot().
+    */
+
+    /*
+        Passively check core cache-manager invariants.
+
+        This helper intentionally does not update validation counters,
+        integrity counters, or any other statistics. It is used when diagnostic
+        code needs to know whether the current cache state is coherent without
+        changing the statistics it is about to report.
+
+        The checked invariants mirror the mutating validation helper:
+            - every cache_index entry exists in exactly one owning pool
+            - every owning pool entry exists in cache_index
+            - no frame number exists in both owning pools
+            - no stored frame pointer is nullptr
+            - checkpoint pin_count is never negative
+            - highest_cached_frame_number matches the actual highest cached
+              frame number, or -1 if both owning pools are empty
+    */
+
+    int actual_highest_cached_frame_number = -1;
+
+    for (const auto& entry : cache.non_checkpoint_pool) {
+        const int frame_number = entry.first;
+        const VSFrame* pool_frame = entry.second;
+
+        if (frame_number > actual_highest_cached_frame_number) {
+            actual_highest_cached_frame_number = frame_number;
+        }
+
+        if (pool_frame == nullptr) {
+            return false;
+        }
+
+        if (cache.checkpoint_pool.find(frame_number) != cache.checkpoint_pool.end()) {
+            return false;
+        }
+
+        const auto index_found = cache.cache_index.find(frame_number);
+
+        if (index_found == cache.cache_index.end()) {
+            return false;
+        }
+
+        if (index_found->second != pool_frame) {
+            return false;
+        }
+    }
+
+    for (const auto& entry : cache.checkpoint_pool) {
+        const int frame_number = entry.first;
+        const Cnr3CheckpointSlot& slot = entry.second;
+
+        if (frame_number > actual_highest_cached_frame_number) {
+            actual_highest_cached_frame_number = frame_number;
+        }
+
+        if (slot.frame == nullptr) {
+            return false;
+        }
+
+        if (slot.pin_count < 0) {
+            return false;
+        }
+
+        if (cache.non_checkpoint_pool.find(frame_number) != cache.non_checkpoint_pool.end()) {
+            return false;
+        }
+
+        const auto index_found = cache.cache_index.find(frame_number);
+
+        if (index_found == cache.cache_index.end()) {
+            return false;
+        }
+
+        if (index_found->second != slot.frame) {
+            return false;
+        }
+    }
+
+    for (const auto& entry : cache.cache_index) {
+        const int frame_number = entry.first;
+        const VSFrame* indexed_frame = entry.second;
+
+        if (indexed_frame == nullptr) {
+            return false;
+        }
+
+        const auto non_checkpoint_found =
+            cache.non_checkpoint_pool.find(frame_number);
+
+        const auto checkpoint_found =
+            cache.checkpoint_pool.find(frame_number);
+
+        const bool in_non_checkpoint_pool =
+            (non_checkpoint_found != cache.non_checkpoint_pool.end());
+
+        const bool in_checkpoint_pool =
+            (checkpoint_found != cache.checkpoint_pool.end());
+
+        if (in_non_checkpoint_pool == in_checkpoint_pool) {
+            return false;
+        }
+
+        if (in_non_checkpoint_pool) {
+            if (non_checkpoint_found->second != indexed_frame) {
+                return false;
+            }
+        }
+        else {
+            if (checkpoint_found->second.frame != indexed_frame) {
+                return false;
+            }
+        }
+    }
+
+    return (
+        cache.highest_cached_frame_number ==
+        actual_highest_cached_frame_number
+        );
 }
 
 bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(

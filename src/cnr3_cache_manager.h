@@ -151,7 +151,7 @@ constexpr bool CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS = true;
     other development diagnostics.
 */
 constexpr bool CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION =
-                      CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
+    CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager statistics
@@ -309,6 +309,39 @@ struct Cnr3CacheManagerV005 {
 };
 
 // -----------------------------------------------------------------------------
+// CNR3 cache manager debug snapshot
+//
+// This structure is a passive diagnostic snapshot of v005 cache-manager state.
+//
+// It is intended for debug/status output. It does not own frame references and
+// must not store VSFrame pointers.
+//
+// A debug snapshot should be collected by one cache-manager helper while holding
+// cache.cache_mutex once, so all fields describe one coherent point-in-time view.
+// -----------------------------------------------------------------------------
+
+struct Cnr3CacheManagerDebugSnapshot {
+    std::size_t non_checkpoint_count = 0;
+    std::size_t checkpoint_count = 0;
+    std::size_t total_cached_frame_count = 0;
+
+    bool has_pinned_checkpoints = false;
+    int64_t total_pin_count = 0;
+
+    int highest_cached_frame_number = -1;
+
+    /*
+        Passive invariant result.
+
+        This is calculated without incrementing validation counters. It is meant
+        for diagnostic summary output, not for recording validation activity.
+    */
+    bool invariants_ok = false;
+
+    Cnr3CacheManagerStats stats;
+};
+
+// -----------------------------------------------------------------------------
 // CNR3 cache manager helper functions - Phase 2A
 //
 // These helpers are intentionally limited to safe cache state inspection and
@@ -397,6 +430,23 @@ void cnr3_cache_manager_reset_stats(
 
 Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
     Cnr3CacheManagerV005& cache
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 cache manager debug snapshot helpers - Phase 3C.1
+//
+// These helpers collect passive diagnostic snapshots of v005 cache-manager state.
+//
+// The debug snapshot helper locks cache.cache_mutex once and copies all summary
+// fields from one coherent point-in-time view.
+//
+// Unlike cnr3_cache_manager_validate_invariants(), this helper's invariant check
+// is passive and does not increment validation counters.
+// -----------------------------------------------------------------------------
+
+bool cnr3_cache_manager_get_debug_snapshot(
+    Cnr3CacheManagerV005& cache,
+    Cnr3CacheManagerDebugSnapshot& snapshot
 );
 
 // -----------------------------------------------------------------------------

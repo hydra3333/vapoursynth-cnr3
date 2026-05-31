@@ -1017,7 +1017,15 @@ bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
             1. Find the nearest prior checkpoint by strict frame-number order.
             2. Verify that the checkpoint slot has a valid frame pointer.
             3. Increment that checkpoint slot's pin_count.
-            4. Return only the checkpoint frame number.
+            4. Validate the mutation in development builds.
+            5. Return only the checkpoint frame number.
+
+        If development validation fails after pin_count has been incremented,
+        this helper rolls the pin_count change back before returning false.
+
+        Therefore:
+            return true  means the checkpoint was found and remains pinned.
+            return false means no new pin remains held by this helper.
 
         This helper does not return a raw VSFrame pointer. The checkpoint slot is
         protected from pruning by pin_count, not by an extra addFrameRef().
@@ -1048,19 +1056,30 @@ bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
             return false;
         }
 
-        ++slot.pin_count;
-
-        checkpoint_frame_number = found->first;
-
-        ++cache.stats.checkpoint_find_and_pin_successes;
         ++cache.stats.checkpoint_pin_attempts;
-        ++cache.stats.checkpoint_pin_successes;
+
+        ++slot.pin_count;
+        checkpoint_frame_number = found->first;
 
         if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
             if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                /*
+                    The pin has not been published to the caller as a success,
+                    so roll it back before returning false. This prevents a
+                    future caller from missing the matching unpin cleanup.
+                */
+                --slot.pin_count;
+                checkpoint_frame_number = -1;
+
+                ++cache.stats.checkpoint_find_and_pin_failures;
+                ++cache.stats.checkpoint_pin_failures;
+
                 return false;
             }
         }
+
+        ++cache.stats.checkpoint_find_and_pin_successes;
+        ++cache.stats.checkpoint_pin_successes;
 
         return true;
     }
@@ -1083,6 +1102,16 @@ bool cnr3_cache_manager_pin_checkpoint(
             Caller must not already hold cache.cache_mutex.
     */
 
+    /*
+        Pin one existing checkpoint.
+
+        A successful return means pin_count was incremented and remains
+        incremented.
+
+        If development validation fails after pin_count has been incremented,
+        this helper rolls the increment back before returning false.
+    */
+
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
     ++cache.stats.checkpoint_pin_attempts;
@@ -1098,10 +1127,26 @@ bool cnr3_cache_manager_pin_checkpoint(
 
     if (slot.frame == nullptr) {
         ++cache.stats.checkpoint_pin_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.checkpoint_null_frame_errors;
         return false;
     }
 
     ++slot.pin_count;
+
+    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            /*
+                The pin is not being reported as a success, so restore the
+                caller-visible pin state before returning false.
+            */
+            --slot.pin_count;
+
+            ++cache.stats.checkpoint_pin_failures;
+            return false;
+        }
+    }
+
     ++cache.stats.checkpoint_pin_successes;
 
     return true;
@@ -1119,6 +1164,16 @@ bool cnr3_cache_manager_unpin_checkpoint(
             Caller must not already hold cache.cache_mutex.
     */
 
+    /*
+        Unpin one existing checkpoint.
+
+        A successful return means pin_count was decremented and remains
+        decremented.
+
+        If development validation fails after pin_count has been decremented,
+        this helper rolls the decrement back before returning false.
+    */
+
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
     ++cache.stats.checkpoint_unpin_attempts;
@@ -1134,6 +1189,8 @@ bool cnr3_cache_manager_unpin_checkpoint(
 
     if (slot.frame == nullptr) {
         ++cache.stats.checkpoint_unpin_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.checkpoint_null_frame_errors;
         return false;
     }
 
@@ -1144,6 +1201,20 @@ bool cnr3_cache_manager_unpin_checkpoint(
     }
 
     --slot.pin_count;
+
+    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            /*
+                The unpin is not being reported as a success, so restore the
+                caller-visible pin state before returning false.
+            */
+            ++slot.pin_count;
+
+            ++cache.stats.checkpoint_unpin_failures;
+            return false;
+        }
+    }
+
     ++cache.stats.checkpoint_unpin_successes;
 
     return true;

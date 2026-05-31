@@ -15,6 +15,15 @@
 //
 // The measurements are deliberately process/system level. They do not attempt
 // to split memory ownership between VapourSynth and CNR3.
+//
+// The intended use is trend correlation:
+//     - compare process memory with CNR3 cache-manager counts;
+//     - compare available/used physical memory with Windows Task Manager;
+//     - identify unexpected growth before or during v005 cache-manager runtime
+//       testing.
+//
+// These diagnostics are controlled by CNR3_MEMORY_DIAGNOSTICS and are not
+// required for correctness.
 // -----------------------------------------------------------------------------
 
 struct Cnr3MemorySnapshot {

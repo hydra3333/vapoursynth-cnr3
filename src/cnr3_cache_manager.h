@@ -151,7 +151,7 @@ constexpr int CNR3_CHECKPOINT_MIN_RETAIN = 6;
     other cache-manager development diagnostics.
 */
 constexpr bool CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION =
-CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
+    CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager statistics
@@ -162,6 +162,11 @@ CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
 // Statistics are mutable cache-manager state. Any helper that reads or writes
 // these counters must follow the same cache_mutex locking rules as the cache
 // pools and cache index.
+//
+// Future diagnostic note:
+//     A separate verbose/full stats dump may be added later. The current
+//     vapoursynth-Cnr3.cpp summary intentionally prints only selected headline
+//     counters plus post-validation failures.
 // -----------------------------------------------------------------------------
 
 struct Cnr3CacheManagerStats {
@@ -425,8 +430,16 @@ bool cnr3_cache_manager_should_promote_checkpoint(
 //
 // These helpers manage the v005 cache-manager statistics counters.
 //
-// They do not change current CNR3 runtime behaviour until the v005 cache manager
-// is later wired into Cnr3Data and cnr3_get_frame().
+// reset_stats() resets the resettable diagnostic counters only. It does not
+// clear cached output frames, checkpoint slots, cache indexes, pin counts, or
+// frame references.
+//
+// Integrity/error counters are part of the resettable statistics block. A later
+// lifetime/non-resettable error counter set can be added if runtime testing
+// shows that persistent integrity history is useful.
+//
+// These helpers do not change current CNR3 runtime behaviour until the v005
+// cache manager is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
 void cnr3_cache_manager_reset_stats(
@@ -447,6 +460,9 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
 //
 // Unlike cnr3_cache_manager_validate_invariants(), this helper's invariant check
 // is passive and does not increment validation counters.
+//
+// This helper is intended for summary/status output. It is not a substitute for
+// the mutating development validation helper used after cache mutations.
 // -----------------------------------------------------------------------------
 
 bool cnr3_cache_manager_get_debug_snapshot(
@@ -576,6 +592,17 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
 //
 //     Frame 0 is never pruned.
 //     Checkpoints with pin_count > 0 are never pruned.
+//
+// Skip-counter semantics:
+//     checkpoint_prune_skipped_frame_zero and
+//     checkpoint_prune_skipped_pinned are skip observations, not unique
+//     checkpoint counts. Because checkpoint pruning may restart from begin()
+//     after each successful removal, the same surviving checkpoint may be
+//     observed and counted more than once across a prune run.
+//
+//     checkpoint_prune_no_eligible_frames means no eligible removable checkpoint
+//     was found in that pass. It should not be used for remove-failure cases;
+//     those are represented by checkpoint_prune_remove_failures.
 //
 // Actual frame removal is delegated to the shared remove helper so that
 // cache_index erasure, owning-pool erasure, and freeFrame() release remain

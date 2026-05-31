@@ -174,10 +174,13 @@ struct Cnr3Data {
     Cnr3CacheManagerV005 cache_manager_v005;
 
     /*
-    Per-instance memory diagnostics accumulator.
+        Per-instance memory diagnostics accumulator.
 
-    This records process/system memory observations for development
-    diagnostics. It does not affect frame processing.
+        This records process/system memory observations for development
+        diagnostics. It does not affect frame processing.
+
+        The measurements are process/system level. They do not attempt to split
+        memory ownership between VapourSynth and CNR3.
     */
     Cnr3MemoryStats memory_stats;
 

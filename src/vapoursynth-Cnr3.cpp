@@ -176,6 +176,98 @@ static void cnr3_debug_print_cache_state(
     );
 }
 
+static void cnr3_debug_print_cache_manager_v005_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Thread safety:
+            Uses public cache-manager helpers. Each helper locks internally.
+
+        Caller requirement:
+            Caller must not already hold d->cache_manager_v005.cache_mutex.
+
+        Purpose:
+            Print one compact v005 cache-manager diagnostic summary line for
+            this CNR3 filter instance.
+
+        Important:
+            Phase 3B only adds diagnostic plumbing. It does not make the v005
+            cache manager participate in frame scheduling or output generation.
+
+        Diagnostic context:
+            The where argument is deliberately included in the output line so
+            logs show exactly when the snapshot was taken.
+    */
+
+    if (d == nullptr || !d->debug || where == nullptr) {
+        return;
+    }
+
+    Cnr3CacheManagerV005& cache =
+        const_cast<Cnr3CacheManagerV005&>(d->cache_manager_v005);
+
+    const std::size_t non_checkpoint_count =
+        cnr3_cache_manager_get_non_checkpoint_count(cache);
+
+    const std::size_t checkpoint_count =
+        cnr3_cache_manager_get_checkpoint_count(cache);
+
+    const std::size_t total_cached_frame_count =
+        cnr3_cache_manager_get_total_cached_frame_count(cache);
+
+    const bool has_pinned_checkpoints =
+        cnr3_cache_manager_has_pinned_checkpoints(cache);
+
+    const int64_t total_pin_count =
+        cnr3_cache_manager_get_total_pin_count(cache);
+
+    const bool invariants_ok =
+        cnr3_cache_manager_validate_invariants(cache);
+
+    const Cnr3CacheManagerStats stats =
+        cnr3_cache_manager_get_stats_snapshot(cache);
+
+    cnr3_debug_printf(
+        d->debug,
+        "CNR3 debug: instance=%d, %s: cache_manager_v005 summary: "
+        "active=0, non_checkpoint_count=%llu, checkpoint_count=%llu, "
+        "total_cached_frame_count=%llu, has_pinned_checkpoints=%d, "
+        "total_pin_count=%lld, invariants_ok=%d, "
+        "store=%lld/%lld/%lld, remove=%lld/%lld/%lld, "
+        "prune_after_store=%lld/%lld/%lld, "
+        "find_and_pin=%lld/%lld/%lld, unpin=%lld/%lld/%lld, "
+        "validation=%lld/%lld/%lld, integrity_errors=%lld\n",
+        d->instance_id,
+        where,
+        static_cast<unsigned long long>(non_checkpoint_count),
+        static_cast<unsigned long long>(checkpoint_count),
+        static_cast<unsigned long long>(total_cached_frame_count),
+        has_pinned_checkpoints ? 1 : 0,
+        static_cast<long long>(total_pin_count),
+        invariants_ok ? 1 : 0,
+        static_cast<long long>(stats.cache_store_attempts),
+        static_cast<long long>(stats.cache_store_successes),
+        static_cast<long long>(stats.cache_store_failures),
+        static_cast<long long>(stats.cache_remove_attempts),
+        static_cast<long long>(stats.cache_remove_successes),
+        static_cast<long long>(stats.cache_remove_failures),
+        static_cast<long long>(stats.prune_after_store_attempts),
+        static_cast<long long>(stats.prune_after_store_successes),
+        static_cast<long long>(stats.prune_after_store_failures),
+        static_cast<long long>(stats.checkpoint_find_and_pin_attempts),
+        static_cast<long long>(stats.checkpoint_find_and_pin_successes),
+        static_cast<long long>(stats.checkpoint_find_and_pin_failures),
+        static_cast<long long>(stats.checkpoint_unpin_attempts),
+        static_cast<long long>(stats.checkpoint_unpin_successes),
+        static_cast<long long>(stats.checkpoint_unpin_failures),
+        static_cast<long long>(stats.cache_validation_attempts),
+        static_cast<long long>(stats.cache_validation_successes),
+        static_cast<long long>(stats.cache_validation_failures),
+        static_cast<long long>(stats.cache_integrity_errors)
+    );
+}
+
 static int64_t get_optional_int(
     const VSMap* in,
     const VSAPI* vsapi,
@@ -2180,6 +2272,11 @@ static void VS_CC cnr3_free(
             d->node = nullptr;
         }
 
+        cnr3_debug_print_cache_manager_v005_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
         cnr3_cache_clear(d->cache, vsapi);
 
         if (!cnr3_cache_manager_clear(d->cache_manager_v005, vsapi)) {
@@ -2665,6 +2762,11 @@ static void VS_CC cnr3_create(
             )
         );
     }
+
+    cnr3_debug_print_cache_manager_v005_summary(
+        data,
+        "after cnr3_create configuration before createVideoFilter"
+    );
 
     VSFilterDependency deps[] = {
         {data->node, rpGeneral}

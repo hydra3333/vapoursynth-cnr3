@@ -21,7 +21,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\src\cnr3_build_config.h" />
     <ClInclude Include="..\..\src\old_cnr3_strict_cache.h" />
-    <ClInclude Include="..\..\src\cnr3_cache_manager.h" />
+    <ClInclude Include="..\..\src\cnr3_output_cache_manager.h" />
     <ClInclude Include="..\..\src\cnr3_common.h" />
     <ClInclude Include="..\..\src\cnr3_memory_diagnostics.h" />
     <ClInclude Include="..\..\src\cnr3_response_tables.h" />
@@ -33,7 +33,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\..\src\cnr3_cache_manager.cpp" />
+    <ClCompile Include="..\..\src\cnr3_output_cache_manager.cpp" />
     <ClCompile Include="..\..\src\cnr3_memory_diagnostics.cpp" />
     <ClCompile Include="..\..\src\cnr3_response_tables.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>

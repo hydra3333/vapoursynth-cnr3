@@ -10,7 +10,7 @@
 #include "cnr3_build_config.h"
 #include "cnr3_memory_diagnostics.h"
 #include "old_cnr3_strict_cache.h"
-#include "cnr3_cache_manager.h"
+#include "cnr3_output_cache_manager.h"
 
 // -----------------------------------------------------------------------------
 // Small shared mechanical helpers

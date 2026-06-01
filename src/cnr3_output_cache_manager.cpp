@@ -1,6 +1,6 @@
 #include "cnr3_build_config.h"
 #include "cnr3_memory_diagnostics.h"
-#include "cnr3_cache_manager.h"
+#include "cnr3_output_cache_manager.h"
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager - v005

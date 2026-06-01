@@ -579,10 +579,10 @@ void cnr3_cache_manager_reset_stats(
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    cache.stats = Cnr3CacheManagerStats{};
+    cache.stats = Cnr3OutputCacheStats{};
 }
 
-Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
+Cnr3OutputCacheStats cnr3_cache_manager_get_stats_snapshot(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -600,7 +600,7 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
 
 bool cnr3_cache_manager_get_debug_snapshot(
     Cnr3OutputCacheManager& cache,
-    Cnr3CacheManagerDebugSnapshot& snapshot
+    Cnr3OutputCacheDebugSnapshot& snapshot
 ) {
     /*
         Thread safety:
@@ -622,7 +622,7 @@ bool cnr3_cache_manager_get_debug_snapshot(
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    snapshot = Cnr3CacheManagerDebugSnapshot{};
+    snapshot = Cnr3OutputCacheDebugSnapshot{};
 
     snapshot.non_checkpoint_count = cache.non_checkpoint_pool.size();
     snapshot.checkpoint_count = cache.checkpoint_pool.size();

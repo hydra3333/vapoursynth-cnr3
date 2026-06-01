@@ -46,7 +46,7 @@ void old_cnr3_strict_cache_clear(
     const VSAPI *vsapi
 );
 
-void cnr3_cache_store_output_frame(
+void old_cnr3_strict_cache_store_output_frame(
     OldCnr3StrictStreamCache &cache,
     const VSFrame *output_frame,
     int frame_number,

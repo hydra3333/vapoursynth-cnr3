@@ -215,7 +215,7 @@ static void cnr3_debug_print_output_cache_summary(
     Cnr3OutputCacheManager& cache =
         const_cast<Cnr3OutputCacheManager&>(d->output_cache);
 
-    Cnr3CacheManagerDebugSnapshot snapshot;
+    Cnr3OutputCacheDebugSnapshot snapshot;
 
     if (!cnr3_cache_manager_get_debug_snapshot(cache, snapshot)) {
         cnr3_debug_printf(
@@ -228,7 +228,7 @@ static void cnr3_debug_print_output_cache_summary(
         return;
     }
 
-    const Cnr3CacheManagerStats& stats = snapshot.stats;
+    const Cnr3OutputCacheStats& stats = snapshot.stats;
 
     cnr3_debug_printf(
         d->debug,
@@ -2462,7 +2462,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
             return nullptr;
         }
 
-        cnr3_cache_store_output_frame(
+        old_cnr3_strict_cache_store_output_frame(
             d->old_strict_cache,
             dst,
             n,

@@ -169,7 +169,7 @@ constexpr bool CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION =
 //     counters plus post-validation failures.
 // -----------------------------------------------------------------------------
 
-struct Cnr3CacheManagerStats {
+struct Cnr3OutputCacheStats {
     int64_t checkpoint_pin_attempts = 0;
     int64_t checkpoint_pin_successes = 0;
     int64_t checkpoint_pin_failures = 0;
@@ -315,7 +315,7 @@ struct Cnr3OutputCacheManager {
 
     int highest_cached_frame_number = -1;
 
-    Cnr3CacheManagerStats stats;
+    Cnr3OutputCacheStats stats;
 };
 
 // -----------------------------------------------------------------------------
@@ -330,7 +330,7 @@ struct Cnr3OutputCacheManager {
 // cache.cache_mutex once, so all fields describe one coherent point-in-time view.
 // -----------------------------------------------------------------------------
 
-struct Cnr3CacheManagerDebugSnapshot {
+struct Cnr3OutputCacheDebugSnapshot {
     std::size_t non_checkpoint_count = 0;
     std::size_t checkpoint_count = 0;
     std::size_t total_cached_frame_count = 0;
@@ -348,7 +348,7 @@ struct Cnr3CacheManagerDebugSnapshot {
     */
     bool invariants_ok = false;
 
-    Cnr3CacheManagerStats stats;
+    Cnr3OutputCacheStats stats;
 };
 
 // -----------------------------------------------------------------------------
@@ -446,7 +446,7 @@ void cnr3_cache_manager_reset_stats(
     Cnr3OutputCacheManager& cache
 );
 
-Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
+Cnr3OutputCacheStats cnr3_cache_manager_get_stats_snapshot(
     Cnr3OutputCacheManager& cache
 );
 
@@ -467,7 +467,7 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
 
 bool cnr3_cache_manager_get_debug_snapshot(
     Cnr3OutputCacheManager& cache,
-    Cnr3CacheManagerDebugSnapshot& snapshot
+    Cnr3OutputCacheDebugSnapshot& snapshot
 );
 
 // -----------------------------------------------------------------------------

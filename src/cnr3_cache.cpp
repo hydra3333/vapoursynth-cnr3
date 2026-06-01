@@ -14,7 +14,7 @@ void old_cnr3_strict_cache_clear(
     cache.next_needed = 0;
 }
 
-void cnr3_cache_store_output_frame(
+void old_cnr3_strict_cache_store_output_frame(
     OldCnr3StrictStreamCache &cache,
     const VSFrame *output_frame,
     int frame_number,

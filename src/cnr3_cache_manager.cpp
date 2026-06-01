@@ -107,25 +107,25 @@
 // -----------------------------------------------------------------------------
 
 static bool cnr3_cache_manager_check_invariants_externally_locked(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 );
 
 static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
 
 static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
 
 static bool cnr3_cache_manager_validate_invariants_externally_locked(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 );
 
 static bool cnr3_cache_manager_remove_output_frame_externally_locked(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSAPI* vsapi
 ) {
@@ -310,7 +310,7 @@ int cnr3_cache_manager_get_non_checkpoint_overflow_limit() {
 }
 
 bool cnr3_cache_manager_is_empty(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -329,7 +329,7 @@ bool cnr3_cache_manager_is_empty(
 }
 
 std::size_t cnr3_cache_manager_get_non_checkpoint_count(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -345,7 +345,7 @@ std::size_t cnr3_cache_manager_get_non_checkpoint_count(
 }
 
 std::size_t cnr3_cache_manager_get_checkpoint_count(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -361,7 +361,7 @@ std::size_t cnr3_cache_manager_get_checkpoint_count(
 }
 
 std::size_t cnr3_cache_manager_get_total_cached_frame_count(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -380,7 +380,7 @@ std::size_t cnr3_cache_manager_get_total_cached_frame_count(
 }
 
 bool cnr3_cache_manager_contains_output_frame(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int frame_number
 ) {
     /*
@@ -397,7 +397,7 @@ bool cnr3_cache_manager_contains_output_frame(
 }
 
 bool cnr3_cache_manager_clear(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
     /*
@@ -470,7 +470,7 @@ bool cnr3_cache_manager_clear(
 }
 
 bool cnr3_cache_manager_find_nearest_prior_checkpoint(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
 ) {
@@ -567,7 +567,7 @@ bool cnr3_cache_manager_should_promote_checkpoint(
 }
 
 void cnr3_cache_manager_reset_stats(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -583,7 +583,7 @@ void cnr3_cache_manager_reset_stats(
 }
 
 Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -599,7 +599,7 @@ Cnr3CacheManagerStats cnr3_cache_manager_get_stats_snapshot(
 }
 
 bool cnr3_cache_manager_get_debug_snapshot(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     Cnr3CacheManagerDebugSnapshot& snapshot
 ) {
     /*
@@ -656,7 +656,7 @@ bool cnr3_cache_manager_get_debug_snapshot(
 }
 
 bool cnr3_cache_manager_validate_invariants(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -675,7 +675,7 @@ bool cnr3_cache_manager_validate_invariants(
 }
 
 static bool cnr3_cache_manager_validate_invariants_externally_locked(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -857,7 +857,7 @@ static bool cnr3_cache_manager_validate_invariants_externally_locked(
 }
 
 static bool cnr3_cache_manager_check_invariants_externally_locked(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -990,7 +990,7 @@ static bool cnr3_cache_manager_check_invariants_externally_locked(
 }
 
 bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
 ) {
@@ -1093,7 +1093,7 @@ bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
 }
 
 bool cnr3_cache_manager_pin_checkpoint(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
 ) {
     /*
@@ -1155,7 +1155,7 @@ bool cnr3_cache_manager_pin_checkpoint(
 }
 
 bool cnr3_cache_manager_unpin_checkpoint(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
 ) {
     /*
@@ -1223,7 +1223,7 @@ bool cnr3_cache_manager_unpin_checkpoint(
 }
 
 bool cnr3_cache_manager_has_pinned_checkpoints(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -1247,7 +1247,7 @@ bool cnr3_cache_manager_has_pinned_checkpoints(
 }
 
 int64_t cnr3_cache_manager_get_total_pin_count(
-    Cnr3CacheManagerV005& cache
+    Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
@@ -1273,7 +1273,7 @@ int64_t cnr3_cache_manager_get_total_pin_count(
 }
 
 bool cnr3_cache_manager_store_output_frame(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSFrame* output_frame,
     const VSAPI* vsapi
@@ -1429,7 +1429,7 @@ bool cnr3_cache_manager_store_output_frame(
 }
 
 bool cnr3_cache_manager_remove_output_frame(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSAPI* vsapi
 ) {
@@ -1465,7 +1465,7 @@ bool cnr3_cache_manager_remove_output_frame(
 }
 
 bool cnr3_cache_manager_prune_non_checkpoint_pool(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
     /*
@@ -1486,7 +1486,7 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
 }
 
 bool cnr3_cache_manager_prune_checkpoint_pool(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
     /*
@@ -1507,7 +1507,7 @@ bool cnr3_cache_manager_prune_checkpoint_pool(
 }
 
 bool cnr3_cache_manager_prune_after_store(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
     /*
@@ -1577,7 +1577,7 @@ bool cnr3_cache_manager_prune_after_store(
 }
 
 static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
     /*
@@ -1678,7 +1678,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
 }
 
 static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
-    Cnr3CacheManagerV005& cache,
+    Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
     /*

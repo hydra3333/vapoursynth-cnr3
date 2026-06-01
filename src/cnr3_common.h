@@ -171,7 +171,7 @@ struct Cnr3Data {
         This cache manager must remain per-instance/per-source and must never be
         global or shared between CNR3 instances.
     */
-    Cnr3CacheManagerV005 cache_manager_v005;
+    Cnr3OutputCacheManager output_cache;
 
     /*
         Per-instance memory diagnostics accumulator.

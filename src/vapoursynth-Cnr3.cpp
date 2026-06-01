@@ -179,7 +179,7 @@ static void cnr3_debug_print_cache_state(
     );
 }
 
-static void cnr3_debug_print_cache_manager_v005_summary(
+static void cnr3_debug_print_output_cache_summary(
     const Cnr3Data* d,
     const char* where
 ) {
@@ -189,7 +189,7 @@ static void cnr3_debug_print_cache_manager_v005_summary(
             manager once and returns a coherent passive snapshot.
 
         Caller requirement:
-            Caller must not already hold d->cache_manager_v005.cache_mutex.
+            Caller must not already hold d->output_cache.cache_mutex.
 
         Purpose:
             Print one compact v005 cache-manager diagnostic summary line for
@@ -212,15 +212,15 @@ static void cnr3_debug_print_cache_manager_v005_summary(
         return;
     }
 
-    Cnr3CacheManagerV005& cache =
-        const_cast<Cnr3CacheManagerV005&>(d->cache_manager_v005);
+    Cnr3OutputCacheManager& cache =
+        const_cast<Cnr3OutputCacheManager&>(d->output_cache);
 
     Cnr3CacheManagerDebugSnapshot snapshot;
 
     if (!cnr3_cache_manager_get_debug_snapshot(cache, snapshot)) {
         cnr3_debug_printf(
             d->debug,
-            "CNR3 debug: instance=%d, %s: cache_manager_v005 summary unavailable.\n",
+            "CNR3 debug: instance=%d, %s: output_cache summary unavailable.\n",
             d->instance_id,
             where
         );
@@ -232,7 +232,7 @@ static void cnr3_debug_print_cache_manager_v005_summary(
 
     cnr3_debug_printf(
         d->debug,
-        "CNR3 debug: instance=%d, %s: cache_manager_v005 summary: "
+        "CNR3 debug: instance=%d, %s: output_cache summary: "
         "active=0, non_checkpoint_count=%llu, checkpoint_count=%llu, "
         "total_cached_frame_count=%llu, highest_cached_frame_number=%d, "
         "has_pinned_checkpoints=%d, total_pin_count=%lld, invariants_ok=%d, "
@@ -2281,7 +2281,7 @@ static void VS_CC cnr3_free(
             d->node = nullptr;
         }
 
-        cnr3_debug_print_cache_manager_v005_summary(
+        cnr3_debug_print_output_cache_summary(
             d,
             "before cnr3_free cleanup"
         );
@@ -2295,10 +2295,10 @@ static void VS_CC cnr3_free(
 
         cnr3_cache_clear(d->cache, vsapi);
 
-        if (!cnr3_cache_manager_clear(d->cache_manager_v005, vsapi)) {
+        if (!cnr3_cache_manager_clear(d->output_cache, vsapi)) {
             cnr3_debug_printf(
                 d->debug,
-                "CNR3 debug: instance=%d, cache_manager_v005 clear failed during cnr3_free.\n",
+                "CNR3 debug: instance=%d, output_cache clear failed during cnr3_free.\n",
                 d->instance_id
             );
         }
@@ -2793,7 +2793,7 @@ static void VS_CC cnr3_create(
         );
     }
 
-    cnr3_debug_print_cache_manager_v005_summary(
+    cnr3_debug_print_output_cache_summary(
         data,
         "after cnr3_create configuration before createVideoFilter"
     );

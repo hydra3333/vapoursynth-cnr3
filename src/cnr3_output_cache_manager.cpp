@@ -135,7 +135,8 @@ static int cnr3_output_cache_distance_to_hot_zone_externally_locked(
     const Cnr3HotZone& zone,
     int frame_number
 )
-{   /*
+{
+    /*
         Thread safety:
             Does not lock internally.
 
@@ -163,6 +164,50 @@ static int cnr3_output_cache_distance_to_hot_zone_externally_locked(
     }
 
     return 0;
+}
+
+static int cnr3_output_cache_min_distance_to_any_hot_zone_externally_locked(
+    const Cnr3OutputCacheManager& cache,
+    int frame_number
+)
+{
+    /*
+        Thread safety:
+            Does not lock internally.
+
+        Caller requirement:
+            The caller MUST already hold cache.cache_mutex.
+
+        Return value:
+            0 if frame_number is inside any active hot zone.
+            Positive minimum distance to the nearest active hot-zone boundary
+            if at least one active hot zone exists.
+            INT_MAX if no active hot zone exists.
+
+        Pruning use:
+            Eligible candidates with larger returned values are colder and
+            should be evicted before candidates closer to active work.
+    */
+
+    int minimum_distance = INT_MAX;
+
+    for (const Cnr3HotZone& zone : cache.hot_zones) {
+        if (!zone.active) {
+            continue;
+        }
+
+        const int distance =
+            cnr3_output_cache_distance_to_hot_zone_externally_locked(
+                zone,
+                frame_number
+            );
+
+        if (distance < minimum_distance) {
+            minimum_distance = distance;
+        }
+    }
+
+    return minimum_distance;
 }
 
 static bool cnr3_output_cache_remove_frame_externally_locked(
@@ -1984,39 +2029,20 @@ static bool cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
     /*
         Thread safety:
             Does not lock internally.
+
         Caller requirement:
-            Requires a lock to be applied by the caller before calling this
-            function; i.e. the caller MUST already hold cache.cache_mutex.
-        Expected callers:
-            cnr3_output_cache_prune_non_checkpoint_pool().
-            Combined prune helpers that need to prune multiple pools while
-            holding one cache-manager critical section.
-    */
+            The caller MUST already hold cache.cache_mutex.
 
-    /*
-        Prune only the non-checkpoint output-frame pool.
-
-        Option B pruning policy:
-            Let non_checkpoint_pool grow up to the overflow limit.
-
-            If non_checkpoint_pool.size() exceeds the overflow limit, prune the
-            oldest non-checkpoint frames first until non_checkpoint_pool.size()
-            is back to CNR3_OUTPUT_CACHE_CAPACITY.
-
-        Ordering rule:
-            non_checkpoint_pool is std::map<int, const VSFrame *>, ordered by
-            frame number. begin() is therefore the lowest/oldest cached
-            non-checkpoint frame number.
+        CMS05 pruning policy:
+            Let non_checkpoint_pool grow up to the overflow limit. Once it
+            exceeds that limit, evict only frames outside all active hot zones,
+            choosing the candidate furthest from any active hot-zone boundary.
 
         Ownership rule:
-            Frame removal is delegated to
-            cnr3_output_cache_remove_frame_externally_locked(), which
-            removes the cache_index alias, erases exactly one owning pool entry,
-            and releases exactly one cache-owned VSFrame reference with
-            vsapi->freeFrame().
-
-        Checkpoint rule:
-            This helper does not choose or prune checkpoints.
+            Actual removal is delegated to
+            cnr3_output_cache_remove_frame_externally_locked(), so cache_index
+            erasure, owning-pool erasure, and freeFrame() release stay
+            centralised.
     */
 
     ++cache.stats.non_checkpoint_prune_attempts;
@@ -2045,12 +2071,47 @@ static bool cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
         cache.non_checkpoint_pool.size() >
         static_cast<std::size_t>(CNR3_OUTPUT_CACHE_CAPACITY)
         ) {
-        if (cache.non_checkpoint_pool.empty()) {
-            break;
+        int frame_number_to_remove = -1;
+        int best_distance = -1;
+
+        for (const auto& entry : cache.non_checkpoint_pool) {
+            const int candidate_frame_number = entry.first;
+
+            const int candidate_distance =
+                cnr3_output_cache_min_distance_to_any_hot_zone_externally_locked(
+                    cache,
+                    candidate_frame_number
+                );
+
+            if (candidate_distance == 0) {
+                /*
+                    Candidate is inside an active hot zone and is protected
+                    from pruning in the CMS05 hot-zone-first implementation.
+                */
+                ++cache.stats.non_checkpoint_prune_skipped_in_hot_zone;
+                continue;
+            }
+
+            /*
+                If no hot zones are active, candidate_distance is INT_MAX for
+                every candidate. In that case, the first candidate encountered
+                wins, preserving ordered deterministic behaviour.
+            */
+            if (frame_number_to_remove < 0 || candidate_distance > best_distance) {
+                frame_number_to_remove = candidate_frame_number;
+                best_distance = candidate_distance;
+            }
         }
 
-        const int frame_number_to_remove =
-            cache.non_checkpoint_pool.begin()->first;
+        if (frame_number_to_remove < 0) {
+            /*
+                The pool still exceeds the target, but every non-checkpoint
+                frame is protected by an active hot zone. Do not evict protected
+                frames. Let the hard ceiling decide whether this becomes fatal.
+            */
+            ++cache.stats.prune_no_candidate_exists;
+            break;
+        }
 
         const bool removed =
             cnr3_output_cache_remove_frame_externally_locked(
@@ -2085,40 +2146,23 @@ static bool cnr3_output_cache_prune_checkpoint_pool_externally_locked(
     /*
         Thread safety:
             Does not lock internally.
+
         Caller requirement:
-            Requires a lock to be applied by the caller before calling this
-            function; i.e. the caller MUST already hold cache.cache_mutex.
-        Expected callers:
-            cnr3_output_cache_prune_checkpoint_pool().
-            Combined prune helpers that need to prune multiple pools while
-            holding one cache-manager critical section.
-    */
+            The caller MUST already hold cache.cache_mutex.
 
-    /*
-        Prune only the checkpoint output-frame pool.
+        CMS05 checkpoint pruning policy:
+            If checkpoint_pool exceeds CNR3_CHECKPOINT_MAX_RETAIN, remove
+            eligible checkpoints until the pool reaches
+            CNR3_CHECKPOINT_MIN_RETAIN or no eligible candidate remains.
 
-        Checkpoint pruning policy:
-            If checkpoint_pool.size() exceeds CNR3_CHECKPOINT_MAX_RETAIN, prune
-            the oldest eligible checkpoints first until checkpoint_pool.size()
-            is back to CNR3_CHECKPOINT_MIN_RETAIN.
+        Eligibility:
+            - frame 0 is never pruned;
+            - pinned checkpoints are never pruned;
+            - checkpoints inside active hot zones are not pruned.
 
-        Eligibility rules:
-            Frame 0 is never pruned because it is the last-resort checkpoint.
-
-            A checkpoint with pin_count > 0 is never pruned because an in-flight
-            invocation still depends on that checkpoint slot.
-
-        Ordering rule:
-            checkpoint_pool is std::map<int, Cnr3CheckpointSlot>, ordered by
-            frame number. begin() is therefore the lowest/oldest checkpoint
-            frame number.
-
-        Ownership rule:
-            Frame removal is delegated to
-            cnr3_output_cache_remove_frame_externally_locked(), which
-            removes the cache_index alias, erases exactly one owning pool entry,
-            and releases exactly one cache-owned VSFrame reference with
-            vsapi->freeFrame().
+        Candidate choice:
+            Evict the eligible checkpoint furthest from any active hot-zone
+            boundary first.
     */
 
     ++cache.stats.checkpoint_prune_attempts;
@@ -2144,18 +2188,14 @@ static bool cnr3_output_cache_prune_checkpoint_pool_externally_locked(
         cache.checkpoint_pool.size() >
         static_cast<std::size_t>(CNR3_CHECKPOINT_MIN_RETAIN)
         ) {
-        bool removed_one_checkpoint = false;
-        bool remove_failed = false;
+        int frame_number_to_remove = -1;
+        int best_distance = -1;
 
-        for (
-            auto found = cache.checkpoint_pool.begin();
-            found != cache.checkpoint_pool.end();
-            ++found
-            ) {
-            const int frame_number_to_remove = found->first;
-            const Cnr3CheckpointSlot& slot = found->second;
+        for (const auto& entry : cache.checkpoint_pool) {
+            const int candidate_frame_number = entry.first;
+            const Cnr3CheckpointSlot& slot = entry.second;
 
-            if (frame_number_to_remove == 0) {
+            if (candidate_frame_number == 0) {
                 ++cache.stats.checkpoint_prune_skipped_frame_zero;
                 continue;
             }
@@ -2165,55 +2205,54 @@ static bool cnr3_output_cache_prune_checkpoint_pool_externally_locked(
                 continue;
             }
 
-            const bool removed =
-                cnr3_output_cache_remove_frame_externally_locked(
+            const int candidate_distance =
+                cnr3_output_cache_min_distance_to_any_hot_zone_externally_locked(
                     cache,
-                    frame_number_to_remove,
-                    vsapi
+                    candidate_frame_number
                 );
 
-            if (!removed) {
-                ++cache.stats.checkpoint_prune_remove_failures;
-                all_removes_succeeded = false;
-                remove_failed = true;
-            }
-            else {
-                ++cache.stats.checkpoint_prune_removed_frames;
-                removed_one_checkpoint = true;
-
-                if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
-                    if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
-                        ++cache.stats.checkpoint_prune_post_validation_failures;
-                        return false;
-                    }
-                }
+            if (candidate_distance == 0) {
+                ++cache.stats.checkpoint_prune_skipped_in_hot_zone;
+                continue;
             }
 
-            /*
-                The remove helper erases from checkpoint_pool on success,
-                invalidating the iterator used by this loop.
-
-                On success, break and restart from begin().
-
-                On failure, also break because pruning has failed and the caller
-                should see checkpoint_prune_remove_failures rather than the loop
-                continuing past a failed remove attempt.
-            */
-            break;
+            if (frame_number_to_remove < 0 || candidate_distance > best_distance) {
+                frame_number_to_remove = candidate_frame_number;
+                best_distance = candidate_distance;
+            }
         }
 
-        if (!removed_one_checkpoint && !remove_failed) {
+        if (frame_number_to_remove < 0) {
             /*
-                The pool still exceeds the target size, but every remaining
-                checkpoint is either frame 0 or pinned. No eligible removable
-                checkpoint was found in this pass.
+                No eligible removable checkpoint was found. The pool may remain
+                above the soft retain target because the remaining checkpoints
+                are frame 0, pinned, or protected by hot zones.
             */
             ++cache.stats.checkpoint_prune_no_eligible_frames;
+            ++cache.stats.prune_no_candidate_exists;
             break;
         }
 
-        if (!all_removes_succeeded) {
+        const bool removed =
+            cnr3_output_cache_remove_frame_externally_locked(
+                cache,
+                frame_number_to_remove,
+                vsapi
+            );
+
+        if (!removed) {
+            ++cache.stats.checkpoint_prune_remove_failures;
+            all_removes_succeeded = false;
             break;
+        }
+
+        ++cache.stats.checkpoint_prune_removed_frames;
+
+        if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
+            if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
+                ++cache.stats.checkpoint_prune_post_validation_failures;
+                return false;
+            }
         }
     }
 

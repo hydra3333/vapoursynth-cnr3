@@ -265,6 +265,10 @@ struct Cnr3OutputCacheStats {
     int64_t non_checkpoint_prune_remove_failures = 0;
     int64_t non_checkpoint_prune_post_validation_failures = 0;
 
+    int64_t non_checkpoint_prune_skipped_in_hot_zone = 0;
+    int64_t checkpoint_prune_skipped_in_hot_zone = 0;
+    int64_t prune_no_candidate_exists = 0;
+
     int64_t checkpoint_prune_attempts = 0;
     int64_t checkpoint_prune_runs = 0;
     int64_t checkpoint_prune_skipped_below_max_retain = 0;

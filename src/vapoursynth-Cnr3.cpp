@@ -185,7 +185,7 @@ static void cnr3_debug_print_output_cache_summary(
 ) {
     /*
         Thread safety:
-            Uses cnr3_cache_manager_get_debug_snapshot(), which locks the cache
+            Uses cnr3_output_cache_get_debug_snapshot(), which locks the cache
             manager once and returns a coherent passive snapshot.
 
         Caller requirement:
@@ -217,7 +217,7 @@ static void cnr3_debug_print_output_cache_summary(
 
     Cnr3OutputCacheDebugSnapshot snapshot;
 
-    if (!cnr3_cache_manager_get_debug_snapshot(cache, snapshot)) {
+    if (!cnr3_output_cache_get_debug_snapshot(cache, snapshot)) {
         cnr3_debug_printf(
             d->debug,
             "CNR3 debug: instance=%d, %s: output_cache summary unavailable.\n",
@@ -2295,7 +2295,7 @@ static void VS_CC cnr3_free(
 
         old_cnr3_strict_cache_clear(d->old_strict_cache, vsapi);
 
-        if (!cnr3_cache_manager_clear(d->output_cache, vsapi)) {
+        if (!cnr3_output_cache_clear(d->output_cache, vsapi)) {
             cnr3_debug_printf(
                 d->debug,
                 "CNR3 debug: instance=%d, output_cache clear failed during cnr3_free.\n",

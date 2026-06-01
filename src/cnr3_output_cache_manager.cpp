@@ -109,21 +109,21 @@
 // The existing strict-streaming cache remains active.
 // -----------------------------------------------------------------------------
 
-static bool cnr3_cache_manager_check_invariants_externally_locked(
+static bool cnr3_output_cache_check_invariants_externally_locked(
     Cnr3OutputCacheManager& cache
 );
 
-static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+static bool cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
 
-static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+static bool cnr3_output_cache_prune_checkpoint_pool_externally_locked(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
 
-static bool cnr3_cache_manager_validate_invariants_externally_locked(
+static bool cnr3_output_cache_validate_invariants_externally_locked(
     Cnr3OutputCacheManager& cache
 );
 
@@ -162,7 +162,7 @@ static int cnr3_output_cache_distance_to_hot_zone_externally_locked(
     return 0;
 }
 
-static bool cnr3_cache_manager_remove_output_frame_externally_locked(
+static bool cnr3_output_cache_remove_frame_externally_locked(
     Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSAPI* vsapi
@@ -174,7 +174,7 @@ static bool cnr3_cache_manager_remove_output_frame_externally_locked(
             Requires a lock to be applied by the caller before calling this
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
-            cnr3_cache_manager_remove_output_frame().
+            cnr3_output_cache_remove_frame().
             Future prune helpers that need to remove multiple frames while
             holding one cache-manager critical section.
     */
@@ -324,7 +324,7 @@ static bool cnr3_cache_manager_remove_output_frame_externally_locked(
     return true;
 }
 
-int cnr3_cache_manager_get_non_checkpoint_overflow_limit() {
+int cnr3_output_cache_get_non_checkpoint_overflow_limit() {
     /*
         Thread safety:
             Does not lock. Reads only compile-time constants and does not read
@@ -347,7 +347,7 @@ int cnr3_cache_manager_get_non_checkpoint_overflow_limit() {
         );
 }
 
-bool cnr3_cache_manager_is_empty(
+bool cnr3_output_cache_is_empty(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -366,7 +366,7 @@ bool cnr3_cache_manager_is_empty(
         );
 }
 
-std::size_t cnr3_cache_manager_get_non_checkpoint_count(
+std::size_t cnr3_output_cache_get_non_checkpoint_count(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -382,7 +382,7 @@ std::size_t cnr3_cache_manager_get_non_checkpoint_count(
     return cache.non_checkpoint_pool.size();
 }
 
-std::size_t cnr3_cache_manager_get_checkpoint_count(
+std::size_t cnr3_output_cache_get_checkpoint_count(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -398,7 +398,7 @@ std::size_t cnr3_cache_manager_get_checkpoint_count(
     return cache.checkpoint_pool.size();
 }
 
-std::size_t cnr3_cache_manager_get_total_cached_frame_count(
+std::size_t cnr3_output_cache_get_total_cached_frame_count(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -417,7 +417,7 @@ std::size_t cnr3_cache_manager_get_total_cached_frame_count(
         );
 }
 
-bool cnr3_cache_manager_contains_output_frame(
+bool cnr3_output_cache_contains_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number
 ) {
@@ -434,7 +434,7 @@ bool cnr3_cache_manager_contains_output_frame(
     return (cache.cache_index.find(frame_number) != cache.cache_index.end());
 }
 
-bool cnr3_cache_manager_clear(
+bool cnr3_output_cache_clear(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
@@ -785,7 +785,7 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
     }
 }
 
-bool cnr3_cache_manager_find_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_nearest_prior_checkpoint(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
@@ -851,7 +851,7 @@ bool cnr3_cache_manager_find_nearest_prior_checkpoint(
     return false;
 }
 
-bool cnr3_cache_manager_should_promote_checkpoint(
+bool cnr3_output_cache_should_promote_checkpoint(
     int frame_number
 ) {
     /*
@@ -882,7 +882,7 @@ bool cnr3_cache_manager_should_promote_checkpoint(
     return ((frame_number % CNR3_CHECKPOINT_INTERVAL) == 0);
 }
 
-void cnr3_cache_manager_reset_stats(
+void cnr3_output_cache_reset_stats(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -898,7 +898,7 @@ void cnr3_cache_manager_reset_stats(
     cache.stats = Cnr3OutputCacheStats{};
 }
 
-Cnr3OutputCacheStats cnr3_cache_manager_get_stats_snapshot(
+Cnr3OutputCacheStats cnr3_output_cache_get_stats_snapshot(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -914,7 +914,7 @@ Cnr3OutputCacheStats cnr3_cache_manager_get_stats_snapshot(
     return cache.stats;
 }
 
-bool cnr3_cache_manager_get_debug_snapshot(
+bool cnr3_output_cache_get_debug_snapshot(
     Cnr3OutputCacheManager& cache,
     Cnr3OutputCacheDebugSnapshot& snapshot
 ) {
@@ -964,33 +964,33 @@ bool cnr3_cache_manager_get_debug_snapshot(
     snapshot.total_pin_count = total_pin_count;
 
     snapshot.invariants_ok =
-        cnr3_cache_manager_check_invariants_externally_locked(cache);
+        cnr3_output_cache_check_invariants_externally_locked(cache);
 
     snapshot.stats = cache.stats;
 
     return true;
 }
 
-bool cnr3_cache_manager_validate_invariants(
+bool cnr3_output_cache_validate_invariants(
     Cnr3OutputCacheManager& cache
 ) {
     /*
         Thread safety:
             Locks cache.cache_mutex internally. Reads and writes mutable
             cache-manager state through
-            cnr3_cache_manager_validate_invariants_externally_locked().
+            cnr3_output_cache_validate_invariants_externally_locked().
         Caller requirement:
             Caller must not already hold cache.cache_mutex.
     */
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    return cnr3_cache_manager_validate_invariants_externally_locked(
+    return cnr3_output_cache_validate_invariants_externally_locked(
         cache
     );
 }
 
-static bool cnr3_cache_manager_validate_invariants_externally_locked(
+static bool cnr3_output_cache_validate_invariants_externally_locked(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -1000,7 +1000,7 @@ static bool cnr3_cache_manager_validate_invariants_externally_locked(
             Requires a lock to be applied by the caller before calling this
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
-            cnr3_cache_manager_validate_invariants().
+            cnr3_output_cache_validate_invariants().
             Future compound cache-manager helpers that need to validate
             invariants while holding one cache-manager critical section.
     */
@@ -1172,7 +1172,7 @@ static bool cnr3_cache_manager_validate_invariants_externally_locked(
     return valid;
 }
 
-static bool cnr3_cache_manager_check_invariants_externally_locked(
+static bool cnr3_output_cache_check_invariants_externally_locked(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -1182,7 +1182,7 @@ static bool cnr3_cache_manager_check_invariants_externally_locked(
             Requires a lock to be applied by the caller before calling this
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
-            cnr3_cache_manager_get_debug_snapshot().
+            cnr3_output_cache_get_debug_snapshot().
     */
 
     /*
@@ -1305,7 +1305,7 @@ static bool cnr3_cache_manager_check_invariants_externally_locked(
         );
 }
 
-bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
@@ -1380,7 +1380,7 @@ bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
         checkpoint_frame_number = found->first;
 
         if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-            if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
                 /*
                     The pin has not been published to the caller as a success,
                     so roll it back before returning false. This prevents a
@@ -1408,7 +1408,7 @@ bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
     return false;
 }
 
-bool cnr3_cache_manager_pin_checkpoint(
+bool cnr3_output_cache_pin_checkpoint(
     Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
 ) {
@@ -1453,7 +1453,7 @@ bool cnr3_cache_manager_pin_checkpoint(
     ++slot.pin_count;
 
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+        if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             /*
                 The pin is not being reported as a success, so restore the
                 caller-visible pin state before returning false.
@@ -1470,7 +1470,7 @@ bool cnr3_cache_manager_pin_checkpoint(
     return true;
 }
 
-bool cnr3_cache_manager_unpin_checkpoint(
+bool cnr3_output_cache_unpin_checkpoint(
     Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
 ) {
@@ -1521,7 +1521,7 @@ bool cnr3_cache_manager_unpin_checkpoint(
     --slot.pin_count;
 
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+        if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             /*
                 The unpin is not being reported as a success, so restore the
                 caller-visible pin state before returning false.
@@ -1538,7 +1538,7 @@ bool cnr3_cache_manager_unpin_checkpoint(
     return true;
 }
 
-bool cnr3_cache_manager_has_pinned_checkpoints(
+bool cnr3_output_cache_has_pinned_checkpoints(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -1562,7 +1562,7 @@ bool cnr3_cache_manager_has_pinned_checkpoints(
     return false;
 }
 
-int64_t cnr3_cache_manager_get_total_pin_count(
+int64_t cnr3_output_cache_get_total_pin_count(
     Cnr3OutputCacheManager& cache
 ) {
     /*
@@ -1588,7 +1588,7 @@ int64_t cnr3_cache_manager_get_total_pin_count(
     return total_pin_count;
 }
 
-bool cnr3_cache_manager_store_output_frame(
+bool cnr3_output_cache_store_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSFrame* output_frame,
@@ -1621,7 +1621,7 @@ bool cnr3_cache_manager_store_output_frame(
             pruning, clearing, or teardown.
 
         Promotion rule:
-            cnr3_cache_manager_should_promote_checkpoint(frame_number) decides
+            cnr3_output_cache_should_promote_checkpoint(frame_number) decides
             whether the frame is stored in checkpoint_pool or non_checkpoint_pool.
 
         Duplicate rule:
@@ -1646,7 +1646,7 @@ bool cnr3_cache_manager_store_output_frame(
     }
 
     const bool should_promote_to_checkpoint =
-        cnr3_cache_manager_should_promote_checkpoint(frame_number);
+        cnr3_output_cache_should_promote_checkpoint(frame_number);
 
     const VSFrame* retained_frame = vsapi->addFrameRef(output_frame);
 
@@ -1735,7 +1735,7 @@ bool cnr3_cache_manager_store_output_frame(
     }
 
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+        if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             ++cache.stats.cache_store_post_validation_failures;
             return false;
         }
@@ -1744,7 +1744,7 @@ bool cnr3_cache_manager_store_output_frame(
     return true;
 }
 
-bool cnr3_cache_manager_remove_output_frame(
+bool cnr3_output_cache_remove_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSAPI* vsapi
@@ -1753,7 +1753,7 @@ bool cnr3_cache_manager_remove_output_frame(
         Thread safety:
             Locks cache.cache_mutex internally. Reads and writes mutable
             cache-manager state through
-            cnr3_cache_manager_remove_output_frame_externally_locked().
+            cnr3_output_cache_remove_frame_externally_locked().
         Caller requirement:
             Caller must not already hold cache.cache_mutex.
     */
@@ -1761,7 +1761,7 @@ bool cnr3_cache_manager_remove_output_frame(
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
     const bool removed =
-        cnr3_cache_manager_remove_output_frame_externally_locked(
+        cnr3_output_cache_remove_frame_externally_locked(
             cache,
             frame_number,
             vsapi
@@ -1770,7 +1770,7 @@ bool cnr3_cache_manager_remove_output_frame(
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
         if (
             removed &&
-            !cnr3_cache_manager_validate_invariants_externally_locked(cache)
+            !cnr3_output_cache_validate_invariants_externally_locked(cache)
             ) {
             ++cache.stats.cache_remove_post_validation_failures;
             return false;
@@ -1780,7 +1780,7 @@ bool cnr3_cache_manager_remove_output_frame(
     return removed;
 }
 
-bool cnr3_cache_manager_prune_non_checkpoint_pool(
+bool cnr3_output_cache_prune_non_checkpoint_pool(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
@@ -1788,20 +1788,20 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
         Thread safety:
             Locks cache.cache_mutex internally. Reads and writes mutable
             cache-manager state through
-            cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked().
+            cnr3_output_cache_prune_non_checkpoint_pool_externally_locked().
         Caller requirement:
             Caller must not already hold cache.cache_mutex.
     */
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    return cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+    return cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
         cache,
         vsapi
     );
 }
 
-bool cnr3_cache_manager_prune_checkpoint_pool(
+bool cnr3_output_cache_prune_checkpoint_pool(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
@@ -1809,20 +1809,20 @@ bool cnr3_cache_manager_prune_checkpoint_pool(
         Thread safety:
             Locks cache.cache_mutex internally. Reads and writes mutable
             cache-manager state through
-            cnr3_cache_manager_prune_checkpoint_pool_externally_locked().
+            cnr3_output_cache_prune_checkpoint_pool_externally_locked().
         Caller requirement:
             Caller must not already hold cache.cache_mutex.
     */
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    return cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+    return cnr3_output_cache_prune_checkpoint_pool_externally_locked(
         cache,
         vsapi
     );
 }
 
-bool cnr3_cache_manager_prune_after_store(
+bool cnr3_output_cache_prune_after_store(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
@@ -1847,7 +1847,7 @@ bool cnr3_cache_manager_prune_after_store(
         deadlocking on public helpers that would otherwise lock internally.
 
         Actual frame removal is delegated to
-        cnr3_cache_manager_remove_output_frame_externally_locked(), so
+        cnr3_output_cache_remove_frame_externally_locked(), so
         cache_index erasure, owning-pool erasure, and freeFrame() release remain
         centralised.
     */
@@ -1857,13 +1857,13 @@ bool cnr3_cache_manager_prune_after_store(
     ++cache.stats.prune_after_store_attempts;
 
     const bool non_checkpoint_prune_ok =
-        cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+        cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
             cache,
             vsapi
         );
 
     const bool checkpoint_prune_ok =
-        cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+        cnr3_output_cache_prune_checkpoint_pool_externally_locked(
             cache,
             vsapi
         );
@@ -1882,7 +1882,7 @@ bool cnr3_cache_manager_prune_after_store(
     }
 
     if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-        if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+        if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             ++cache.stats.prune_after_store_post_validation_failures;
             return false;
         }
@@ -1892,7 +1892,7 @@ bool cnr3_cache_manager_prune_after_store(
     return true;
 }
 
-static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
+static bool cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
@@ -1903,7 +1903,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
             Requires a lock to be applied by the caller before calling this
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
-            cnr3_cache_manager_prune_non_checkpoint_pool().
+            cnr3_output_cache_prune_non_checkpoint_pool().
             Combined prune helpers that need to prune multiple pools while
             holding one cache-manager critical section.
     */
@@ -1925,7 +1925,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
 
         Ownership rule:
             Frame removal is delegated to
-            cnr3_cache_manager_remove_output_frame_externally_locked(), which
+            cnr3_output_cache_remove_frame_externally_locked(), which
             removes the cache_index alias, erases exactly one owning pool entry,
             and releases exactly one cache-owned VSFrame reference with
             vsapi->freeFrame().
@@ -1942,7 +1942,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
     }
 
     const int overflow_limit =
-        cnr3_cache_manager_get_non_checkpoint_overflow_limit();
+        cnr3_output_cache_get_non_checkpoint_overflow_limit();
 
     if (
         cache.non_checkpoint_pool.size() <=
@@ -1968,7 +1968,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
             cache.non_checkpoint_pool.begin()->first;
 
         const bool removed =
-            cnr3_cache_manager_remove_output_frame_externally_locked(
+            cnr3_output_cache_remove_frame_externally_locked(
                 cache,
                 frame_number_to_remove,
                 vsapi
@@ -1983,7 +1983,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
         ++cache.stats.non_checkpoint_prune_removed_frames;
 
         if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-            if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+            if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
                 ++cache.stats.non_checkpoint_prune_post_validation_failures;
                 return false;
             }
@@ -1993,7 +1993,7 @@ static bool cnr3_cache_manager_prune_non_checkpoint_pool_externally_locked(
     return all_removes_succeeded;
 }
 
-static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
+static bool cnr3_output_cache_prune_checkpoint_pool_externally_locked(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 ) {
@@ -2004,7 +2004,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
             Requires a lock to be applied by the caller before calling this
             function; i.e. the caller MUST already hold cache.cache_mutex.
         Expected callers:
-            cnr3_cache_manager_prune_checkpoint_pool().
+            cnr3_output_cache_prune_checkpoint_pool().
             Combined prune helpers that need to prune multiple pools while
             holding one cache-manager critical section.
     */
@@ -2030,7 +2030,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
 
         Ownership rule:
             Frame removal is delegated to
-            cnr3_cache_manager_remove_output_frame_externally_locked(), which
+            cnr3_output_cache_remove_frame_externally_locked(), which
             removes the cache_index alias, erases exactly one owning pool entry,
             and releases exactly one cache-owned VSFrame reference with
             vsapi->freeFrame().
@@ -2081,7 +2081,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
             }
 
             const bool removed =
-                cnr3_cache_manager_remove_output_frame_externally_locked(
+                cnr3_output_cache_remove_frame_externally_locked(
                     cache,
                     frame_number_to_remove,
                     vsapi
@@ -2097,7 +2097,7 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
                 removed_one_checkpoint = true;
 
                 if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
-                    if (!cnr3_cache_manager_validate_invariants_externally_locked(cache)) {
+                    if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
                         ++cache.stats.checkpoint_prune_post_validation_failures;
                         return false;
                     }

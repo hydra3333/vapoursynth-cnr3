@@ -427,30 +427,30 @@ struct Cnr3OutputCacheDebugSnapshot {
 // is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
-int cnr3_cache_manager_get_non_checkpoint_overflow_limit();
+int cnr3_output_cache_get_non_checkpoint_overflow_limit();
 
-bool cnr3_cache_manager_is_empty(
+bool cnr3_output_cache_is_empty(
     Cnr3OutputCacheManager& cache
 );
 
-std::size_t cnr3_cache_manager_get_non_checkpoint_count(
+std::size_t cnr3_output_cache_get_non_checkpoint_count(
     Cnr3OutputCacheManager& cache
 );
 
-std::size_t cnr3_cache_manager_get_checkpoint_count(
+std::size_t cnr3_output_cache_get_checkpoint_count(
     Cnr3OutputCacheManager& cache
 );
 
-std::size_t cnr3_cache_manager_get_total_cached_frame_count(
+std::size_t cnr3_output_cache_get_total_cached_frame_count(
     Cnr3OutputCacheManager& cache
 );
 
-bool cnr3_cache_manager_contains_output_frame(
+bool cnr3_output_cache_contains_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number
 );
 
-bool cnr3_cache_manager_clear(
+bool cnr3_output_cache_clear(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
@@ -515,13 +515,13 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
         Locks cache.cache_mutex internally.
         Caller must not already hold cache.cache_mutex.
 */
-bool cnr3_cache_manager_find_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_nearest_prior_checkpoint(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
 );
 
-bool cnr3_cache_manager_should_promote_checkpoint(
+bool cnr3_output_cache_should_promote_checkpoint(
     int frame_number
 );
 
@@ -542,11 +542,11 @@ bool cnr3_cache_manager_should_promote_checkpoint(
 // cache manager is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
-void cnr3_cache_manager_reset_stats(
+void cnr3_output_cache_reset_stats(
     Cnr3OutputCacheManager& cache
 );
 
-Cnr3OutputCacheStats cnr3_cache_manager_get_stats_snapshot(
+Cnr3OutputCacheStats cnr3_output_cache_get_stats_snapshot(
     Cnr3OutputCacheManager& cache
 );
 
@@ -558,14 +558,14 @@ Cnr3OutputCacheStats cnr3_cache_manager_get_stats_snapshot(
 // The debug snapshot helper locks cache.cache_mutex once and copies all summary
 // fields from one coherent point-in-time view.
 //
-// Unlike cnr3_cache_manager_validate_invariants(), this helper's invariant check
+// Unlike cnr3_output_cache_validate_invariants(), this helper's invariant check
 // is passive and does not increment validation counters.
 //
 // This helper is intended for summary/status output. It is not a substitute for
 // the mutating development validation helper used after cache mutations.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_get_debug_snapshot(
+bool cnr3_output_cache_get_debug_snapshot(
     Cnr3OutputCacheManager& cache,
     Cnr3OutputCacheDebugSnapshot& snapshot
 );
@@ -582,7 +582,7 @@ bool cnr3_cache_manager_get_debug_snapshot(
 // is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_validate_invariants(
+bool cnr3_output_cache_validate_invariants(
     Cnr3OutputCacheManager& cache
 );
 
@@ -601,27 +601,27 @@ bool cnr3_cache_manager_validate_invariants(
 // perform an unsafe find/unlock/pin sequence.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_find_and_pin_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
 );
 
-bool cnr3_cache_manager_pin_checkpoint(
+bool cnr3_output_cache_pin_checkpoint(
     Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
 );
 
-bool cnr3_cache_manager_unpin_checkpoint(
+bool cnr3_output_cache_unpin_checkpoint(
     Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
 );
 
-bool cnr3_cache_manager_has_pinned_checkpoints(
+bool cnr3_output_cache_has_pinned_checkpoints(
     Cnr3OutputCacheManager& cache
 );
 
-int64_t cnr3_cache_manager_get_total_pin_count(
+int64_t cnr3_output_cache_get_total_pin_count(
     Cnr3OutputCacheManager& cache
 );
 
@@ -637,7 +637,7 @@ int64_t cnr3_cache_manager_get_total_pin_count(
 // No pruning is performed in Phase 2D.1.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_store_output_frame(
+bool cnr3_output_cache_store_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSFrame* output_frame,
@@ -656,7 +656,7 @@ bool cnr3_cache_manager_store_output_frame(
 // Pinned checkpoints must not be removed.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_remove_output_frame(
+bool cnr3_output_cache_remove_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number,
     const VSAPI* vsapi
@@ -675,7 +675,7 @@ bool cnr3_cache_manager_remove_output_frame(
 // Checkpoints are not pruned by these helpers.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_prune_non_checkpoint_pool(
+bool cnr3_output_cache_prune_non_checkpoint_pool(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
@@ -709,7 +709,7 @@ bool cnr3_cache_manager_prune_non_checkpoint_pool(
 // centralised.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_prune_checkpoint_pool(
+bool cnr3_output_cache_prune_checkpoint_pool(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );
@@ -724,7 +724,7 @@ bool cnr3_cache_manager_prune_checkpoint_pool(
 // the detailed pruning sequence and locking policy internal.
 // -----------------------------------------------------------------------------
 
-bool cnr3_cache_manager_prune_after_store(
+bool cnr3_output_cache_prune_after_store(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
 );

@@ -231,20 +231,42 @@ static void cnr3_debug_print_output_cache_summary(
 
     const Cnr3OutputCacheStats& stats = snapshot.stats;
 
+    const int64_t cache_ref_balance =
+        stats.cache_addframeref_total -
+        stats.cache_freeframe_total;
+
     cnr3_debug_printf(
         d->debug,
         "CNR3 debug: instance=%d, %s: output_cache summary: "
-        "active=0, non_checkpoint_count=%llu, checkpoint_count=%llu, "
+        "active=0, active_ceiling=%d, "
+        "non_checkpoint_count=%llu, checkpoint_count=%llu, "
         "total_cached_frame_count=%llu, highest_cached_frame_number=%d, "
         "has_pinned_checkpoints=%d, total_pin_count=%lld, invariants_ok=%d, "
+
         "store=%lld/%lld/%lld, remove=%lld/%lld/%lld, "
         "prune_after_store=%lld/%lld/%lld, "
         "find_and_pin=%lld/%lld/%lld, unpin=%lld/%lld/%lld, "
         "validation=%lld/%lld/%lld, integrity_errors=%lld, "
+
+        "refs: add=%lld, free=%lld, balance=%lld, ref_balance_errors=%lld, "
+
+        "duplicate_store: skipped_already_cached=%lld, "
+        "computed_but_discarded=%lld, "
+
+        "ceiling: hard_aborts=%lld, "
+
+        "hot_zones: updates=%lld, allocations=%lld, hits=%lld, slides=%lld, "
+        "merges=%lld, retirements=%lld, max_active=%lld, "
+
+        "hot_zone_prune: non_checkpoint_skipped=%lld, "
+        "checkpoint_skipped=%lld, no_candidate=%lld, "
+
         "post_validation_failures: store=%lld, remove=%lld, "
         "non_checkpoint_prune=%lld, checkpoint_prune=%lld, "
-        "prune_after_store=%lld\n", d->instance_id,
+        "prune_after_store=%lld\n",
+        d->instance_id,
         where,
+        snapshot.active_ceiling,
         static_cast<unsigned long long>(snapshot.non_checkpoint_count),
         static_cast<unsigned long long>(snapshot.checkpoint_count),
         static_cast<unsigned long long>(snapshot.total_cached_frame_count),
@@ -252,6 +274,7 @@ static void cnr3_debug_print_output_cache_summary(
         snapshot.has_pinned_checkpoints ? 1 : 0,
         static_cast<long long>(snapshot.total_pin_count),
         snapshot.invariants_ok ? 1 : 0,
+
         static_cast<long long>(stats.cache_store_attempts),
         static_cast<long long>(stats.cache_store_successes),
         static_cast<long long>(stats.cache_store_failures),
@@ -271,11 +294,35 @@ static void cnr3_debug_print_output_cache_summary(
         static_cast<long long>(stats.cache_validation_successes),
         static_cast<long long>(stats.cache_validation_failures),
         static_cast<long long>(stats.cache_integrity_errors),
+
+        static_cast<long long>(stats.cache_addframeref_total),
+        static_cast<long long>(stats.cache_freeframe_total),
+        static_cast<long long>(cache_ref_balance),
+        static_cast<long long>(stats.cache_validation_ref_balance_errors),
+
+        static_cast<long long>(stats.store_skipped_already_cached),
+        static_cast<long long>(stats.duplicate_store_computed_but_discarded),
+
+        static_cast<long long>(stats.cache_ceiling_hard_aborts),
+
+        static_cast<long long>(stats.hot_zone_updates_at_arInitial),
+        static_cast<long long>(stats.hot_zone_allocations),
+        static_cast<long long>(stats.hot_zone_hits),
+        static_cast<long long>(stats.hot_zone_slides),
+        static_cast<long long>(stats.hot_zone_merges),
+        static_cast<long long>(stats.hot_zone_retirements),
+        static_cast<long long>(stats.hot_zone_max_active_observed),
+
+        static_cast<long long>(stats.non_checkpoint_prune_skipped_in_hot_zone),
+        static_cast<long long>(stats.checkpoint_prune_skipped_in_hot_zone),
+        static_cast<long long>(stats.prune_no_candidate_exists),
+
         static_cast<long long>(stats.cache_store_post_validation_failures),
         static_cast<long long>(stats.cache_remove_post_validation_failures),
         static_cast<long long>(stats.non_checkpoint_prune_post_validation_failures),
         static_cast<long long>(stats.checkpoint_prune_post_validation_failures),
-        static_cast<long long>(stats.prune_after_store_post_validation_failures));
+        static_cast<long long>(stats.prune_after_store_post_validation_failures)
+    );
 }
 
 static int64_t get_optional_int(

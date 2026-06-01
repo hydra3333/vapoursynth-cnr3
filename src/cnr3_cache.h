@@ -41,7 +41,7 @@ struct OldCnr3StrictStreamCache {
 // END CNR3 cache manager
 // -----------------------------------------------------------------------------
 
-void cnr3_cache_clear(
+void old_cnr3_strict_cache_clear(
     OldCnr3StrictStreamCache &cache,
     const VSAPI *vsapi
 );

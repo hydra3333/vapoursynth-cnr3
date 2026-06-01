@@ -2293,7 +2293,7 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
-        cnr3_cache_clear(d->old_strict_cache, vsapi);
+        old_cnr3_strict_cache_clear(d->old_strict_cache, vsapi);
 
         if (!cnr3_cache_manager_clear(d->output_cache, vsapi)) {
             cnr3_debug_printf(

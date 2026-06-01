@@ -2,7 +2,7 @@
 #include "cnr3_memory_diagnostics.h"
 #include "cnr3_cache.h"
 
-void cnr3_cache_clear(
+void old_cnr3_strict_cache_clear(
     OldCnr3StrictStreamCache &cache,
     const VSAPI *vsapi
 ) {

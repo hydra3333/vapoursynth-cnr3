@@ -233,6 +233,8 @@ struct Cnr3OutputCacheStats {
     int64_t cache_store_index_inconsistency_errors = 0;
     int64_t cache_store_post_validation_failures = 0;
 
+    int64_t cache_ceiling_hard_aborts = 0;
+
     // CMS05 duplicate-store diagnostics.
     int64_t store_skipped_already_cached = 0;
     int64_t duplicate_store_computed_but_discarded = 0;
@@ -653,7 +655,21 @@ bool cnr3_output_cache_store_frame(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager remove helpers - Phase 2D.2
+// CNR3 output cache ceiling helpers - CMS05-2C
+//
+// The externally-locked helper answers whether adding one more cached frame
+// would exceed the active hard ceiling.
+//
+// Caller requirement:
+//     The caller MUST already hold cache.cache_mutex.
+// -----------------------------------------------------------------------------
+
+bool cnr3_output_cache_would_exceed_ceiling_externally_locked(
+    const Cnr3OutputCacheManager& cache
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 output cache remove helpers - Phase 2D.2
 //
 // These helpers remove output frames from the CMS05 output cache manager.
 //

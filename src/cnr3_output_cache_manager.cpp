@@ -127,12 +127,15 @@ static bool cnr3_output_cache_validate_invariants_externally_locked(
     Cnr3OutputCacheManager& cache
 );
 
+static bool cnr3_output_cache_would_exceed_ceiling_externally_locked(
+    const Cnr3OutputCacheManager& cache
+);
+
 static int cnr3_output_cache_distance_to_hot_zone_externally_locked(
     const Cnr3HotZone& zone,
     int frame_number
 )
-{
-    /*
+{   /*
         Thread safety:
             Does not lock internally.
 
@@ -867,7 +870,7 @@ bool cnr3_output_cache_should_promote_checkpoint(
     */
 
     /*
-        v005 checkpoint promotion rule.
+        CMS05 checkpoint promotion rule.
 
         Frame 0 is always a checkpoint.
 
@@ -884,6 +887,38 @@ bool cnr3_output_cache_should_promote_checkpoint(
     }
 
     return ((frame_number % CNR3_CHECKPOINT_INTERVAL) == 0);
+}
+
+static bool cnr3_output_cache_would_exceed_ceiling_externally_locked(
+    const Cnr3OutputCacheManager& cache
+)
+{
+    /*
+        Thread safety:
+            Does not lock internally.
+
+        Caller requirement:
+            The caller MUST already hold cache.cache_mutex.
+
+        CMS05 ceiling rule:
+            A store is allowed if total_live_refs_after_store <= active_ceiling.
+            A store is rejected if total_live_refs_after_store > active_ceiling
+            after any allowed pruning has failed to free space.
+
+        This helper answers only the arithmetic question:
+            "Would one additional cached frame exceed active_ceiling?"
+
+        It does not prune and it does not mutate cache state.
+    */
+
+    const int64_t current_live_refs =
+        static_cast<int64_t>(cache.non_checkpoint_pool.size()) +
+        static_cast<int64_t>(cache.checkpoint_pool.size());
+
+    const int64_t total_live_refs_after_store = current_live_refs + 1;
+
+    return total_live_refs_after_store >
+        static_cast<int64_t>(cache.active_ceiling);
 }
 
 void cnr3_output_cache_reset_stats(
@@ -1644,7 +1679,8 @@ bool cnr3_output_cache_store_frame(
 
         Duplicate rule:
             If frame_number is already present in cache_index, no addFrameRef()
-            is taken and the function returns false.
+            is taken and the function returns true. The already-stored frame is
+            the source of truth. The caller still owns the supplied frame.
     */
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
@@ -1671,6 +1707,22 @@ bool cnr3_output_cache_store_frame(
         ++cache.stats.store_skipped_already_cached;
         ++cache.stats.duplicate_store_computed_but_discarded;
         return true;
+    }
+
+    /*
+        CMS05 hard-ceiling guard.
+
+        This check occurs before addFrameRef(), so a rejected store cannot create
+        a cache-owned reference leak.
+
+        CMS05-2C only adds the hard guard. CMS05-2D will update pruning so the
+        store path can attempt hot-zone-aware pruning before concluding that no
+        space can be freed.
+    */
+    if (cnr3_output_cache_would_exceed_ceiling_externally_locked(cache)) {
+        ++cache.stats.cache_store_failures;
+        ++cache.stats.cache_ceiling_hard_aborts;
+        return false;
     }
 
     const bool should_promote_to_checkpoint =

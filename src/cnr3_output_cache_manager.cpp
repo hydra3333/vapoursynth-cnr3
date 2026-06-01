@@ -33,7 +33,7 @@
 //          - cache index updates
 //          - future debug/statistics counters stored inside the cache manager
 //
-//      All non-static cnr3_cache_manager_* functions MUST be thread-safe     
+//      All non-static cnr3_output_cache_* functions MUST be thread-safe
 //      and lock internally if/as appropriate, unless their name ends in _externally_locked.
 //
 //      A helper whose name ends in _externally_locked MUST be called only while
@@ -103,10 +103,12 @@
 //          It only prevents a checkpoint_pool slot from being pruned while
 //          an in-flight invocation depends on that checkpoint.
 // 
-// Phase 2A adds only safe cache state inspection and teardown/release helpers.
+// CMS05-2 implements output-cache scaffolding, diagnostics, store/remove
+// ownership rules, hot-zone-aware pruning, and active-ceiling calculation.
 //
-// These helpers are not wired into current runtime behaviour yet.
-// The existing strict-streaming cache remains active.
+// The output cache is still not output-authoritative. The existing strict
+// streaming cache remains the runtime source of truth until CMS05 runtime
+// proving phases wire the output cache into cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
 static bool cnr3_output_cache_check_invariants_externally_locked(
@@ -384,7 +386,7 @@ int cnr3_output_cache_get_non_checkpoint_overflow_limit() {
     */
 
     /*
-        The v005 design has a nominal non-checkpoint capacity plus a small
+        The CMS05 design has a nominal non-checkpoint capacity plus a small
         overflow allowance. The overflow allowance gives the cache room to
         absorb bursts during out-of-order request patterns before pruning.
 
@@ -1868,14 +1870,39 @@ bool cnr3_output_cache_store_frame(
         This check occurs before addFrameRef(), so a rejected store cannot create
         a cache-owned reference leak.
 
-        CMS05-2C only adds the hard guard. CMS05-2D will update pruning so the
-        store path can attempt hot-zone-aware pruning before concluding that no
-        space can be freed.
+        Policy:
+            If adding one more cached frame would exceed active_ceiling, attempt
+            hot-zone-aware pruning first. Reject only if pruning fails or if the
+            cache would still exceed active_ceiling after pruning.
+
+        This keeps the store helper self-contained and avoids relying on every
+        caller to remember a separate prune-before-store sequence.
     */
+
     if (cnr3_output_cache_would_exceed_ceiling_externally_locked(cache)) {
-        ++cache.stats.cache_store_failures;
-        ++cache.stats.cache_ceiling_hard_aborts;
-        return false;
+        const bool non_checkpoint_prune_ok =
+            cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
+                cache,
+                vsapi
+            );
+
+        const bool checkpoint_prune_ok =
+            cnr3_output_cache_prune_checkpoint_pool_externally_locked(
+                cache,
+                vsapi
+            );
+
+        if (!non_checkpoint_prune_ok || !checkpoint_prune_ok) {
+            ++cache.stats.cache_store_failures;
+            ++cache.stats.cache_ceiling_hard_aborts;
+            return false;
+        }
+
+        if (cnr3_output_cache_would_exceed_ceiling_externally_locked(cache)) {
+            ++cache.stats.cache_store_failures;
+            ++cache.stats.cache_ceiling_hard_aborts;
+            return false;
+        }
     }
 
     const bool should_promote_to_checkpoint =

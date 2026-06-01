@@ -192,12 +192,13 @@ static void cnr3_debug_print_output_cache_summary(
             Caller must not already hold d->output_cache.cache_mutex.
 
         Purpose:
-            Print one compact v005 cache-manager diagnostic summary line for
+            Print one compact CMS05 output-cache diagnostic summary line for
             this CNR3 filter instance.
 
         Important:
-            Phase 3B only adds diagnostic plumbing. It does not make the v005
-            cache manager participate in frame scheduling or output generation.
+            This diagnostic helper reports output-cache state. It does not make
+            the CMS05 output cache participate in frame scheduling or output
+            generation.
 
         Diagnostic context:
             The where argument is deliberately included in the output line so
@@ -205,7 +206,7 @@ static void cnr3_debug_print_output_cache_summary(
 
         Snapshot behaviour:
             This diagnostic summary is passive. Printing it does not increment
-            cache-manager validation counters.
+            output-cache validation counters.
     */
 
     if (d == nullptr || !d->debug || where == nullptr) {

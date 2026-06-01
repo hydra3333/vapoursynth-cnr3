@@ -276,6 +276,7 @@ static bool cnr3_output_cache_remove_frame_externally_locked(
         cache.cache_index.erase(index_found);
         cache.checkpoint_pool.erase(checkpoint_found);
         vsapi->freeFrame(owned_frame);
+        ++cache.stats.cache_freeframe_total;
 
         ++cache.stats.cache_remove_successes;
         ++cache.stats.checkpoint_remove_successes;
@@ -300,6 +301,7 @@ static bool cnr3_output_cache_remove_frame_externally_locked(
         cache.cache_index.erase(index_found);
         cache.non_checkpoint_pool.erase(non_checkpoint_found);
         vsapi->freeFrame(owned_frame);
+        ++cache.stats.cache_freeframe_total;
 
         ++cache.stats.cache_remove_successes;
         ++cache.stats.non_checkpoint_remove_successes;
@@ -485,6 +487,7 @@ bool cnr3_output_cache_clear(
 
             if (frame != nullptr) {
                 vsapi->freeFrame(frame);
+                ++cache.stats.cache_freeframe_total;
             }
         }
 
@@ -493,6 +496,7 @@ bool cnr3_output_cache_clear(
 
             if (slot.frame != nullptr) {
                 vsapi->freeFrame(slot.frame);
+                ++cache.stats.cache_freeframe_total;
             }
         }
     }
@@ -1162,6 +1166,20 @@ static bool cnr3_output_cache_validate_invariants_externally_locked(
         valid = false;
     }
 
+    const int64_t expected_cache_owned_refs =
+        static_cast<int64_t>(cache.non_checkpoint_pool.size()) +
+        static_cast<int64_t>(cache.checkpoint_pool.size());
+
+    const int64_t actual_cache_owned_refs =
+        cache.stats.cache_addframeref_total -
+        cache.stats.cache_freeframe_total;
+
+    if (actual_cache_owned_refs != expected_cache_owned_refs) {
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_validation_ref_balance_errors;
+        valid = false;
+    }
+
     if (valid) {
         ++cache.stats.cache_validation_successes;
     }
@@ -1640,9 +1658,19 @@ bool cnr3_output_cache_store_frame(
     }
 
     if (cache.cache_index.find(frame_number) != cache.cache_index.end()) {
-        ++cache.stats.cache_store_failures;
-        ++cache.stats.cache_store_duplicate_rejections;
-        return false;
+        /*
+            CMS05 first-in-best-dressed idempotency.
+
+            Another path has already stored this frame number. The existing cached
+            frame is the source of truth. Do not replace it, do not take an
+            additional cache-owned addFrameRef, and do not mutate either pool.
+
+            The caller still owns the frame pointer it supplied and must release or
+            transfer that caller-owned reference according to its own path.
+        */
+        ++cache.stats.store_skipped_already_cached;
+        ++cache.stats.duplicate_store_computed_but_discarded;
+        return true;
     }
 
     const bool should_promote_to_checkpoint =
@@ -1655,6 +1683,8 @@ bool cnr3_output_cache_store_frame(
         ++cache.stats.cache_store_add_ref_failures;
         return false;
     }
+
+    ++cache.stats.cache_addframeref_total;
 
     if (should_promote_to_checkpoint) {
         Cnr3CheckpointSlot slot;
@@ -1671,6 +1701,7 @@ bool cnr3_output_cache_store_frame(
                 the retained reference immediately to avoid a leak.
             */
             vsapi->freeFrame(retained_frame);
+            ++cache.stats.cache_freeframe_total;
 
             ++cache.stats.cache_store_failures;
             ++cache.stats.cache_integrity_errors;
@@ -1689,6 +1720,7 @@ bool cnr3_output_cache_store_frame(
                 the retained reference immediately to avoid a leak.
             */
             vsapi->freeFrame(retained_frame);
+            ++cache.stats.cache_freeframe_total;
 
             ++cache.stats.cache_store_failures;
             ++cache.stats.cache_integrity_errors;
@@ -1714,6 +1746,7 @@ bool cnr3_output_cache_store_frame(
         }
 
         vsapi->freeFrame(retained_frame);
+        ++cache.stats.cache_freeframe_total;
 
         ++cache.stats.cache_store_failures;
         ++cache.stats.cache_integrity_errors;

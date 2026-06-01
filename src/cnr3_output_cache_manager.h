@@ -221,6 +221,7 @@ struct Cnr3OutputCacheStats {
     int64_t cache_validation_null_frame_errors = 0;
     int64_t cache_validation_negative_pin_count_errors = 0;
     int64_t cache_validation_highest_frame_number_errors = 0;
+    int64_t cache_validation_ref_balance_errors = 0;
 
     int64_t cache_store_attempts = 0;
     int64_t cache_store_successes = 0;
@@ -231,6 +232,10 @@ struct Cnr3OutputCacheStats {
     int64_t cache_store_pool_inconsistency_errors = 0;
     int64_t cache_store_index_inconsistency_errors = 0;
     int64_t cache_store_post_validation_failures = 0;
+
+    // CMS05 duplicate-store diagnostics.
+    int64_t store_skipped_already_cached = 0;
+    int64_t duplicate_store_computed_but_discarded = 0;
 
     int64_t non_checkpoint_store_successes = 0;
     int64_t checkpoint_store_successes = 0;
@@ -247,6 +252,9 @@ struct Cnr3OutputCacheStats {
 
     int64_t non_checkpoint_remove_successes = 0;
     int64_t checkpoint_remove_successes = 0;
+
+    int64_t cache_addframeref_total = 0;
+    int64_t cache_freeframe_total = 0;
 
     int64_t non_checkpoint_prune_attempts = 0;
     int64_t non_checkpoint_prune_runs = 0;

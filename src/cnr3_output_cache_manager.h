@@ -13,7 +13,7 @@
 #include "cnr3_build_config.h"
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager - v005 design structures
+// CNR3 output cache manager - CMS05 design structures
 //
 // CRITICAL DESIGN RULE:
 //      The cache-manager specification has the critical rule that
@@ -32,7 +32,7 @@
 //      MUST hold the cache manager's per-instance cache_mutex while doing so.
 //
 //      This applies to at least:
-//          - cnr3_cache_manager_* helper functions
+//          - cnr3_output_cache_* helper functions
 //          - cnr3_get_frame() code that directly touches cache-manager state
 //          - pruning code
 //          - checkpoint promotion code
@@ -89,7 +89,7 @@
 //          the caller-owned temporary reference is still held by the caller.
 //
 //          The helper name MUST make this explicit, for example:
-//              cnr3_cache_manager_find_output_frame_and_add_ref()
+//              cnr3_output_cache_find_frame_and_add_ref()
 //
 //          The caller MUST release that caller-owned temporary reference exactly
 //          once with vsapi->freeFrame() on every success, error, and early-exit
@@ -165,12 +165,12 @@ static constexpr int CNR3_HOT_ZONE_JUMP_THRESHOLD =
 // -----------------------------------------------------------------------------
 
 /*
-    Defaults to CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS, but may be set independently
+    Defaults to CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS, but may be set independently
     if post-mutation validation needs to be enabled or disabled separately from
-    other cache-manager development diagnostics.
+    other output-cache development diagnostics.
 */
-constexpr bool CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION =
-    CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS;
+constexpr bool CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION =
+CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS;
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager statistics
@@ -423,7 +423,7 @@ struct Cnr3OutputCacheDebugSnapshot {
 // These helpers are intentionally limited to safe cache state inspection and
 // teardown/release support.
 //
-// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// They do not change current CNR3 runtime behaviour until the CMS05 output cache manager
 // is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
@@ -494,7 +494,7 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
 //
 // These helpers perform frame-number ordered lookups only.
 //
-// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// They do not change current CNR3 runtime behaviour until the CMS05 output cache manager
 // is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
@@ -578,7 +578,7 @@ bool cnr3_output_cache_get_debug_snapshot(
 // They are intended for development, maintenance, debug diagnostics, and future
 // runtime sanity checks.
 //
-// They do not change current CNR3 runtime behaviour until the v005 cache manager
+// They do not change current CNR3 runtime behaviour until the CMS05 output cache manager
 // is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
@@ -628,7 +628,7 @@ int64_t cnr3_output_cache_get_total_pin_count(
 // -----------------------------------------------------------------------------
 // CNR3 cache manager store helpers - Phase 2D.1
 //
-// These helpers insert output frames into the v005 cache manager.
+// These helpers insert output frames into the CMS05 output cache manager.
 //
 // Store helpers take cache-owned VSFrame references with vsapi->addFrameRef().
 // Those references must later be released exactly once by pruning, clearing, or
@@ -647,7 +647,7 @@ bool cnr3_output_cache_store_frame(
 // -----------------------------------------------------------------------------
 // CNR3 cache manager remove helpers - Phase 2D.2
 //
-// These helpers remove output frames from the v005 cache manager.
+// These helpers remove output frames from the CMS05 output cache manager.
 //
 // Remove helpers release cache-owned VSFrame references with vsapi->freeFrame().
 // They must remove the non-owning cache_index alias and exactly one owning pool
@@ -730,5 +730,5 @@ bool cnr3_output_cache_prune_after_store(
 );
 
 // -----------------------------------------------------------------------------
-// END CNR3 cache manager - v005 design structures
+// END CNR3 output cache manager - CMS05 design structures
 // -----------------------------------------------------------------------------

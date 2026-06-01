@@ -29,7 +29,7 @@ constexpr bool CNR3_DEV_DIAGNOSTICS = true;
     cache-manager diagnostics need to be enabled or disabled separately from
     other CNR3 development diagnostics.
 */
-constexpr bool CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS =
+constexpr bool CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS =
     CNR3_DEV_DIAGNOSTICS;
 
 /*

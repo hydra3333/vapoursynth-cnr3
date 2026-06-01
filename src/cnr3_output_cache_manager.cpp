@@ -6,7 +6,7 @@
 #include "cnr3_output_cache_manager.h"
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager - v005
+// CNR3 output cache manager - CMS05
 //
 // CRITICAL DESIGN RULE:
 //      The cache-manager specification has the critical rule that
@@ -25,7 +25,7 @@
 //      MUST hold the cache manager's per-instance cache_mutex while doing so.
 //
 //      This applies to at least:
-//          - cnr3_cache_manager_* helper functions
+//          - cnr3_output_cache_* helper functions
 //          - cnr3_get_frame() code that directly touches cache-manager state
 //          - pruning code
 //          - checkpoint promotion code
@@ -82,7 +82,7 @@
 //          the caller-owned temporary reference is still held by the caller.
 //
 //          The helper name MUST make this explicit, for example:
-//              cnr3_cache_manager_find_output_frame_and_add_ref()
+//              cnr3_output_cache_find_frame_and_add_ref()
 //
 //          The caller MUST release that caller-owned temporary reference exactly
 //          once with vsapi->freeFrame() on every success, error, and early-exit
@@ -180,7 +180,7 @@ static bool cnr3_output_cache_remove_frame_externally_locked(
     */
 
     /*
-        Remove one cached output frame from the v005 cache manager.
+        Remove one cached output frame from the CMS05 output cache manager.
 
         Ownership rule:
             A cached output frame must be owned by exactly one of:
@@ -451,7 +451,7 @@ bool cnr3_output_cache_clear(
     ++cache.stats.cache_clear_attempts;
 
     /*
-        Release every VS frame reference owned by the v005 cache manager.
+        Release every VS frame reference owned by the CMS05 output cache manager.
 
         Important ownership rule:
             Frames stored in non_checkpoint_pool and checkpoint_pool are owned
@@ -1379,7 +1379,7 @@ bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
         ++slot.pin_count;
         checkpoint_frame_number = found->first;
 
-        if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
             if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
                 /*
                     The pin has not been published to the caller as a success,
@@ -1452,7 +1452,7 @@ bool cnr3_output_cache_pin_checkpoint(
 
     ++slot.pin_count;
 
-    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+    if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             /*
                 The pin is not being reported as a success, so restore the
@@ -1520,7 +1520,7 @@ bool cnr3_output_cache_unpin_checkpoint(
 
     --slot.pin_count;
 
-    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+    if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             /*
                 The unpin is not being reported as a success, so restore the
@@ -1604,7 +1604,7 @@ bool cnr3_output_cache_store_frame(
     */
 
     /*
-        Store one output frame in the v005 cache manager.
+        Store one output frame in the CMS05 output cache manager.
 
         Ownership rule:
             On successful insertion, this function takes one cache-owned
@@ -1734,7 +1734,7 @@ bool cnr3_output_cache_store_frame(
         ++cache.stats.non_checkpoint_store_successes;
     }
 
-    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+    if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             ++cache.stats.cache_store_post_validation_failures;
             return false;
@@ -1767,7 +1767,7 @@ bool cnr3_output_cache_remove_frame(
             vsapi
         );
 
-    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+    if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (
             removed &&
             !cnr3_output_cache_validate_invariants_externally_locked(cache)
@@ -1881,7 +1881,7 @@ bool cnr3_output_cache_prune_after_store(
         return false;
     }
 
-    if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+    if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
             ++cache.stats.prune_after_store_post_validation_failures;
             return false;
@@ -1982,7 +1982,7 @@ static bool cnr3_output_cache_prune_non_checkpoint_pool_externally_locked(
 
         ++cache.stats.non_checkpoint_prune_removed_frames;
 
-        if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+        if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
             if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
                 ++cache.stats.non_checkpoint_prune_post_validation_failures;
                 return false;
@@ -2096,7 +2096,7 @@ static bool cnr3_output_cache_prune_checkpoint_pool_externally_locked(
                 ++cache.stats.checkpoint_prune_removed_frames;
                 removed_one_checkpoint = true;
 
-                if constexpr (CNR3_CACHE_MANAGER_VALIDATE_AFTER_MUTATION) {
+                if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
                     if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
                         ++cache.stats.checkpoint_prune_post_validation_failures;
                         return false;

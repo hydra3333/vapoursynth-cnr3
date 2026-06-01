@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <climits>
+
 #include "cnr3_build_config.h"
 #include "cnr3_memory_diagnostics.h"
 #include "cnr3_output_cache_manager.h"
@@ -123,6 +126,41 @@ static bool cnr3_cache_manager_prune_checkpoint_pool_externally_locked(
 static bool cnr3_cache_manager_validate_invariants_externally_locked(
     Cnr3OutputCacheManager& cache
 );
+
+static int cnr3_output_cache_distance_to_hot_zone_externally_locked(
+    const Cnr3HotZone& zone,
+    int frame_number
+)
+{
+    /*
+        Thread safety:
+            Does not lock internally.
+
+        Caller requirement:
+            Intended for use only while the caller already holds the output
+            cache mutex, because the hot-zone state is mutable cache-manager
+            state.
+
+        Return value:
+            0 if frame_number is inside the hot zone.
+            Positive distance to the nearest hot-zone boundary if outside.
+            INT_MAX if the zone is inactive.
+    */
+
+    if (!zone.active) {
+        return INT_MAX;
+    }
+
+    if (frame_number < zone.low) {
+        return zone.low - frame_number;
+    }
+
+    if (frame_number > zone.high) {
+        return frame_number - zone.high;
+    }
+
+    return 0;
+}
 
 static bool cnr3_cache_manager_remove_output_frame_externally_locked(
     Cnr3OutputCacheManager& cache,
@@ -467,6 +505,284 @@ bool cnr3_cache_manager_clear(
 
     ++cache.stats.cache_clear_successes;
     return true;
+}
+
+bool cnr3_output_cache_is_frame_in_hot_zone_externally_locked(
+    const Cnr3OutputCacheManager& cache,
+    int frame_number
+)
+{
+    /*
+        Thread safety:
+            Does not lock internally.
+
+        Caller requirement:
+            The caller MUST already hold cache.cache_mutex.
+
+        Purpose:
+            Return true if frame_number is inside any active CMS05 sliding
+            hot zone.
+    */
+
+    for (const Cnr3HotZone& zone : cache.hot_zones) {
+        if (!zone.active) {
+            continue;
+        }
+
+        if (frame_number >= zone.low && frame_number <= zone.high) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void cnr3_output_cache_update_hot_zones(
+    Cnr3OutputCacheManager& cache,
+    int frame_number
+)
+{
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally.
+
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+
+        CMS05 policy:
+            Sliding hot zones. If frame_number is within jump-threshold range
+            of an existing zone, slide that zone to be centred on frame_number.
+            Otherwise allocate a new zone, retiring or merging if needed.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.hot_zone_updates_at_arInitial;
+
+    int best_zone_index = -1;
+    int best_zone_distance = INT_MAX;
+
+    for (int index = 0; index < CNR3_MAX_HOT_ZONES; ++index) {
+        const Cnr3HotZone& zone = cache.hot_zones[index];
+
+        if (!zone.active) {
+            continue;
+        }
+
+        const int distance =
+            cnr3_output_cache_distance_to_hot_zone_externally_locked(
+                zone,
+                frame_number
+            );
+
+        if (
+            distance <= CNR3_HOT_ZONE_JUMP_THRESHOLD &&
+            distance < best_zone_distance
+            ) {
+            best_zone_index = index;
+            best_zone_distance = distance;
+        }
+    }
+
+    if (best_zone_index >= 0) {
+        Cnr3HotZone& zone = cache.hot_zones[best_zone_index];
+
+        const int old_low = zone.low;
+        const int old_high = zone.high;
+
+        zone.low = std::max(0, frame_number - CNR3_HOT_ZONE_BACK_RADIUS);
+        zone.high = frame_number + CNR3_HOT_ZONE_FORWARD_RADIUS;
+        zone.last_observed_frame = frame_number;
+
+        if (zone.low == old_low && zone.high == old_high) {
+            ++zone.hit_count;
+            ++cache.stats.hot_zone_hits;
+        }
+        else {
+            ++zone.slide_count;
+            ++cache.stats.hot_zone_slides;
+        }
+
+        return;
+    }
+
+    ++cache.stats.hot_zone_new_zone_requests;
+
+    int free_zone_index = -1;
+
+    for (int index = 0; index < CNR3_MAX_HOT_ZONES; ++index) {
+        if (!cache.hot_zones[index].active) {
+            free_zone_index = index;
+            break;
+        }
+    }
+
+    if (free_zone_index < 0) {
+        cnr3_output_cache_retire_cold_hot_zones_externally_locked(
+            cache,
+            Cnr3CacheSchedulingMode::FmUnordered
+        );
+
+        for (int index = 0; index < CNR3_MAX_HOT_ZONES; ++index) {
+            if (!cache.hot_zones[index].active) {
+                free_zone_index = index;
+                break;
+            }
+        }
+    }
+
+    if (free_zone_index < 0) {
+        /*
+            Conservative merge fallback.
+
+            This should not normally be needed in the first fmUnordered-only
+            wiring, but keeping the helper total avoids undefined behaviour if
+            more hot zones are active than expected.
+        */
+        int first_active = -1;
+        int second_active = -1;
+
+        for (int index = 0; index < CNR3_MAX_HOT_ZONES; ++index) {
+            if (!cache.hot_zones[index].active) {
+                continue;
+            }
+
+            if (first_active < 0) {
+                first_active = index;
+            }
+            else {
+                second_active = index;
+                break;
+            }
+        }
+
+        if (first_active >= 0 && second_active >= 0) {
+            Cnr3HotZone& first = cache.hot_zones[first_active];
+            Cnr3HotZone& second = cache.hot_zones[second_active];
+
+            first.low = std::min(first.low, second.low);
+            first.high = std::max(first.high, second.high);
+            first.last_observed_frame =
+                std::max(first.last_observed_frame, second.last_observed_frame);
+
+            ++first.merge_count;
+            ++cache.stats.hot_zone_merges;
+
+            second = Cnr3HotZone{};
+            free_zone_index = second_active;
+        }
+        else if (first_active >= 0) {
+            free_zone_index = first_active;
+        }
+        else {
+            free_zone_index = 0;
+        }
+    }
+
+    Cnr3HotZone& zone = cache.hot_zones[free_zone_index];
+
+    zone = Cnr3HotZone{};
+    zone.active = true;
+    zone.low = std::max(0, frame_number - CNR3_HOT_ZONE_BACK_RADIUS);
+    zone.high = frame_number + CNR3_HOT_ZONE_FORWARD_RADIUS;
+    zone.last_observed_frame = frame_number;
+
+    ++cache.stats.hot_zone_allocations;
+
+    int active_count = 0;
+
+    for (const Cnr3HotZone& active_zone : cache.hot_zones) {
+        if (active_zone.active) {
+            ++active_count;
+        }
+    }
+
+    if (active_count > cache.stats.hot_zone_max_active_observed) {
+        cache.stats.hot_zone_max_active_observed = active_count;
+    }
+}
+
+void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
+    Cnr3OutputCacheManager& cache,
+    Cnr3CacheSchedulingMode mode
+)
+{
+    /*
+        Thread safety:
+            Does not lock internally.
+
+        Caller requirement:
+            The caller MUST already hold cache.cache_mutex.
+
+        CMS05 policy:
+            fmUnordered can eagerly retire hot zones when a new zone slot is
+            needed. fmParallelRequests uses a conservative lazy retirement
+            rule because multiple requests may be in flight.
+    */
+
+    if (mode == Cnr3CacheSchedulingMode::FmUnordered) {
+        for (Cnr3HotZone& zone : cache.hot_zones) {
+            if (!zone.active) {
+                continue;
+            }
+
+            ++zone.retirement_count;
+            ++cache.stats.hot_zone_retirements;
+            zone = Cnr3HotZone{};
+        }
+
+        return;
+    }
+
+    for (Cnr3HotZone& zone : cache.hot_zones) {
+        if (!zone.active) {
+            continue;
+        }
+
+        bool has_live_frame_in_range = false;
+
+        for (const auto& entry : cache.non_checkpoint_pool) {
+            const int cached_frame_number = entry.first;
+
+            if (
+                cached_frame_number >= zone.low &&
+                cached_frame_number <= zone.high
+                ) {
+                has_live_frame_in_range = true;
+                break;
+            }
+        }
+
+        if (!has_live_frame_in_range) {
+            for (const auto& entry : cache.checkpoint_pool) {
+                const int cached_frame_number = entry.first;
+                const Cnr3CheckpointSlot& slot = entry.second;
+
+                if (
+                    cached_frame_number >= zone.low &&
+                    cached_frame_number <= zone.high
+                    ) {
+                    has_live_frame_in_range = true;
+                    break;
+                }
+
+                if (
+                    slot.pin_count > 0 &&
+                    cached_frame_number >= zone.low &&
+                    cached_frame_number <= zone.high
+                    ) {
+                    has_live_frame_in_range = true;
+                    break;
+                }
+            }
+        }
+
+        if (!has_live_frame_in_range) {
+            ++zone.retirement_count;
+            ++cache.stats.hot_zone_retirements;
+            zone = Cnr3HotZone{};
+        }
+    }
 }
 
 bool cnr3_cache_manager_find_nearest_prior_checkpoint(

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -270,6 +271,16 @@ struct Cnr3OutputCacheStats {
     int64_t prune_after_store_non_checkpoint_failures = 0;
     int64_t prune_after_store_checkpoint_failures = 0;
     int64_t prune_after_store_post_validation_failures = 0;
+
+    // CMS05 hot-zone diagnostics.
+    int64_t hot_zone_allocations = 0;
+    int64_t hot_zone_slides = 0;
+    int64_t hot_zone_hits = 0;
+    int64_t hot_zone_merges = 0;
+    int64_t hot_zone_retirements = 0;
+    int64_t hot_zone_new_zone_requests = 0;
+    int64_t hot_zone_max_active_observed = 0;
+    int64_t hot_zone_updates_at_arInitial = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -293,6 +304,39 @@ struct Cnr3OutputCacheStats {
 struct Cnr3CheckpointSlot {
     const VSFrame* frame = nullptr;
     int pin_count = 0;
+};
+
+// -----------------------------------------------------------------------------
+// CNR3 output cache hot zone
+//
+// CMS05 hot zones are sliding frame-number ranges used to protect likely-active
+// output-cache regions from pruning.
+// -----------------------------------------------------------------------------
+
+struct Cnr3HotZone {
+    bool active = false;
+    int low = -1;
+    int high = -1;
+    int last_observed_frame = -1;
+
+    int64_t hit_count = 0;
+    int64_t slide_count = 0;
+    int64_t merge_count = 0;
+    int64_t retirement_count = 0;
+    int64_t prune_protection_count = 0;
+};
+
+// -----------------------------------------------------------------------------
+// CNR3 output cache scheduling mode
+//
+// Used only where cache-manager behaviour must distinguish the current
+// VapourSynth scheduling policy. CMS05 uses the same sliding hot-zone update
+// in both modes; retirement is mode-specific.
+// -----------------------------------------------------------------------------
+
+enum class Cnr3CacheSchedulingMode {
+    FmUnordered,
+    FmParallelRequests
 };
 
 // -----------------------------------------------------------------------------
@@ -332,6 +376,10 @@ struct Cnr3OutputCacheManager {
     std::mutex cache_mutex;
 
     int highest_cached_frame_number = -1;
+
+    int active_ceiling = CNR3_CACHE_MIN_HARD_CEILING;
+
+    std::array<Cnr3HotZone, CNR3_MAX_HOT_ZONES> hot_zones{};
 
     Cnr3OutputCacheStats stats;
 };
@@ -405,6 +453,40 @@ bool cnr3_cache_manager_contains_output_frame(
 bool cnr3_cache_manager_clear(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 output cache hot-zone helpers - CMS05-2A
+// -----------------------------------------------------------------------------
+
+bool cnr3_output_cache_is_frame_in_hot_zone_externally_locked(
+    const Cnr3OutputCacheManager& cache,
+    int frame_number
+);
+
+void cnr3_output_cache_update_hot_zones(
+    Cnr3OutputCacheManager& cache,
+    int frame_number
+);
+
+void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
+    Cnr3OutputCacheManager& cache,
+    Cnr3CacheSchedulingMode mode
+);
+
+bool cnr3_output_cache_is_frame_in_hot_zone_externally_locked(
+    const Cnr3OutputCacheManager& cache,
+    int frame_number
+);
+
+void cnr3_output_cache_update_hot_zones(
+    Cnr3OutputCacheManager& cache,
+    int frame_number
+);
+
+void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
+    Cnr3OutputCacheManager& cache,
+    Cnr3CacheSchedulingMode mode
 );
 
 // -----------------------------------------------------------------------------

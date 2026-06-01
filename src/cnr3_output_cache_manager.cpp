@@ -559,6 +559,111 @@ bool cnr3_output_cache_clear(
     return true;
 }
 
+static int cnr3_output_cache_subsampled_dimension(
+    int full_size,
+    int subsampling_shift
+)
+{
+    /*
+        Return ceil(full_size / (1 << subsampling_shift)).
+
+        This avoids underestimating chroma-plane memory for odd dimensions.
+        CNR3 currently accepts only three-plane YUV clips, but this helper keeps
+        the frame-size estimate conservative for all accepted subsampling modes.
+    */
+
+    if (full_size <= 0) {
+        return 0;
+    }
+
+    if (subsampling_shift <= 0) {
+        return full_size;
+    }
+
+    return (full_size + ((1 << subsampling_shift) - 1)) >> subsampling_shift;
+}
+
+void cnr3_output_cache_set_ceiling(
+    Cnr3OutputCacheManager& cache,
+    const VSVideoInfo* vi
+)
+{
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Writes mutable cache-manager
+            state: cache.active_ceiling.
+
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+
+        CMS05 policy:
+            The runtime hard ceiling is a simple frame-count limit. This helper
+            derives that frame-count limit once from clip geometry, sample depth,
+            and CNR3_CACHE_BYTE_BUDGET.
+
+            active_ceiling =
+                clamp(byte_budget / estimated_frame_bytes,
+                      CNR3_CACHE_MIN_HARD_CEILING,
+                      CNR3_CACHE_MAX_HARD_CEILING)
+    */
+
+    int computed_ceiling = CNR3_CACHE_MIN_HARD_CEILING;
+
+    if (
+        vi != nullptr &&
+        vi->width > 0 &&
+        vi->height > 0 &&
+        vi->format.numPlanes == 3 &&
+        vi->format.bitsPerSample > 0
+        ) {
+        const int bytes_per_sample =
+            (vi->format.bitsPerSample + 7) / 8;
+
+        const int sub_w = vi->format.subSamplingW;
+        const int sub_h = vi->format.subSamplingH;
+
+        int64_t estimated_frame_bytes = 0;
+
+        for (int plane = 0; plane < vi->format.numPlanes; ++plane) {
+            const int plane_width =
+                (plane == 0)
+                ? vi->width
+                : cnr3_output_cache_subsampled_dimension(vi->width, sub_w);
+
+            const int plane_height =
+                (plane == 0)
+                ? vi->height
+                : cnr3_output_cache_subsampled_dimension(vi->height, sub_h);
+
+            estimated_frame_bytes +=
+                static_cast<int64_t>(plane_width) *
+                static_cast<int64_t>(plane_height) *
+                static_cast<int64_t>(bytes_per_sample);
+        }
+
+        if (estimated_frame_bytes > 0) {
+            const int64_t candidate_ceiling =
+                CNR3_CACHE_BYTE_BUDGET / estimated_frame_bytes;
+
+            int64_t clamped_ceiling = candidate_ceiling;
+
+            if (clamped_ceiling < CNR3_CACHE_MIN_HARD_CEILING) {
+                clamped_ceiling = CNR3_CACHE_MIN_HARD_CEILING;
+            }
+
+            if (clamped_ceiling > CNR3_CACHE_MAX_HARD_CEILING) {
+                clamped_ceiling = CNR3_CACHE_MAX_HARD_CEILING;
+            }
+
+            computed_ceiling = static_cast<int>(clamped_ceiling);
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    cache.active_ceiling = computed_ceiling;
+}
+
 bool cnr3_output_cache_is_frame_in_hot_zone_externally_locked(
     const Cnr3OutputCacheManager& cache,
     int frame_number
@@ -1031,6 +1136,9 @@ bool cnr3_output_cache_get_debug_snapshot(
 
     snapshot.highest_cached_frame_number =
         cache.highest_cached_frame_number;
+
+    snapshot.active_ceiling =
+        cache.active_ceiling;
 
     int64_t total_pin_count = 0;
     bool has_pinned_checkpoints = false;

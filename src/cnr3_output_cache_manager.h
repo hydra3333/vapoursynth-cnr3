@@ -40,7 +40,7 @@
 //          - cache index updates
 //          - future debug/statistics counters stored inside the cache manager
 //
-//      All non-static cnr3_cache_manager_* functions MUST be thread-safe
+//      All non-static cnr3_output_cache_* functions MUST be thread-safe
 //      and lock internally if/as appropriate, unless their name ends in _externally_locked.
 //
 //      A helper whose name ends in _externally_locked MUST be called only while
@@ -111,7 +111,7 @@
 //          an in-flight invocation depends on that checkpoint.
 // 
 // This file contains only the data structures and constants for the future
-// v005 output-frame cache manager.
+// CMS05 output-frame cache manager.
 //
 // Phase 1 intentionally does not change current runtime behaviour.
 // The existing strict-streaming cache remains active until later phases wire
@@ -119,7 +119,7 @@
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager tunable constants
+// CNR3 output cache manager tunable constants
 //
 // These are deliberately compile-time constants for the first implementation.
 // Public VapourSynth parameters can be considered later after behaviour and
@@ -133,7 +133,17 @@ static constexpr double CNR3_OUTPUT_CACHE_OVERFLOW_FACTOR = 1.1;
 
 // --- Hard ceiling (byte-budget based) ---
 
-static constexpr int64_t CNR3_CACHE_BYTE_BUDGET = 512LL * 1024LL * 1024LL;
+/*
+    Nominal output-cache byte budget used to derive active_ceiling.
+
+    The runtime cache limit remains a simple frame count. This byte budget is
+    used only at filter creation to choose a format-aware frame-count ceiling.
+
+    The 1 GiB value is intentional: CNR3's bounded recursive recovery needs
+    enough cached frame history to remain useful under VapourSynth request
+    jitter and modest seeks.
+*/
+static constexpr int64_t CNR3_CACHE_BYTE_BUDGET = 1024LL * 1024LL * 1024LL;
 static constexpr int CNR3_CACHE_MIN_HARD_CEILING = 150;
 static constexpr int CNR3_CACHE_MAX_HARD_CEILING = 1000;
 
@@ -152,7 +162,7 @@ static constexpr int CNR3_HOT_ZONE_JUMP_THRESHOLD =
     CNR3_HOT_ZONE_FORWARD_RADIUS + CNR3_HOT_ZONE_BACK_RADIUS + 1;
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager development diagnostics
+// CNR3 output cache manager development diagnostics
 //
 // These switches are compile-time controls for extra validation and diagnostics
 // intended for development and maintenance.
@@ -170,10 +180,10 @@ static constexpr int CNR3_HOT_ZONE_JUMP_THRESHOLD =
     other output-cache development diagnostics.
 */
 constexpr bool CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION =
-CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS;
+    CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS;
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager statistics
+// CNR3 output cache manager statistics
 //
 // These counters are used to assess cache-manager behaviour and detect problems
 // such as missed unpin paths, failed pin/unpin attempts, and cache thrashing.
@@ -354,7 +364,7 @@ enum class Cnr3CacheSchedulingMode {
 };
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager
+// CNR3 output cache manager
 //
 // This structure is intended to be owned by Cnr3Data, making the cache strictly
 // per-instance. It must never be global or static.
@@ -399,9 +409,9 @@ struct Cnr3OutputCacheManager {
 };
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager debug snapshot
+// CNR3 output cache manager debug snapshot
 //
-// This structure is a passive diagnostic snapshot of v005 cache-manager state.
+// This structure is a passive diagnostic snapshot of CMS05 output-cache state.
 //
 // It is intended for debug/status output. It does not own frame references and
 // must not store VSFrame pointers.
@@ -419,6 +429,7 @@ struct Cnr3OutputCacheDebugSnapshot {
     int64_t total_pin_count = 0;
 
     int highest_cached_frame_number = -1;
+    int active_ceiling = CNR3_CACHE_MIN_HARD_CEILING;
 
     /*
         Passive invariant result.
@@ -432,7 +443,7 @@ struct Cnr3OutputCacheDebugSnapshot {
 };
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager helper functions - Phase 2A
+// CNR3 output cache manager helper functions - Phase 2A
 //
 // These helpers are intentionally limited to safe cache state inspection and
 // teardown/release support.
@@ -470,6 +481,22 @@ bool cnr3_output_cache_clear(
 );
 
 // -----------------------------------------------------------------------------
+// CNR3 output cache active-ceiling helpers - CMS05-2E
+//
+// The runtime hard ceiling is a simple frame-count limit. This helper derives
+// that frame-count limit from clip geometry, bit depth, and the nominal byte
+// budget.
+//
+// Thread safety:
+//     Locks cache.cache_mutex internally.
+// -----------------------------------------------------------------------------
+
+void cnr3_output_cache_set_ceiling(
+    Cnr3OutputCacheManager& cache,
+    const VSVideoInfo* vi
+);
+
+// -----------------------------------------------------------------------------
 // CNR3 output cache hot-zone helpers - CMS05-2A
 // -----------------------------------------------------------------------------
 
@@ -488,23 +515,8 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
     Cnr3CacheSchedulingMode mode
 );
 
-bool cnr3_output_cache_is_frame_in_hot_zone_externally_locked(
-    const Cnr3OutputCacheManager& cache,
-    int frame_number
-);
-
-void cnr3_output_cache_update_hot_zones(
-    Cnr3OutputCacheManager& cache,
-    int frame_number
-);
-
-void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
-    Cnr3OutputCacheManager& cache,
-    Cnr3CacheSchedulingMode mode
-);
-
 // -----------------------------------------------------------------------------
-// CNR3 cache manager lookup helpers - Phase 2B
+// CNR3 output cache manager lookup helpers - Phase 2B
 //
 // These helpers perform frame-number ordered lookups only.
 //
@@ -515,7 +527,7 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
 /*
     Find the nearest prior checkpoint for requested_frame_number.
 
-    Critical v005 cache-manager ordering rule:
+    Critical CNR3 output cache manager ordering rule:
         "nearest prior checkpoint" means the checkpoint with the highest
         frame number that is strictly less than requested_frame_number.
 
@@ -540,9 +552,9 @@ bool cnr3_output_cache_should_promote_checkpoint(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager statistics helpers - Phase 2C.1
+// CNR3 output cache manager statistics helpers - Phase 2C.1
 //
-// These helpers manage the v005 cache-manager statistics counters.
+// These helpers manage the CNR3 output cache manager statistics counters.
 //
 // reset_stats() resets the resettable diagnostic counters only. It does not
 // clear cached output frames, checkpoint slots, cache indexes, pin counts, or
@@ -552,8 +564,8 @@ bool cnr3_output_cache_should_promote_checkpoint(
 // lifetime/non-resettable error counter set can be added if runtime testing
 // shows that persistent integrity history is useful.
 //
-// These helpers do not change current CNR3 runtime behaviour until the v005
-// cache manager is later wired into Cnr3Data and cnr3_get_frame().
+// These helpers do not change current CNR3 runtime behaviour until the
+// CNR3 output cache manager is later wired into Cnr3Data and cnr3_get_frame().
 // -----------------------------------------------------------------------------
 
 void cnr3_output_cache_reset_stats(
@@ -565,9 +577,9 @@ Cnr3OutputCacheStats cnr3_output_cache_get_stats_snapshot(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager debug snapshot helpers - Phase 3C.1
+// CNR3 output cache manager debug snapshot helpers - Phase 3C.1
 //
-// These helpers collect passive diagnostic snapshots of v005 cache-manager state.
+// These helpers collect passive diagnostic snapshots of CMS05 output-cache state.
 //
 // The debug snapshot helper locks cache.cache_mutex once and copies all summary
 // fields from one coherent point-in-time view.
@@ -585,7 +597,7 @@ bool cnr3_output_cache_get_debug_snapshot(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager validation helpers - Phase 2G.1
+// CNR3 output cache manager validation helpers - Phase 2G.1
 //
 // These helpers validate internal cache-manager invariants.
 //
@@ -601,7 +613,7 @@ bool cnr3_output_cache_validate_invariants(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager checkpoint pin helpers - Phase 2C.2
+// CNR3 output cache manager checkpoint pin helpers - Phase 2C.2
 //
 // These helpers manage checkpoint pin_count values.
 //
@@ -640,7 +652,7 @@ int64_t cnr3_output_cache_get_total_pin_count(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager store helpers - Phase 2D.1
+// CNR3 output cache manager store helpers - Phase 2D.1
 //
 // These helpers insert output frames into the CMS05 output cache manager.
 //
@@ -656,20 +668,6 @@ bool cnr3_output_cache_store_frame(
     int frame_number,
     const VSFrame* output_frame,
     const VSAPI* vsapi
-);
-
-// -----------------------------------------------------------------------------
-// CNR3 output cache ceiling helpers - CMS05-2C
-//
-// The externally-locked helper answers whether adding one more cached frame
-// would exceed the active hard ceiling.
-//
-// Caller requirement:
-//     The caller MUST already hold cache.cache_mutex.
-// -----------------------------------------------------------------------------
-
-bool cnr3_output_cache_would_exceed_ceiling_externally_locked(
-    const Cnr3OutputCacheManager& cache
 );
 
 // -----------------------------------------------------------------------------
@@ -691,7 +689,7 @@ bool cnr3_output_cache_remove_frame(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager non-checkpoint pruning helpers - Phase 2E.1b
+// CNR3 output cache manager non-checkpoint pruning helpers - Phase 2E.1b
 //
 // These helpers prune only non_checkpoint_pool.
 //
@@ -709,7 +707,7 @@ bool cnr3_output_cache_prune_non_checkpoint_pool(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager checkpoint pruning helpers - Phase 2E.2
+// CNR3 output cache manager checkpoint pruning helpers - Phase 2E.2
 //
 // These helpers prune only checkpoint_pool.
 //
@@ -743,7 +741,7 @@ bool cnr3_output_cache_prune_checkpoint_pool(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 cache manager combined pruning helpers - Phase 2E.3b
+// CNR3 output cache manager combined pruning helpers - Phase 2E.3b
 //
 // These helpers run the standard post-store pruning pass.
 //

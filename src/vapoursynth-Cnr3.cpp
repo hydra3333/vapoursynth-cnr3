@@ -2793,6 +2793,11 @@ static void VS_CC cnr3_create(
         );
     }
 
+    cnr3_output_cache_set_ceiling(
+        data->output_cache,
+        data->vi
+    );
+
     cnr3_debug_print_output_cache_summary(
         data,
         "after cnr3_create configuration before createVideoFilter"

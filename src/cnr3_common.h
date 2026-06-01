@@ -159,7 +159,7 @@ struct Cnr3Data {
         Currently this implements only strict streaming Policy A.
         The struct shape deliberately leaves room for the future cache manager.
     */
-    Cnr3CacheManager cache;
+    OldCnr3StrictStreamCache old_strict_cache;
 
     /*
         Future v005 output-frame cache manager.

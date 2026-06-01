@@ -164,7 +164,7 @@ static void cnr3_debug_print_cache_state(
         return;
     }
 
-    const int next_needed = d->cache.next_needed;
+    const int next_needed = d->old_strict_cache.next_needed;
     const int gap = requested_frame - next_needed;
 
     cnr3_debug_printf(
@@ -175,7 +175,7 @@ static void cnr3_debug_print_cache_state(
         requested_frame,
         next_needed,
         gap,
-        d->cache.prev_output != nullptr ? "yes" : "no"
+        d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
     );
 }
 
@@ -2028,7 +2028,7 @@ static bool process_cnr3_frame(
         Recursive precondition:
             frame 0 does not need a previous output frame.
 
-            frame N > 0 must have d->cache.prev_output available, because CNR3
+            frame N > 0 must have d->old_strict_cache.prev_output available, because CNR3
             uses output[N - 1] when producing output[N].
 
         Strict streaming note:
@@ -2050,7 +2050,7 @@ static bool process_cnr3_frame(
         return false;
     }
 
-    const VSFrame* prev_output = d->cache.prev_output;
+    const VSFrame* prev_output = d->old_strict_cache.prev_output;
 
     if (frame_number == 0) {
         /*
@@ -2293,7 +2293,7 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
-        cnr3_cache_clear(d->cache, vsapi);
+        cnr3_cache_clear(d->old_strict_cache, vsapi);
 
         if (!cnr3_cache_manager_clear(d->output_cache, vsapi)) {
             cnr3_debug_printf(
@@ -2378,15 +2378,15 @@ static const VSFrame* VS_CC cnr3_get_frame(
         /*
             Initial recursive Policy A.
 
-            The real recursive algorithm uses d->cache.prev_output when producing frame n.
+            The real recursive algorithm uses d->old_strict_cache.prev_output when producing frame n.
 
             Later, this can be replaced by a seek-safe Policy C using recomputation
             or checkpoints.
         */
 
-        if (n != d->cache.next_needed) {
+        if (n != d->old_strict_cache.next_needed) {
             const int requested_frame = n;
-            const int next_needed = d->cache.next_needed;
+            const int next_needed = d->old_strict_cache.next_needed;
             const int gap = requested_frame - next_needed;
 
             cnr3_debug_printf(
@@ -2396,7 +2396,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 requested_frame,
                 next_needed,
                 gap,
-                d->cache.prev_output != nullptr ? "yes" : "no"
+                d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
             );
 
             char error_message[384];
@@ -2410,7 +2410,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 requested_frame,
                 next_needed,
                 gap,
-                d->cache.prev_output != nullptr ? "yes" : "no"
+                d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
             );
 
             vsapi->freeFrame(src);
@@ -2430,8 +2430,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             "CNR3 debug: instance=%d, in-order frame accepted: requested=%d, next_needed=%d, prev_output=%s\n",
             d->instance_id,
             n,
-            d->cache.next_needed,
-            d->cache.prev_output != nullptr ? "yes" : "no"
+            d->old_strict_cache.next_needed,
+            d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
         );
         */
 
@@ -2463,7 +2463,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
         }
 
         cnr3_cache_store_output_frame(
-            d->cache,
+            d->old_strict_cache,
             dst,
             n,
             vsapi
@@ -2478,8 +2478,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             "CNR3 debug: instance=%d, processed frame: frame=%d, new_next_needed=%d, stored_prev_output=%s\n",
             d->instance_id,
             n,
-            d->cache.next_needed,
-            d->cache.prev_output != nullptr ? "yes" : "no"
+            d->old_strict_cache.next_needed,
+            d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
         );
         */
 

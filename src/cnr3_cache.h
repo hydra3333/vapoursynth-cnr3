@@ -13,7 +13,7 @@
 // filter instance has its own independent recursive state.
 // -----------------------------------------------------------------------------
 
-struct Cnr3CacheManager {
+struct OldCnr3StrictStreamCache {
     /*
         Minimal cache/state manager.
 
@@ -42,12 +42,12 @@ struct Cnr3CacheManager {
 // -----------------------------------------------------------------------------
 
 void cnr3_cache_clear(
-    Cnr3CacheManager &cache,
+    OldCnr3StrictStreamCache &cache,
     const VSAPI *vsapi
 );
 
 void cnr3_cache_store_output_frame(
-    Cnr3CacheManager &cache,
+    OldCnr3StrictStreamCache &cache,
     const VSFrame *output_frame,
     int frame_number,
     const VSAPI *vsapi

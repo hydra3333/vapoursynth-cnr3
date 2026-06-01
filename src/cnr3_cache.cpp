@@ -3,7 +3,7 @@
 #include "cnr3_cache.h"
 
 void cnr3_cache_clear(
-    Cnr3CacheManager &cache,
+    OldCnr3StrictStreamCache &cache,
     const VSAPI *vsapi
 ) {
     if (cache.prev_output != nullptr) {
@@ -15,7 +15,7 @@ void cnr3_cache_clear(
 }
 
 void cnr3_cache_store_output_frame(
-    Cnr3CacheManager &cache,
+    OldCnr3StrictStreamCache &cache,
     const VSFrame *output_frame,
     int frame_number,
     const VSAPI *vsapi

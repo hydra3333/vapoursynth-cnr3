@@ -1,6 +1,6 @@
 #include "cnr3_build_config.h"
 #include "cnr3_memory_diagnostics.h"
-#include "cnr3_cache.h"
+#include "old_cnr3_strict_cache.h"
 
 void old_cnr3_strict_cache_clear(
     OldCnr3StrictStreamCache &cache,

@@ -9,7 +9,7 @@
 
 #include "cnr3_build_config.h"
 #include "cnr3_memory_diagnostics.h"
-#include "cnr3_cache.h"
+#include "old_cnr3_strict_cache.h"
 #include "cnr3_cache_manager.h"
 
 // -----------------------------------------------------------------------------

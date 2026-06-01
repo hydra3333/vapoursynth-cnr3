@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\cnr3_build_config.h" />
-    <ClInclude Include="..\..\src\cnr3_cache.h" />
+    <ClInclude Include="..\..\src\old_cnr3_strict_cache.h" />
     <ClInclude Include="..\..\src\cnr3_cache_manager.h" />
     <ClInclude Include="..\..\src\cnr3_common.h" />
     <ClInclude Include="..\..\src\cnr3_memory_diagnostics.h" />
@@ -29,7 +29,7 @@
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\cnr3_cache.cpp">
+    <ClCompile Include="..\..\src\old_cnr3_strict_cache.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>

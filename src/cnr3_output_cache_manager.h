@@ -125,12 +125,30 @@
 // memory use are measured.
 // -----------------------------------------------------------------------------
 
-constexpr int CNR3_OUTPUT_CACHE_CAPACITY = 100;
-constexpr double CNR3_OUTPUT_CACHE_OVERFLOW_FACTOR = 1.1;
+// --- Soft pruning targets ---
 
-constexpr int CNR3_CHECKPOINT_INTERVAL = 10;
-constexpr int CNR3_CHECKPOINT_MAX_RETAIN = 16;
-constexpr int CNR3_CHECKPOINT_MIN_RETAIN = 6;
+static constexpr int CNR3_OUTPUT_CACHE_CAPACITY = 100;
+static constexpr double CNR3_OUTPUT_CACHE_OVERFLOW_FACTOR = 1.1;
+
+// --- Hard ceiling (byte-budget based) ---
+
+static constexpr int64_t CNR3_CACHE_BYTE_BUDGET = 512LL * 1024LL * 1024LL;
+static constexpr int CNR3_CACHE_MIN_HARD_CEILING = 150;
+static constexpr int CNR3_CACHE_MAX_HARD_CEILING = 1000;
+
+// --- Checkpoints ---
+
+static constexpr int CNR3_CHECKPOINT_INTERVAL = 10;
+static constexpr int CNR3_CHECKPOINT_MAX_RETAIN = 32;
+static constexpr int CNR3_CHECKPOINT_MIN_RETAIN = 10;
+
+// --- Hot zones ---
+
+static constexpr int CNR3_HOT_ZONE_FORWARD_RADIUS = 10;
+static constexpr int CNR3_HOT_ZONE_BACK_RADIUS = 50;
+static constexpr int CNR3_MAX_HOT_ZONES = 5;
+static constexpr int CNR3_HOT_ZONE_JUMP_THRESHOLD =
+    CNR3_HOT_ZONE_FORWARD_RADIUS + CNR3_HOT_ZONE_BACK_RADIUS + 1;
 
 // -----------------------------------------------------------------------------
 // CNR3 cache manager development diagnostics

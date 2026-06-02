@@ -2625,6 +2625,11 @@ static const VSFrame* VS_CC cnr3_get_frame(
         );
         */
 
+        cnr3_output_cache_update_hot_zones(
+            d->output_cache,
+            n
+        );
+
         vsapi->requestFrameFilter(n, d->node, frameCtx);
         return nullptr;
     }
@@ -2780,11 +2785,6 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 change the returned frame in CMS05-3A. The old strict-streaming
                 path remains the source of output truth.
         */
-
-        cnr3_output_cache_update_hot_zones(
-            d->output_cache,
-            n
-        );
 
         const bool output_cache_store_ok =
             cnr3_output_cache_store_frame(

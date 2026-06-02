@@ -66,6 +66,7 @@
 #include "VSHelper4.h"
 
 #include "cnr3_build_config.h"
+#include "cnr3_output_cache_manager.h"
 #include "cnr3_memory_diagnostics.h"
 #include "cnr3_common.h"
 #include "cnr3_response_tables.h"
@@ -2532,6 +2533,69 @@ static const VSFrame* VS_CC cnr3_get_frame(
         */
 
         vsapi->freeFrame(src);
+
+        /*
+            CMS05-3A store/prune-only runtime proving.
+
+            The CMS05 output cache is not output-authoritative in this phase.
+            The already-produced dst frame remains the frame returned to
+            VapourSynth.
+
+            Purpose:
+                - store the produced output frame in output_cache;
+                - exercise addFrameRef/freeFrame ownership accounting;
+                - exercise active_ceiling, hot zones, and pruning on real frames;
+                - collect diagnostics before any future output-cache read path is
+                  allowed to affect recursive output generation.
+
+            Important:
+                Failure to store or prune the diagnostic/proving cache must not
+                change the returned frame in CMS05-3A. The old strict-streaming
+                path remains the source of output truth.
+        */
+
+        cnr3_output_cache_update_hot_zones(
+            d->output_cache,
+            n
+        );
+
+        const bool output_cache_store_ok =
+            cnr3_output_cache_store_frame(
+                d->output_cache,
+                n,
+                dst,
+                vsapi
+            );
+
+        if (!output_cache_store_ok) {
+            cnr3_debug_printf(
+                d->debug,
+                "CNR3 debug: instance=%d, frame=%d, CMS05-3A output_cache store failed; returning strict-path output.\n",
+                d->instance_id,
+                n
+            );
+        }
+        else {
+            const bool output_cache_prune_ok =
+                cnr3_output_cache_prune_after_store(
+                    d->output_cache,
+                    vsapi
+                );
+
+            if (!output_cache_prune_ok) {
+                cnr3_debug_printf(
+                    d->debug,
+                    "CNR3 debug: instance=%d, frame=%d, CMS05-3A output_cache prune_after_store failed; returning strict-path output.\n",
+                    d->instance_id,
+                    n
+                );
+            }
+        }
+
+        cnr3_debug_print_output_cache_summary(
+            d,
+            "after CMS05-3A output_cache store/prune proving"
+        );
 
         return dst;
     }

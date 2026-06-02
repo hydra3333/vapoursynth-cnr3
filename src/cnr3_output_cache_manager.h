@@ -307,6 +307,16 @@ struct Cnr3OutputCacheStats {
     int64_t hot_zone_new_zone_requests = 0;
     int64_t hot_zone_max_active_observed = 0;
     int64_t hot_zone_updates_at_arInitial = 0;
+
+    // Last hot-zone update, for one-line debug trace output.
+    int hot_zone_last_event_kind = 0;
+    int hot_zone_last_event_frame = -1;
+    int hot_zone_last_event_zone_index = -1;
+    int hot_zone_last_event_old_low = -1;
+    int hot_zone_last_event_old_high = -1;
+    int hot_zone_last_event_new_low = -1;
+    int hot_zone_last_event_new_high = -1;
+    int hot_zone_last_event_active_count = 0;
 };
 
 // -----------------------------------------------------------------------------

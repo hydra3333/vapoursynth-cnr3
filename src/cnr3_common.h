@@ -162,11 +162,11 @@ struct Cnr3Data {
     OldCnr3StrictStreamCache old_strict_cache;
 
     /*
-        Future v005 output-frame cache manager.
+        CMS06 output-frame cache manager.
 
-        Phase 3A only makes this cache manager owned by the CNR3 filter instance.
-        It is deliberately not used by cnr3_get_frame() yet, so current runtime
-        behaviour remains unchanged.
+        Current state: store/prune proving is live, but the output cache is not
+        yet output-authoritative. The old strict-streaming cache remains the
+        source of returned frames until cache-hit reuse and recovery are proven.
 
         This cache manager must remain per-instance/per-source and must never be
         global or shared between CNR3 instances.

@@ -80,9 +80,11 @@ jobs:
             /I third_party\vapoursynth\include ^
             /Fo:build\ ^
             src\vapoursynth-Cnr3.cpp ^
-            src\old_cnr3_strict_cache.cpp ^
-            src\cnr3_cache_manager.cpp ^
+            src\cnr3_memory_diagnostics.cpp
+            src\cnr3_output_cache_manager.cpp ^
             src\cnr3_response_tables.cpp ^
+            src\cnr3_frame_internal_processing.cpp ^
+            src\old_cnr3_strict_cache.cpp ^
             /Fe:build\cnr3.dll ^
             /link ^
             /LTCG

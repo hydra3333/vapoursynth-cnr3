@@ -133,6 +133,50 @@ static bool cnr3_output_cache_would_exceed_ceiling_externally_locked(
     const Cnr3OutputCacheManager& cache
 );
 
+static constexpr int CNR3_HOT_ZONE_EVENT_NONE = 0;
+static constexpr int CNR3_HOT_ZONE_EVENT_HIT = 1;
+static constexpr int CNR3_HOT_ZONE_EVENT_SLIDE = 2;
+static constexpr int CNR3_HOT_ZONE_EVENT_NEW_ALLOCATE = 3;
+static constexpr int CNR3_HOT_ZONE_EVENT_RETIRE = 4;
+static constexpr int CNR3_HOT_ZONE_EVENT_MERGE = 5;
+
+static int cnr3_output_cache_count_active_hot_zones_externally_locked(
+    const Cnr3OutputCacheManager& cache
+)
+{
+    int active_count = 0;
+
+    for (const Cnr3HotZone& zone : cache.hot_zones) {
+        if (zone.active) {
+            ++active_count;
+        }
+    }
+
+    return active_count;
+}
+
+static void cnr3_output_cache_record_hot_zone_event_externally_locked(
+    Cnr3OutputCacheManager& cache,
+    int event_kind,
+    int frame_number,
+    int zone_index,
+    int old_low,
+    int old_high,
+    int new_low,
+    int new_high
+)
+{
+    cache.stats.hot_zone_last_event_kind = event_kind;
+    cache.stats.hot_zone_last_event_frame = frame_number;
+    cache.stats.hot_zone_last_event_zone_index = zone_index;
+    cache.stats.hot_zone_last_event_old_low = old_low;
+    cache.stats.hot_zone_last_event_old_high = old_high;
+    cache.stats.hot_zone_last_event_new_low = new_low;
+    cache.stats.hot_zone_last_event_new_high = new_high;
+    cache.stats.hot_zone_last_event_active_count =
+        cnr3_output_cache_count_active_hot_zones_externally_locked(cache);
+}
+
 static int cnr3_output_cache_distance_to_hot_zone_externally_locked(
     const Cnr3HotZone& zone,
     int frame_number
@@ -756,10 +800,32 @@ void cnr3_output_cache_update_hot_zones(
         if (zone.low == old_low && zone.high == old_high) {
             ++zone.hit_count;
             ++cache.stats.hot_zone_hits;
+
+            cnr3_output_cache_record_hot_zone_event_externally_locked(
+                cache,
+                CNR3_HOT_ZONE_EVENT_HIT,
+                frame_number,
+                best_zone_index,
+                old_low,
+                old_high,
+                zone.low,
+                zone.high
+            );
         }
         else {
             ++zone.slide_count;
             ++cache.stats.hot_zone_slides;
+
+            cnr3_output_cache_record_hot_zone_event_externally_locked(
+                cache,
+                CNR3_HOT_ZONE_EVENT_SLIDE,
+                frame_number,
+                best_zone_index,
+                old_low,
+                old_high,
+                zone.low,
+                zone.high
+            );
         }
 
         return;
@@ -827,6 +893,17 @@ void cnr3_output_cache_update_hot_zones(
             ++first.merge_count;
             ++cache.stats.hot_zone_merges;
 
+            cnr3_output_cache_record_hot_zone_event_externally_locked(
+                cache,
+                CNR3_HOT_ZONE_EVENT_MERGE,
+                frame_number,
+                first_active,
+                -1,
+                -1,
+                first.low,
+                first.high
+            );
+
             second = Cnr3HotZone{};
             free_zone_index = second_active;
         }
@@ -848,17 +925,23 @@ void cnr3_output_cache_update_hot_zones(
 
     ++cache.stats.hot_zone_allocations;
 
-    int active_count = 0;
-
-    for (const Cnr3HotZone& active_zone : cache.hot_zones) {
-        if (active_zone.active) {
-            ++active_count;
-        }
-    }
+    const int active_count =
+        cnr3_output_cache_count_active_hot_zones_externally_locked(cache);
 
     if (active_count > cache.stats.hot_zone_max_active_observed) {
         cache.stats.hot_zone_max_active_observed = active_count;
     }
+
+    cnr3_output_cache_record_hot_zone_event_externally_locked(
+        cache,
+        CNR3_HOT_ZONE_EVENT_NEW_ALLOCATE,
+        frame_number,
+        free_zone_index,
+        -1,
+        -1,
+        zone.low,
+        zone.high
+    );
 }
 
 void cnr3_output_cache_retire_cold_hot_zones_externally_locked(

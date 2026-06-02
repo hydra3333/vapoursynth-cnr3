@@ -185,29 +185,15 @@ static void cnr3_debug_print_output_cache_summary(
     const char* where
 ) {
     /*
-        Thread safety:
-            Uses cnr3_output_cache_get_debug_snapshot(), which locks the cache
-            manager once and returns a coherent passive snapshot.
+        Uses cnr3_output_cache_get_debug_snapshot(), which locks the cache once
+        and returns a coherent passive snapshot.
 
-        Caller requirement:
-            Caller must not already hold d->output_cache.cache_mutex.
+        Caller must not already hold d->output_cache.cache_mutex.
 
-        Purpose:
-            Print one compact CMS05 output-cache diagnostic summary line for
-            this CNR3 filter instance.
-
-        Important:
-            This diagnostic helper reports output-cache state. It does not make
-            the CMS05 output cache participate in frame scheduling or output
-            generation.
-
-        Diagnostic context:
-            The where argument is deliberately included in the output line so
-            logs show exactly when the snapshot was taken.
-
-        Snapshot behaviour:
-            This diagnostic summary is passive. Printing it does not increment
-            output-cache validation counters.
+        This diagnostic reports CMS05 output-cache state only. It does not make
+        the output cache participate in frame scheduling or output generation.
+        Keep substantial cache diagnostics in heading plus one-field-per-line
+        form so ownership, pruning, and validation state can be reviewed by eye.
     */
 
     if (d == nullptr || !d->debug || where == nullptr) {
@@ -238,91 +224,224 @@ static void cnr3_debug_print_output_cache_summary(
 
     cnr3_debug_printf(
         d->debug,
-        "CNR3 debug: instance=%d, %s: output_cache summary: "
-        "active=0, active_ceiling=%d, "
-        "non_checkpoint_count=%llu, checkpoint_count=%llu, "
-        "total_cached_frame_count=%llu, highest_cached_frame_number=%d, "
-        "has_pinned_checkpoints=%d, total_pin_count=%lld, invariants_ok=%d, "
-
-        "store=%lld/%lld/%lld, remove=%lld/%lld/%lld, "
-        "prune_after_store=%lld/%lld/%lld, "
-        "find_and_pin=%lld/%lld/%lld, unpin=%lld/%lld/%lld, "
-        "validation=%lld/%lld/%lld, integrity_errors=%lld, "
-
-        "refs: add=%lld, free=%lld, balance=%lld, ref_balance_errors=%lld, "
-
-        "duplicate_store: skipped_already_cached=%lld, "
-        "computed_but_discarded=%lld, "
-
-        "ceiling: hard_aborts=%lld, "
-
-        "hot_zones: updates=%lld, allocations=%lld, hits=%lld, slides=%lld, "
-        "merges=%lld, retirements=%lld, max_active=%lld, "
-
-        "hot_zone_prune: non_checkpoint_skipped=%lld, "
-        "checkpoint_skipped=%lld, no_candidate=%lld, "
-
-        "post_validation_failures: store=%lld, remove=%lld, "
-        "non_checkpoint_prune=%lld, checkpoint_prune=%lld, "
-        "prune_after_store=%lld\n",
+        "CNR3 debug: instance=%d, %s: output_cache summary:\n"
+        "    phase:\n"
+        "        cms_phase=CMS05\n"
+        "        proving_store_prune_active=1\n"
+        "        output_authoritative=0\n"
+        "        active_ceiling=%d\n"
+        "    cache_counts:\n"
+        "        non_checkpoint_count=%llu\n"
+        "        checkpoint_count=%llu\n"
+        "        total_cached_frame_count=%llu\n"
+        "        highest_cached_frame_number=%d\n"
+        "    pin_state:\n"
+        "        has_pinned_checkpoints=%d\n"
+        "        total_pin_count=%lld\n"
+        "    invariants:\n"
+        "        invariants_ok=%d\n"
+        "        integrity_errors=%lld\n"
+        "        validation_attempts=%lld\n"
+        "        validation_successes=%lld\n"
+        "        validation_failures=%lld\n"
+        "        ref_balance_errors=%lld\n"
+        "    cache_refs:\n"
+        "        addframeref_total=%lld\n"
+        "        freeframe_total=%lld\n"
+        "        balance=%lld\n"
+        "    store:\n"
+        "        attempts=%lld\n"
+        "        successes=%lld\n"
+        "        failures=%lld\n"
+        "        non_checkpoint_successes=%lld\n"
+        "        checkpoint_successes=%lld\n"
+        "        invalid_input_errors=%lld\n"
+        "        add_ref_failures=%lld\n"
+        "        pool_inconsistency_errors=%lld\n"
+        "        index_inconsistency_errors=%lld\n"
+        "        post_validation_failures=%lld\n"
+        "    duplicate_store:\n"
+        "        skipped_already_cached=%lld\n"
+        "        computed_but_discarded=%lld\n"
+        "        legacy_duplicate_rejections=%lld\n"
+        "    ceiling:\n"
+        "        hard_aborts=%lld\n"
+        "    remove:\n"
+        "        attempts=%lld\n"
+        "        successes=%lld\n"
+        "        failures=%lld\n"
+        "        non_checkpoint_successes=%lld\n"
+        "        checkpoint_successes=%lld\n"
+        "        not_found_failures=%lld\n"
+        "        invalid_input_errors=%lld\n"
+        "        pinned_checkpoint_rejections=%lld\n"
+        "        pool_inconsistency_errors=%lld\n"
+        "        index_inconsistency_errors=%lld\n"
+        "        post_validation_failures=%lld\n"
+        "    clear:\n"
+        "        attempts=%lld\n"
+        "        successes=%lld\n"
+        "        failures=%lld\n"
+        "        null_vsapi_failures=%lld\n"
+        "    prune_after_store:\n"
+        "        attempts=%lld\n"
+        "        successes=%lld\n"
+        "        failures=%lld\n"
+        "        non_checkpoint_failures=%lld\n"
+        "        checkpoint_failures=%lld\n"
+        "        post_validation_failures=%lld\n"
+        "    non_checkpoint_prune:\n"
+        "        attempts=%lld\n"
+        "        runs=%lld\n"
+        "        skipped_below_overflow=%lld\n"
+        "        skipped_in_hot_zone=%lld\n"
+        "        removed_frames=%lld\n"
+        "        remove_failures=%lld\n"
+        "        post_validation_failures=%lld\n"
+        "    checkpoint_prune:\n"
+        "        attempts=%lld\n"
+        "        runs=%lld\n"
+        "        skipped_below_max_retain=%lld\n"
+        "        skipped_frame_zero=%lld\n"
+        "        skipped_pinned=%lld\n"
+        "        skipped_in_hot_zone=%lld\n"
+        "        no_eligible_frames=%lld\n"
+        "        removed_frames=%lld\n"
+        "        remove_failures=%lld\n"
+        "        post_validation_failures=%lld\n"
+        "    prune_candidates:\n"
+        "        no_candidate_exists=%lld\n"
+        "    checkpoint_pin_find:\n"
+        "        pin_attempts=%lld\n"
+        "        pin_successes=%lld\n"
+        "        pin_failures=%lld\n"
+        "        find_and_pin_attempts=%lld\n"
+        "        find_and_pin_successes=%lld\n"
+        "        find_and_pin_failures=%lld\n"
+        "        find_and_pin_no_prior_checkpoint_failures=%lld\n"
+        "        find_and_pin_null_frame_failures=%lld\n"
+        "    checkpoint_unpin:\n"
+        "        attempts=%lld\n"
+        "        successes=%lld\n"
+        "        failures=%lld\n"
+        "        underflow_errors=%lld\n"
+        "    hot_zones:\n"
+        "        updates_at_arInitial=%lld\n"
+        "        new_zone_requests=%lld\n"
+        "        allocations=%lld\n"
+        "        hits=%lld\n"
+        "        slides=%lld\n"
+        "        merges=%lld\n"
+        "        retirements=%lld\n"
+        "        max_active_observed=%lld\n",
         d->instance_id,
         where,
+
         snapshot.active_ceiling,
+
         static_cast<unsigned long long>(snapshot.non_checkpoint_count),
         static_cast<unsigned long long>(snapshot.checkpoint_count),
         static_cast<unsigned long long>(snapshot.total_cached_frame_count),
         snapshot.highest_cached_frame_number,
+
         snapshot.has_pinned_checkpoints ? 1 : 0,
         static_cast<long long>(snapshot.total_pin_count),
-        snapshot.invariants_ok ? 1 : 0,
 
-        static_cast<long long>(stats.cache_store_attempts),
-        static_cast<long long>(stats.cache_store_successes),
-        static_cast<long long>(stats.cache_store_failures),
-        static_cast<long long>(stats.cache_remove_attempts),
-        static_cast<long long>(stats.cache_remove_successes),
-        static_cast<long long>(stats.cache_remove_failures),
-        static_cast<long long>(stats.prune_after_store_attempts),
-        static_cast<long long>(stats.prune_after_store_successes),
-        static_cast<long long>(stats.prune_after_store_failures),
-        static_cast<long long>(stats.checkpoint_find_and_pin_attempts),
-        static_cast<long long>(stats.checkpoint_find_and_pin_successes),
-        static_cast<long long>(stats.checkpoint_find_and_pin_failures),
-        static_cast<long long>(stats.checkpoint_unpin_attempts),
-        static_cast<long long>(stats.checkpoint_unpin_successes),
-        static_cast<long long>(stats.checkpoint_unpin_failures),
+        snapshot.invariants_ok ? 1 : 0,
+        static_cast<long long>(stats.cache_integrity_errors),
         static_cast<long long>(stats.cache_validation_attempts),
         static_cast<long long>(stats.cache_validation_successes),
         static_cast<long long>(stats.cache_validation_failures),
-        static_cast<long long>(stats.cache_integrity_errors),
+        static_cast<long long>(stats.cache_validation_ref_balance_errors),
 
         static_cast<long long>(stats.cache_addframeref_total),
         static_cast<long long>(stats.cache_freeframe_total),
         static_cast<long long>(cache_ref_balance),
-        static_cast<long long>(stats.cache_validation_ref_balance_errors),
+
+        static_cast<long long>(stats.cache_store_attempts),
+        static_cast<long long>(stats.cache_store_successes),
+        static_cast<long long>(stats.cache_store_failures),
+        static_cast<long long>(stats.non_checkpoint_store_successes),
+        static_cast<long long>(stats.checkpoint_store_successes),
+        static_cast<long long>(stats.cache_store_invalid_input_errors),
+        static_cast<long long>(stats.cache_store_add_ref_failures),
+        static_cast<long long>(stats.cache_store_pool_inconsistency_errors),
+        static_cast<long long>(stats.cache_store_index_inconsistency_errors),
+        static_cast<long long>(stats.cache_store_post_validation_failures),
 
         static_cast<long long>(stats.store_skipped_already_cached),
         static_cast<long long>(stats.duplicate_store_computed_but_discarded),
+        static_cast<long long>(stats.cache_store_duplicate_rejections),
 
         static_cast<long long>(stats.cache_ceiling_hard_aborts),
 
+        static_cast<long long>(stats.cache_remove_attempts),
+        static_cast<long long>(stats.cache_remove_successes),
+        static_cast<long long>(stats.cache_remove_failures),
+        static_cast<long long>(stats.non_checkpoint_remove_successes),
+        static_cast<long long>(stats.checkpoint_remove_successes),
+        static_cast<long long>(stats.cache_remove_not_found_failures),
+        static_cast<long long>(stats.cache_remove_invalid_input_errors),
+        static_cast<long long>(stats.cache_remove_pinned_checkpoint_rejections),
+        static_cast<long long>(stats.cache_remove_pool_inconsistency_errors),
+        static_cast<long long>(stats.cache_remove_index_inconsistency_errors),
+        static_cast<long long>(stats.cache_remove_post_validation_failures),
+
+        static_cast<long long>(stats.cache_clear_attempts),
+        static_cast<long long>(stats.cache_clear_successes),
+        static_cast<long long>(stats.cache_clear_failures),
+        static_cast<long long>(stats.cache_clear_null_vsapi_failures),
+
+        static_cast<long long>(stats.prune_after_store_attempts),
+        static_cast<long long>(stats.prune_after_store_successes),
+        static_cast<long long>(stats.prune_after_store_failures),
+        static_cast<long long>(stats.prune_after_store_non_checkpoint_failures),
+        static_cast<long long>(stats.prune_after_store_checkpoint_failures),
+        static_cast<long long>(stats.prune_after_store_post_validation_failures),
+
+        static_cast<long long>(stats.non_checkpoint_prune_attempts),
+        static_cast<long long>(stats.non_checkpoint_prune_runs),
+        static_cast<long long>(stats.non_checkpoint_prune_skipped_below_overflow),
+        static_cast<long long>(stats.non_checkpoint_prune_skipped_in_hot_zone),
+        static_cast<long long>(stats.non_checkpoint_prune_removed_frames),
+        static_cast<long long>(stats.non_checkpoint_prune_remove_failures),
+        static_cast<long long>(stats.non_checkpoint_prune_post_validation_failures),
+
+        static_cast<long long>(stats.checkpoint_prune_attempts),
+        static_cast<long long>(stats.checkpoint_prune_runs),
+        static_cast<long long>(stats.checkpoint_prune_skipped_below_max_retain),
+        static_cast<long long>(stats.checkpoint_prune_skipped_frame_zero),
+        static_cast<long long>(stats.checkpoint_prune_skipped_pinned),
+        static_cast<long long>(stats.checkpoint_prune_skipped_in_hot_zone),
+        static_cast<long long>(stats.checkpoint_prune_no_eligible_frames),
+        static_cast<long long>(stats.checkpoint_prune_removed_frames),
+        static_cast<long long>(stats.checkpoint_prune_remove_failures),
+        static_cast<long long>(stats.checkpoint_prune_post_validation_failures),
+
+        static_cast<long long>(stats.prune_no_candidate_exists),
+
+        static_cast<long long>(stats.checkpoint_pin_attempts),
+        static_cast<long long>(stats.checkpoint_pin_successes),
+        static_cast<long long>(stats.checkpoint_pin_failures),
+        static_cast<long long>(stats.checkpoint_find_and_pin_attempts),
+        static_cast<long long>(stats.checkpoint_find_and_pin_successes),
+        static_cast<long long>(stats.checkpoint_find_and_pin_failures),
+        static_cast<long long>(stats.checkpoint_find_and_pin_no_prior_checkpoint_failures),
+        static_cast<long long>(stats.checkpoint_find_and_pin_null_frame_failures),
+
+        static_cast<long long>(stats.checkpoint_unpin_attempts),
+        static_cast<long long>(stats.checkpoint_unpin_successes),
+        static_cast<long long>(stats.checkpoint_unpin_failures),
+        static_cast<long long>(stats.checkpoint_unpin_underflow_errors),
+
         static_cast<long long>(stats.hot_zone_updates_at_arInitial),
+        static_cast<long long>(stats.hot_zone_new_zone_requests),
         static_cast<long long>(stats.hot_zone_allocations),
         static_cast<long long>(stats.hot_zone_hits),
         static_cast<long long>(stats.hot_zone_slides),
         static_cast<long long>(stats.hot_zone_merges),
         static_cast<long long>(stats.hot_zone_retirements),
-        static_cast<long long>(stats.hot_zone_max_active_observed),
-
-        static_cast<long long>(stats.non_checkpoint_prune_skipped_in_hot_zone),
-        static_cast<long long>(stats.checkpoint_prune_skipped_in_hot_zone),
-        static_cast<long long>(stats.prune_no_candidate_exists),
-
-        static_cast<long long>(stats.cache_store_post_validation_failures),
-        static_cast<long long>(stats.cache_remove_post_validation_failures),
-        static_cast<long long>(stats.non_checkpoint_prune_post_validation_failures),
-        static_cast<long long>(stats.checkpoint_prune_post_validation_failures),
-        static_cast<long long>(stats.prune_after_store_post_validation_failures)
+        static_cast<long long>(stats.hot_zone_max_active_observed)
     );
 }
 
@@ -2352,13 +2471,17 @@ static void VS_CC cnr3_free(
             );
         }
 
+        cnr3_debug_print_output_cache_summary(
+            d,
+            "after cnr3_free output_cache clear"
+        );
+
         cnr3_memory_record_and_print_snapshot(
             d->memory_stats,
             d->debug,
             d->instance_id,
             "after cnr3_free cache cleanup"
         );
-
         cnr3_memory_print_summary(
             d->memory_stats,
             d->debug,

@@ -110,12 +110,14 @@
 //          It only prevents a checkpoint_pool slot from being pruned while
 //          an in-flight invocation depends on that checkpoint.
 // 
-// This file contains only the data structures and constants for the future
-// CMS05 output-frame cache manager.
+// CMS06 output-frame cache manager.
 //
-// Phase 1 intentionally does not change current runtime behaviour.
-// The existing strict-streaming cache remains active until later phases wire
-// these structures into cnr3_get_frame().
+// Store/prune proving is live: output_cache stores and prunes real produced
+// frames, but it is not yet output-authoritative.
+//
+// The old strict-streaming cache remains the source of returned output.
+// Cache-hit reuse, recovery walks, and bounded warm-up recovery are not yet
+// wired.
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------

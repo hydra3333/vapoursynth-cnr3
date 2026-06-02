@@ -445,6 +445,34 @@ static void cnr3_debug_print_output_cache_summary(
     );
 }
 
+static bool cnr3_should_print_frame_output_cache_summary(
+    const Cnr3Data* d,
+    int frame_number
+) {
+    /*
+        Throttle full per-frame output-cache summaries. Lifecycle summaries and
+        failure summaries are printed by their direct call sites.
+    */
+
+    if (d == nullptr || frame_number < 0) {
+        return false;
+    }
+
+    if (frame_number <= 1) {
+        return true;
+    }
+
+    if ((frame_number % 10) == 0) {
+        return true;
+    }
+
+    if (d->vi != nullptr && frame_number == d->vi->numFrames - 1) {
+        return true;
+    }
+
+    return false;
+}
+
 static int64_t get_optional_int(
     const VSMap* in,
     const VSAPI* vsapi,
@@ -2690,6 +2718,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 vsapi
             );
 
+        bool output_cache_prune_ok = true;
+
         if (!output_cache_store_ok) {
             cnr3_debug_printf(
                 d->debug,
@@ -2699,7 +2729,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
         }
         else {
-            const bool output_cache_prune_ok =
+            output_cache_prune_ok =
                 cnr3_output_cache_prune_after_store(
                     d->output_cache,
                     vsapi
@@ -2715,10 +2745,16 @@ static const VSFrame* VS_CC cnr3_get_frame(
             }
         }
 
-        cnr3_debug_print_output_cache_summary(
-            d,
-            "after CMS05-3A output_cache store/prune proving"
-        );
+        if (
+            !output_cache_store_ok ||
+            !output_cache_prune_ok ||
+            cnr3_should_print_frame_output_cache_summary(d, n)
+            ) {
+            cnr3_debug_print_output_cache_summary(
+                d,
+                "after CMS05-3A output_cache store/prune proving"
+            );
+        }
 
         return dst;
     }

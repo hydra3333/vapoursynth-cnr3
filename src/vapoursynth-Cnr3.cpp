@@ -450,8 +450,8 @@ static bool cnr3_should_print_frame_output_cache_summary(
     int frame_number
 ) {
     /*
-        Throttle full per-frame output-cache summaries. Lifecycle summaries and
-        failure summaries are printed by their direct call sites.
+        Throttle full per-frame output-cache summaries. Compact frame traces
+        still print every frame while CMS05 store/prune proving is active.
     */
 
     if (d == nullptr || frame_number < 0) {
@@ -462,15 +462,91 @@ static bool cnr3_should_print_frame_output_cache_summary(
         return true;
     }
 
-    if ((frame_number % 10) == 0) {
+    if ((frame_number % 100) == 0) {
         return true;
     }
 
-    if (d->vi != nullptr && frame_number == d->vi->numFrames - 1) {
-        return true;
+    if (d->vi != nullptr) {
+        const int final_frame = d->vi->numFrames - 1;
+
+        if (
+            frame_number == final_frame ||
+            frame_number == final_frame - 1
+            ) {
+            return true;
+        }
     }
 
     return false;
+}
+
+static void cnr3_debug_print_output_cache_frame_trace(
+    const Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok,
+    bool output_cache_prune_ok
+) {
+    /*
+        Compact per-frame trace for long runs. The full cache summary remains
+        available at lifecycle, periodic, final-frame, and failure points.
+    */
+
+    if (d == nullptr || !d->debug || frame_number < 0) {
+        return;
+    }
+
+    Cnr3OutputCacheManager& cache =
+        const_cast<Cnr3OutputCacheManager&>(d->output_cache);
+
+    Cnr3OutputCacheDebugSnapshot snapshot;
+
+    if (!cnr3_output_cache_get_debug_snapshot(cache, snapshot)) {
+        cnr3_debug_printf(
+            d->debug,
+            "CNR3 debug: instance=%d, frame=%d, CMS05-3A trace unavailable.\n",
+            d->instance_id,
+            frame_number
+        );
+
+        return;
+    }
+
+    const Cnr3OutputCacheStats& stats = snapshot.stats;
+
+    const int64_t cache_ref_balance =
+        stats.cache_addframeref_total -
+        stats.cache_freeframe_total;
+
+    cnr3_debug_printf(
+        d->debug,
+        "CNR3 debug: instance=%d, frame=%d, CMS05-3A trace: "
+        "store_ok=%d, prune_ok=%d, cached=%llu, non_checkpoint=%llu, "
+        "checkpoint=%llu, highest=%d, refs=%lld/%lld/%lld, "
+        "validation=%lld/%lld/%lld, errors: integrity=%lld, "
+        "ref_balance=%lld, store_fail=%lld, prune_fail=%lld, "
+        "hotzone: updates=%lld, slides=%lld, max_active=%lld\n",
+        d->instance_id,
+        frame_number,
+        output_cache_store_ok ? 1 : 0,
+        output_cache_prune_ok ? 1 : 0,
+        static_cast<unsigned long long>(snapshot.total_cached_frame_count),
+        static_cast<unsigned long long>(snapshot.non_checkpoint_count),
+        static_cast<unsigned long long>(snapshot.checkpoint_count),
+        snapshot.highest_cached_frame_number,
+        static_cast<long long>(stats.cache_addframeref_total),
+        static_cast<long long>(stats.cache_freeframe_total),
+        static_cast<long long>(cache_ref_balance),
+        static_cast<long long>(stats.cache_validation_attempts),
+        static_cast<long long>(stats.cache_validation_successes),
+        static_cast<long long>(stats.cache_validation_failures),
+        static_cast<long long>(stats.cache_integrity_errors),
+        static_cast<long long>(stats.cache_validation_ref_balance_errors),
+        static_cast<long long>(stats.cache_store_failures),
+        static_cast<long long>(stats.prune_after_store_failures),
+        static_cast<long long>(stats.hot_zone_updates_at_arInitial),
+        static_cast<long long>(stats.hot_zone_slides),
+        static_cast<long long>(stats.hot_zone_max_active_observed)
+    );
 }
 
 static int64_t get_optional_int(
@@ -2744,6 +2820,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 );
             }
         }
+
+        cnr3_debug_print_output_cache_frame_trace(
+            d,
+            n,
+            output_cache_store_ok,
+            output_cache_prune_ok
+        );
 
         if (
             !output_cache_store_ok ||

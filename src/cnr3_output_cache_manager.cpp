@@ -530,6 +530,150 @@ bool cnr3_output_cache_contains_frame(
     return (cache.cache_index.find(frame_number) != cache.cache_index.end());
 }
 
+const VSFrame* cnr3_output_cache_find_frame_and_add_ref(
+    Cnr3OutputCacheManager& cache,
+    int frame_number,
+    const VSAPI* vsapi
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads mutable cache-manager state
+            and takes a caller-owned VSFrame reference while still locked.
+
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+
+        Ownership:
+            On success, returns a caller-owned addFrameRef() reference. The
+            caller must either freeFrame() it exactly once or transfer it to
+            VapourSynth as the returned output frame.
+
+        Safety:
+            The addFrameRef() is intentionally taken before releasing
+            cache.cache_mutex. Taking it later would allow prune/clear to remove
+            the cache-owned reference between lookup and caller addref.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.cache_lookup_attempts;
+
+    if (frame_number < 0 || vsapi == nullptr) {
+        ++cache.stats.cache_lookup_failures;
+        ++cache.stats.cache_lookup_invalid_input_errors;
+        return nullptr;
+    }
+
+    const auto index_found = cache.cache_index.find(frame_number);
+
+    if (index_found == cache.cache_index.end()) {
+        ++cache.stats.cache_misses;
+        return nullptr;
+    }
+
+    const VSFrame* indexed_frame = index_found->second;
+
+    if (indexed_frame == nullptr) {
+        ++cache.stats.cache_lookup_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_lookup_null_frame_errors;
+        ++cache.stats.cache_lookup_index_inconsistency_errors;
+        return nullptr;
+    }
+
+    const auto non_checkpoint_found =
+        cache.non_checkpoint_pool.find(frame_number);
+
+    const auto checkpoint_found =
+        cache.checkpoint_pool.find(frame_number);
+
+    const bool in_non_checkpoint_pool =
+        (non_checkpoint_found != cache.non_checkpoint_pool.end());
+
+    const bool in_checkpoint_pool =
+        (checkpoint_found != cache.checkpoint_pool.end());
+
+    if (in_non_checkpoint_pool == in_checkpoint_pool) {
+        ++cache.stats.cache_lookup_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_lookup_pool_inconsistency_errors;
+        return nullptr;
+    }
+
+    const VSFrame* owned_frame = nullptr;
+
+    if (in_checkpoint_pool) {
+        owned_frame = checkpoint_found->second.frame;
+    }
+    else {
+        owned_frame = non_checkpoint_found->second;
+    }
+
+    if (owned_frame == nullptr) {
+        ++cache.stats.cache_lookup_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_lookup_null_frame_errors;
+        ++cache.stats.cache_lookup_pool_inconsistency_errors;
+        return nullptr;
+    }
+
+    if (owned_frame != indexed_frame) {
+        ++cache.stats.cache_lookup_failures;
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.cache_lookup_index_inconsistency_errors;
+        return nullptr;
+    }
+
+    const VSFrame* caller_owned_frame = vsapi->addFrameRef(owned_frame);
+
+    if (caller_owned_frame == nullptr) {
+        ++cache.stats.cache_lookup_failures;
+        ++cache.stats.cache_lookup_null_frame_errors;
+        return nullptr;
+    }
+
+    ++cache.stats.lookup_owned_ref_acquired_total;
+    ++cache.stats.cache_hits_at_arAllFramesReady;
+
+    return caller_owned_frame;
+}
+
+void cnr3_output_cache_note_lookup_ref_released(
+    Cnr3OutputCacheManager& cache
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Writes caller-side lookup
+            reference diagnostics only.
+
+        Caller requirement:
+            Call this immediately after freeFrame() releases a caller-owned
+            lookup reference returned by cnr3_output_cache_find_frame_and_add_ref().
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.lookup_owned_ref_released_total;
+}
+
+void cnr3_output_cache_note_lookup_ref_transferred(
+    Cnr3OutputCacheManager& cache
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Writes caller-side lookup
+            reference diagnostics only.
+
+        Caller requirement:
+            Call this when ownership of a caller-owned lookup reference is
+            transferred to VapourSynth as the returned output frame.
+    */
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.lookup_owned_ref_transferred_total;
+}
+
 bool cnr3_output_cache_clear(
     Cnr3OutputCacheManager& cache,
     const VSAPI* vsapi

@@ -12,6 +12,27 @@
 // -----------------------------------------------------------------------------
 
 /*
+    Edit/version marker printed in debug logs so test output can confirm that
+    the expected source edit was compiled and loaded.
+
+    Update this string for each coherent source-change set.
+*/
+inline constexpr const char* CNR3_EDIT_VERSION =
+    "CMS02-F-cache-hit-lookup-v2";
+
+/*
+    Temporary CMS02-F proof hook.
+
+    When true, cnr3_get_frame() performs an immediate post-store lookup of the
+    frame it just stored, using the real CMS02-F find-and-addref helper. It then
+    releases the caller-owned lookup reference immediately.
+
+    This is for debug proof only. It must be set false or removed after the
+    lookup/addref/release path is proven.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_FORCE_CACHE_LOOKUP_PROBE = false;
+
+/*
     Master development diagnostics switch.
 
     This is intended for diagnostics that are useful during CNR3 development,

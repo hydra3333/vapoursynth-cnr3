@@ -161,7 +161,7 @@ static constexpr int CNR3_HOT_ZONE_FORWARD_RADIUS = 10;
 static constexpr int CNR3_HOT_ZONE_BACK_RADIUS = 50;
 static constexpr int CNR3_MAX_HOT_ZONES = 5;
 static constexpr int CNR3_HOT_ZONE_JUMP_THRESHOLD =
-    CNR3_HOT_ZONE_FORWARD_RADIUS + CNR3_HOT_ZONE_BACK_RADIUS + 1;
+CNR3_HOT_ZONE_FORWARD_RADIUS + CNR3_HOT_ZONE_BACK_RADIUS + 1;
 
 // -----------------------------------------------------------------------------
 // CNR3 output cache manager development diagnostics
@@ -182,7 +182,7 @@ static constexpr int CNR3_HOT_ZONE_JUMP_THRESHOLD =
     other output-cache development diagnostics.
 */
 constexpr bool CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION =
-    CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS;
+CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS;
 
 // -----------------------------------------------------------------------------
 // CNR3 output cache manager statistics
@@ -269,6 +269,19 @@ struct Cnr3OutputCacheStats {
 
     int64_t cache_addframeref_total = 0;
     int64_t cache_freeframe_total = 0;
+
+    // CMS02-F cache-hit lookup diagnostics.
+    int64_t cache_hits_at_arAllFramesReady = 0;
+    int64_t cache_misses = 0;
+    int64_t lookup_owned_ref_acquired_total = 0;
+    int64_t lookup_owned_ref_released_total = 0;
+    int64_t lookup_owned_ref_transferred_total = 0;
+    int64_t cache_lookup_attempts = 0;
+    int64_t cache_lookup_failures = 0;
+    int64_t cache_lookup_invalid_input_errors = 0;
+    int64_t cache_lookup_pool_inconsistency_errors = 0;
+    int64_t cache_lookup_index_inconsistency_errors = 0;
+    int64_t cache_lookup_null_frame_errors = 0;
 
     int64_t non_checkpoint_prune_attempts = 0;
     int64_t non_checkpoint_prune_runs = 0;
@@ -485,6 +498,20 @@ std::size_t cnr3_output_cache_get_total_cached_frame_count(
 bool cnr3_output_cache_contains_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number
+);
+
+const VSFrame* cnr3_output_cache_find_frame_and_add_ref(
+    Cnr3OutputCacheManager& cache,
+    int frame_number,
+    const VSAPI* vsapi
+);
+
+void cnr3_output_cache_note_lookup_ref_released(
+    Cnr3OutputCacheManager& cache
+);
+
+void cnr3_output_cache_note_lookup_ref_transferred(
+    Cnr3OutputCacheManager& cache
 );
 
 bool cnr3_output_cache_clear(

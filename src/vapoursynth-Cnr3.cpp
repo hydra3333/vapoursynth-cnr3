@@ -238,6 +238,11 @@ static void cnr3_debug_print_output_cache_summary(
         stats.cache_addframeref_total -
         stats.cache_freeframe_total;
 
+    const int64_t lookup_ref_balance =
+        stats.lookup_owned_ref_acquired_total -
+        stats.lookup_owned_ref_released_total -
+        stats.lookup_owned_ref_transferred_total;
+
     cnr3_debug_printf(
         d->debug,
         "output-cache # cnr3_debug_print_output_cache_summary # SUMMARY # "
@@ -247,7 +252,12 @@ static void cnr3_debug_print_output_cache_summary(
         "has_pinned_checkpoints=%d # total_pin_count=%lld # invariants_ok=%d # "
         "integrity_errors=%lld # validation_attempts=%lld # validation_successes=%lld # "
         "validation_failures=%lld # ref_balance_errors=%lld # addframeref_total=%lld # "
-        "freeframe_total=%lld # balance=%lld # store_attempts=%lld # store_successes=%lld # "
+        "freeframe_total=%lld # balance=%lld # cache_hits_at_arAllFramesReady=%lld # "
+        "cache_misses=%lld # lookup_ref_acquired=%lld # lookup_ref_released=%lld # "
+        "lookup_ref_transferred=%lld # lookup_ref_balance=%lld # cache_lookup_attempts=%lld # "
+        "cache_lookup_failures=%lld # cache_lookup_invalid_input_errors=%lld # "
+        "cache_lookup_pool_inconsistency_errors=%lld # cache_lookup_index_inconsistency_errors=%lld # "
+        "cache_lookup_null_frame_errors=%lld # store_attempts=%lld # store_successes=%lld # "
         "store_failures=%lld # non_checkpoint_store_successes=%lld # checkpoint_store_successes=%lld # "
         "store_invalid_input_errors=%lld # store_add_ref_failures=%lld # "
         "store_pool_inconsistency_errors=%lld # store_index_inconsistency_errors=%lld # "
@@ -301,6 +311,18 @@ static void cnr3_debug_print_output_cache_summary(
         static_cast<long long>(stats.cache_addframeref_total),
         static_cast<long long>(stats.cache_freeframe_total),
         static_cast<long long>(cache_ref_balance),
+        static_cast<long long>(stats.cache_hits_at_arAllFramesReady),
+        static_cast<long long>(stats.cache_misses),
+        static_cast<long long>(stats.lookup_owned_ref_acquired_total),
+        static_cast<long long>(stats.lookup_owned_ref_released_total),
+        static_cast<long long>(stats.lookup_owned_ref_transferred_total),
+        static_cast<long long>(lookup_ref_balance),
+        static_cast<long long>(stats.cache_lookup_attempts),
+        static_cast<long long>(stats.cache_lookup_failures),
+        static_cast<long long>(stats.cache_lookup_invalid_input_errors),
+        static_cast<long long>(stats.cache_lookup_pool_inconsistency_errors),
+        static_cast<long long>(stats.cache_lookup_index_inconsistency_errors),
+        static_cast<long long>(stats.cache_lookup_null_frame_errors),
         static_cast<long long>(stats.cache_store_attempts),
         static_cast<long long>(stats.cache_store_successes),
         static_cast<long long>(stats.cache_store_failures),
@@ -510,12 +532,19 @@ static void cnr3_debug_print_output_cache_frame_trace(
         stats.cache_addframeref_total -
         stats.cache_freeframe_total;
 
+    const int64_t lookup_ref_balance =
+        stats.lookup_owned_ref_acquired_total -
+        stats.lookup_owned_ref_released_total -
+        stats.lookup_owned_ref_transferred_total;
+
     cnr3_debug_printf(
         d->debug,
         "output-cache # cnr3_debug_print_output_cache_frame_trace # AFTER-STORE-PRUNE # "
         "instance=%d # frame=%d # store_ok=%d # prune_ok=%d # cached=%llu # "
         "non_checkpoint=%llu # checkpoint=%llu # highest=%d # addframeref_total=%lld # "
-        "freeframe_total=%lld # balance=%lld # validation_attempts=%lld # "
+        "freeframe_total=%lld # balance=%lld # cache_hits_at_arAllFramesReady=%lld # "
+        "cache_misses=%lld # lookup_ref_acquired=%lld # lookup_ref_released=%lld # "
+        "lookup_ref_transferred=%lld # lookup_ref_balance=%lld # validation_attempts=%lld # "
         "validation_successes=%lld # validation_failures=%lld # integrity_errors=%lld # "
         "ref_balance_errors=%lld # store_failures=%lld # prune_after_store_failures=%lld # "
         "hot_zone_updates_at_arInitial=%lld # hot_zone_slides=%lld # "
@@ -532,6 +561,12 @@ static void cnr3_debug_print_output_cache_frame_trace(
         static_cast<long long>(stats.cache_addframeref_total),
         static_cast<long long>(stats.cache_freeframe_total),
         static_cast<long long>(cache_ref_balance),
+        static_cast<long long>(stats.cache_hits_at_arAllFramesReady),
+        static_cast<long long>(stats.cache_misses),
+        static_cast<long long>(stats.lookup_owned_ref_acquired_total),
+        static_cast<long long>(stats.lookup_owned_ref_released_total),
+        static_cast<long long>(stats.lookup_owned_ref_transferred_total),
+        static_cast<long long>(lookup_ref_balance),
         static_cast<long long>(stats.cache_validation_attempts),
         static_cast<long long>(stats.cache_validation_successes),
         static_cast<long long>(stats.cache_validation_failures),
@@ -737,6 +772,74 @@ static void VS_CC cnr3_free(
     }
 }
 
+static void cnr3_for_debug_only_force_cache_lookup_probe(
+    Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-F proof hook.
+
+        This deliberately calls the real CMS02-F find-and-addref helper after a
+        successful store, then immediately releases the caller-owned lookup
+        reference. It proves the atomic lookup/addFrameRef path without relying
+        on VapourSynth to request the same frame twice.
+
+        Remove or disable CNR3_FOR_DEBUG_ONLY_FORCE_CACHE_LOOKUP_PROBE after the
+        CMS02-F lookup/reference path is proven.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_FORCE_CACHE_LOOKUP_PROBE) {
+        (void)d;
+        (void)frame_number;
+        (void)output_cache_store_ok;
+        (void)vsapi;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            vsapi == nullptr ||
+            frame_number < 0 ||
+            !output_cache_store_ok
+            ) {
+            return;
+        }
+
+        const VSFrame* probe_frame =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                frame_number,
+                vsapi
+            );
+
+        if (probe_frame == nullptr) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_force_cache_lookup_probe # FOR-DEBUG-ONLY-FORCE-CACHE-LOOKUP-MISS # instance=%d # frame=%d\n",
+                d->instance_id,
+                frame_number
+            );
+
+            return;
+        }
+
+        vsapi->freeFrame(probe_frame);
+
+        cnr3_output_cache_note_lookup_ref_released(
+            d->output_cache
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_force_cache_lookup_probe # FOR-DEBUG-ONLY-FORCE-CACHE-LOOKUP-HIT-RELEASED # instance=%d # frame=%d\n",
+            d->instance_id,
+            frame_number
+        );
+    }
+}
+
 static const VSFrame* VS_CC cnr3_get_frame(
     int n,
     int activationReason,
@@ -793,6 +896,33 @@ static const VSFrame* VS_CC cnr3_get_frame(
             n
         );
         */
+
+        const VSFrame* cached_output =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                n,
+                vsapi
+            );
+
+        if (cached_output != nullptr) {
+            cnr3_output_cache_note_lookup_ref_transferred(
+                d->output_cache
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_get_frame # CACHE-HIT-RETURN # instance=%d # frame=%d\n",
+                d->instance_id,
+                n
+            );
+
+            cnr3_debug_print_output_cache_summary(
+                d,
+                "after CMS02-F output_cache cache-hit return"
+            );
+
+            return cached_output;
+        }
 
         const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
@@ -965,6 +1095,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 );
             }
         }
+
+        cnr3_for_debug_only_force_cache_lookup_probe(
+            d,
+            n,
+            output_cache_store_ok,
+            vsapi
+        );
 
         cnr3_debug_print_output_cache_frame_trace(
             d,
@@ -1174,6 +1311,13 @@ static void VS_CC cnr3_create(
     }
 
     if (local.debug) {
+        cnr3_debug_printf(
+            local.debug,
+            "CNR3 debug: instance=%d, edit_version=%s\n",
+            local.instance_id,
+            CNR3_EDIT_VERSION
+        );
+
         const int y_mid = local.ln_scaled / 2;
         const int u_mid = local.un_scaled / 2;
         const int v_mid = local.vn_scaled / 2;
@@ -1361,4 +1505,3 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(
         plugin
     );
 }
-

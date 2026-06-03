@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-    "CMS02-F-cache-hit-lookup-v2";
+    "CMS02-F-comment-cleanup-v1";
 
 /*
     Temporary CMS02-F proof hook.

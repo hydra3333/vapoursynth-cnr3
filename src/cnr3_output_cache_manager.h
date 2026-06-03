@@ -113,11 +113,12 @@
 // CMS06 output-frame cache manager.
 //
 // Store/prune proving is live: output_cache stores and prunes real produced
-// frames, but it is not yet output-authoritative.
+// frames. CMS02-F direct cache-hit reuse is wired through caller-owned lookup
+// references.
 //
-// The old strict-streaming cache remains the source of returned output.
-// Cache-hit reuse, recovery walks, and bounded warm-up recovery are not yet
-// wired.
+// The old strict-streaming path remains the cache-miss and newly-computed-frame
+// path for now. Recovery walks and bounded warm-up recovery are not yet wired.
+// -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------

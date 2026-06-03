@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-    "CMS02-F-comment-cleanup-v1";
+    "PRE-CMS02-G-memdiag-format-v2";
 
 /*
     Temporary CMS02-F proof hook.
@@ -64,3 +64,14 @@ constexpr bool CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS =
 */
 constexpr bool CNR3_MEMORY_DIAGNOSTICS =
     CNR3_DEV_DIAGNOSTICS;
+
+/*
+    Memory diagnostics periodic frame interval.
+
+    When debug=1 is active, a memory snapshot is printed every time
+    frame_number > 0 and frame_number % CNR3_MEMORY_DIAG_FRAME_INTERVAL == 0.
+
+    Set to 0 to disable periodic in-run snapshots entirely.
+*/
+// static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;
+static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 5;

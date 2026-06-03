@@ -100,6 +100,15 @@ struct Cnr3MemoryStats {
     uint64_t commit_total_min_bytes = 0;
     uint64_t commit_total_max_bytes = 0;
     long double commit_total_sum_bytes = 0.0L;
+
+    // Baseline snapshot taken at cnr3_create completion.
+    // Used as the reference point for formatted memory-delta output.
+    bool baseline_valid = false;
+    uint64_t baseline_working_set_bytes = 0;
+    uint64_t baseline_private_usage_bytes = 0;
+    uint64_t baseline_avail_phys_bytes = 0;
+    uint64_t baseline_used_phys_bytes = 0;
+    uint64_t baseline_commit_total_bytes = 0;
 };
 
 bool cnr3_memory_take_snapshot(
@@ -115,7 +124,8 @@ void cnr3_memory_record_and_print_snapshot(
     Cnr3MemoryStats& stats,
     bool debug_enabled,
     int instance_id,
-    const char* where
+    const char* where,
+    bool show_legend = false
 );
 
 void cnr3_memory_print_summary(

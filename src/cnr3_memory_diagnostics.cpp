@@ -289,17 +289,152 @@ void cnr3_memory_accumulate_snapshot(
     }
 }
 
+
+static void cnr3_memory_store_baseline_if_needed(
+    Cnr3MemoryStats& stats,
+    const Cnr3MemorySnapshot& snapshot
+) {
+    if (stats.baseline_valid) {
+        return;
+    }
+
+    stats.baseline_valid = true;
+    stats.baseline_working_set_bytes = snapshot.process_working_set_bytes;
+    stats.baseline_private_usage_bytes = snapshot.process_private_usage_bytes;
+    stats.baseline_avail_phys_bytes = snapshot.system_avail_phys_bytes;
+    stats.baseline_used_phys_bytes = snapshot.system_used_phys_bytes;
+    stats.baseline_commit_total_bytes = snapshot.performance_commit_total_bytes;
+}
+
+static double cnr3_memory_delta_percent(
+    double current_mb,
+    double baseline_mb
+) {
+    if (baseline_mb <= 0.0) {
+        return 0.0;
+    }
+
+    return ((current_mb - baseline_mb) / baseline_mb) * 100.0;
+}
+
+static void cnr3_memory_print_legend()
+{
+    std::fprintf(
+        stderr,
+        "  Legend:\n"
+        "  process_working_set    RAM actively mapped to this process; drops after cache release; persistent delta above baseline suggests leak.\n"
+        "  process_private_usage  Best process-level memory-growth indicator; should broadly correlate with cache growth but is not cache-only.\n"
+        "  system_avail_phys      Free physical RAM system-wide; falls as the process/system uses more; small percent change is normal.\n"
+        "  system_used_phys       Physical RAM in use system-wide; mirror of avail_phys; helps confirm system-level impact.\n"
+        "  commit_total           Total committed virtual memory system-wide; can grow with cache and should mostly recover after cleanup.\n"
+        "  peak_working_set       Highest working_set seen this run; reveals worst-case RAM pressure from processing.\n"
+        "  peak_private_usage     Highest private committed memory seen this run; compare with after-cleanup value.\n"
+        "  Min->Max (%)           Percentage spread from minimum to maximum sample; shows movement during the run, not proof of a leak.\n"
+    );
+}
+
+static void cnr3_memory_print_snapshot_row(
+    const char* metric_name,
+    uint64_t current_bytes,
+    uint64_t baseline_bytes
+) {
+    const double current_mb = cnr3_memory_bytes_to_mb(current_bytes);
+    const double baseline_mb = cnr3_memory_bytes_to_mb(baseline_bytes);
+    const double delta_mb = current_mb - baseline_mb;
+    const double delta_percent = cnr3_memory_delta_percent(
+        current_mb,
+        baseline_mb
+    );
+
+    std::fprintf(
+        stderr,
+        "  %-24s %10.2f %10.2f %+11.2f %+11.2f\n",
+        metric_name,
+        current_mb,
+        baseline_mb,
+        delta_mb,
+        delta_percent
+    );
+}
+
+static void cnr3_memory_print_formatted_snapshot(
+    const Cnr3MemoryStats& stats,
+    const Cnr3MemorySnapshot& snapshot,
+    int instance_id,
+    const char* label,
+    bool show_legend
+) {
+    std::fprintf(
+        stderr,
+        "CNR3 memory: instance=%d, %s\n"
+        "  %-24s %10s %10s %11s %11s\n",
+        instance_id,
+        label,
+        "Metric",
+        "Now (MB)",
+        "Start (MB)",
+        "Delta (MB)",
+        "Delta (%)"
+    );
+
+    cnr3_memory_print_snapshot_row(
+        "process_working_set",
+        snapshot.process_working_set_bytes,
+        stats.baseline_working_set_bytes
+    );
+
+    cnr3_memory_print_snapshot_row(
+        "process_private_usage",
+        snapshot.process_private_usage_bytes,
+        stats.baseline_private_usage_bytes
+    );
+
+    cnr3_memory_print_snapshot_row(
+        "system_avail_phys",
+        snapshot.system_avail_phys_bytes,
+        stats.baseline_avail_phys_bytes
+    );
+
+    cnr3_memory_print_snapshot_row(
+        "system_used_phys",
+        snapshot.system_used_phys_bytes,
+        stats.baseline_used_phys_bytes
+    );
+
+    cnr3_memory_print_snapshot_row(
+        "commit_total",
+        snapshot.performance_commit_total_bytes,
+        stats.baseline_commit_total_bytes
+    );
+
+    std::fprintf(
+        stderr,
+        "  %-24s %10.2f   (cumulative peak, no delta)\n"
+        "  %-24s %10.2f   (cumulative peak, no delta)\n",
+        "peak_working_set",
+        cnr3_memory_bytes_to_mb(snapshot.process_peak_working_set_bytes),
+        "peak_private_usage",
+        cnr3_memory_bytes_to_mb(snapshot.process_peak_pagefile_usage_bytes)
+    );
+
+    if (show_legend) {
+        cnr3_memory_print_legend();
+    }
+}
+
 void cnr3_memory_record_and_print_snapshot(
     Cnr3MemoryStats& stats,
     bool debug_enabled,
     int instance_id,
-    const char* where
+    const char* where,
+    bool show_legend
 ) {
     if constexpr (!CNR3_MEMORY_DIAGNOSTICS) {
         (void)stats;
         (void)debug_enabled;
         (void)instance_id;
         (void)where;
+        (void)show_legend;
         return;
     }
     else {
@@ -312,7 +447,7 @@ void cnr3_memory_record_and_print_snapshot(
         if (!cnr3_memory_take_snapshot(snapshot)) {
             std::fprintf(
                 stderr,
-                "CNR3 debug: instance=%d, %s: memory snapshot unavailable.\n",
+                "CNR3 memory: instance=%d, %s: snapshot unavailable.\n",
                 instance_id,
                 where
             );
@@ -320,60 +455,57 @@ void cnr3_memory_record_and_print_snapshot(
             return;
         }
 
+        cnr3_memory_store_baseline_if_needed(stats, snapshot);
         cnr3_memory_accumulate_snapshot(stats, snapshot);
-
-        std::fprintf(
-            stderr,
-            "CNR3 debug: instance=%d, %s: memory snapshot: "
-            "process_ok=%d, working_set_mb=%.2f, peak_working_set_mb=%.2f, "
-            "private_usage_mb=%.2f, pagefile_usage_mb=%.2f, "
-            "peak_pagefile_usage_mb=%.2f, "
-            "global_ok=%d, memory_load_percent=%u, "
-            "system_total_phys_mb=%.2f, system_avail_phys_mb=%.2f, "
-            "system_used_phys_mb=%.2f, "
-            "system_total_pagefile_mb=%.2f, system_avail_pagefile_mb=%.2f, "
-            "system_used_pagefile_mb=%.2f, "
-            "system_total_virtual_mb=%.2f, system_avail_virtual_mb=%.2f, "
-            "system_used_virtual_mb=%.2f, "
-            "performance_ok=%d, commit_total_mb=%.2f, commit_limit_mb=%.2f, "
-            "commit_peak_mb=%.2f, physical_total_mb=%.2f, "
-            "physical_available_mb=%.2f, physical_used_mb=%.2f, "
-            "system_cache_mb=%.2f, kernel_total_mb=%.2f, "
-            "kernel_paged_mb=%.2f, kernel_nonpaged_mb=%.2f\n",
+        cnr3_memory_print_formatted_snapshot(
+            stats,
+            snapshot,
             instance_id,
             where,
-            snapshot.process_ok ? 1 : 0,
-            cnr3_memory_bytes_to_mb(snapshot.process_working_set_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.process_peak_working_set_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.process_private_usage_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.process_pagefile_usage_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.process_peak_pagefile_usage_bytes),
-            snapshot.global_ok ? 1 : 0,
-            snapshot.system_memory_load_percent,
-            cnr3_memory_bytes_to_mb(snapshot.system_total_phys_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_avail_phys_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_used_phys_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_total_pagefile_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_avail_pagefile_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_used_pagefile_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_total_virtual_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_avail_virtual_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.system_used_virtual_bytes),
-            snapshot.performance_ok ? 1 : 0,
-            cnr3_memory_bytes_to_mb(snapshot.performance_commit_total_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_commit_limit_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_commit_peak_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_physical_total_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_physical_available_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_physical_used_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_system_cache_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_kernel_total_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_kernel_paged_bytes),
-            cnr3_memory_bytes_to_mb(snapshot.performance_kernel_nonpaged_bytes)
+            show_legend
         );
 
         std::fflush(stderr);
     }
+}
+
+static double cnr3_memory_min_to_max_percent(
+    double min_mb,
+    double max_mb
+) {
+    if (min_mb <= 0.0) {
+        return 0.0;
+    }
+
+    return ((max_mb - min_mb) / min_mb) * 100.0;
+}
+
+static void cnr3_memory_print_summary_row(
+    const char* metric_name,
+    bool have_value,
+    uint64_t min_bytes,
+    long double sum_bytes,
+    uint64_t sample_count,
+    uint64_t max_bytes
+) {
+    const double min_mb = have_value ? cnr3_memory_bytes_to_mb(min_bytes) : 0.0;
+    const double avg_mb = have_value
+        ? cnr3_memory_average_bytes_to_mb(sum_bytes, sample_count)
+        : 0.0;
+    const double max_mb = have_value ? cnr3_memory_bytes_to_mb(max_bytes) : 0.0;
+    const double min_to_max_percent = have_value
+        ? cnr3_memory_min_to_max_percent(min_mb, max_mb)
+        : 0.0;
+
+    std::fprintf(
+        stderr,
+        "  %-28s %10.2f %10.2f %10.2f %+13.2f\n",
+        metric_name,
+        min_mb,
+        avg_mb,
+        max_mb,
+        min_to_max_percent
+    );
 }
 
 void cnr3_memory_print_summary(
@@ -397,9 +529,8 @@ void cnr3_memory_print_summary(
         if (stats.sample_count == 0) {
             std::fprintf(
                 stderr,
-                "CNR3 debug: instance=%d, %s: memory summary: samples=0\n",
-                instance_id,
-                where
+                "CNR3 memory: instance=%d, summary (0 samples)\n",
+                instance_id
             );
             std::fflush(stderr);
             return;
@@ -407,85 +538,63 @@ void cnr3_memory_print_summary(
 
         std::fprintf(
             stderr,
-            "CNR3 debug: instance=%d, %s: memory summary: samples=%llu, "
-            "metric_samples: working_set=%llu, private_usage=%llu, "
-            "avail_phys=%llu, used_phys=%llu, commit_total=%llu, "
-            "process_working_set_mb min/avg/max=%.2f/%.2f/%.2f, "
-            "process_private_usage_mb min/avg/max=%.2f/%.2f/%.2f, "
-            "system_avail_phys_mb min/avg/max=%.2f/%.2f/%.2f, "
-            "system_used_phys_mb min/avg/max=%.2f/%.2f/%.2f, "
-            "commit_total_mb min/avg/max=%.2f/%.2f/%.2f\n",
+            "CNR3 memory: instance=%d, summary (%llu samples)\n"
+            "  %-28s %10s %10s %10s %13s\n",
             instance_id,
-            where,
             static_cast<unsigned long long>(stats.sample_count),
-            static_cast<unsigned long long>(stats.process_working_set_sample_count),
-            static_cast<unsigned long long>(stats.process_private_usage_sample_count),
-            static_cast<unsigned long long>(stats.system_avail_phys_sample_count),
-            static_cast<unsigned long long>(stats.system_used_phys_sample_count),
-            static_cast<unsigned long long>(stats.commit_total_sample_count),
-            stats.have_process_working_set
-            ? cnr3_memory_bytes_to_mb(stats.process_working_set_min_bytes)
-            : 0.0,
-            stats.have_process_working_set
-            ? cnr3_memory_average_bytes_to_mb(
-                stats.process_working_set_sum_bytes,
-                stats.process_working_set_sample_count
-            )
-            : 0.0,
-            stats.have_process_working_set
-            ? cnr3_memory_bytes_to_mb(stats.process_working_set_max_bytes)
-            : 0.0,
-            stats.have_process_private_usage
-            ? cnr3_memory_bytes_to_mb(stats.process_private_usage_min_bytes)
-            : 0.0,
-            stats.have_process_private_usage
-            ? cnr3_memory_average_bytes_to_mb(
-                stats.process_private_usage_sum_bytes,
-                stats.process_private_usage_sample_count
-            )
-            : 0.0,
-            stats.have_process_private_usage
-            ? cnr3_memory_bytes_to_mb(stats.process_private_usage_max_bytes)
-            : 0.0,
-            stats.have_system_avail_phys
-            ? cnr3_memory_bytes_to_mb(stats.system_avail_phys_min_bytes)
-            : 0.0,
-            stats.have_system_avail_phys
-            ? cnr3_memory_average_bytes_to_mb(
-                stats.system_avail_phys_sum_bytes,
-                stats.system_avail_phys_sample_count
-            )
-            : 0.0,
-            stats.have_system_avail_phys
-            ? cnr3_memory_bytes_to_mb(stats.system_avail_phys_max_bytes)
-            : 0.0,
-            stats.have_system_used_phys
-            ? cnr3_memory_bytes_to_mb(stats.system_used_phys_min_bytes)
-            : 0.0,
-            stats.have_system_used_phys
-            ? cnr3_memory_average_bytes_to_mb(
-                stats.system_used_phys_sum_bytes,
-                stats.system_used_phys_sample_count
-            )
-            : 0.0,
-            stats.have_system_used_phys
-            ? cnr3_memory_bytes_to_mb(stats.system_used_phys_max_bytes)
-            : 0.0,
-
-            stats.have_commit_total
-            ? cnr3_memory_bytes_to_mb(stats.commit_total_min_bytes)
-            : 0.0,
-            stats.have_commit_total
-            ? cnr3_memory_average_bytes_to_mb(
-                stats.commit_total_sum_bytes,
-                stats.commit_total_sample_count
-            )
-            : 0.0,
-            stats.have_commit_total
-            ? cnr3_memory_bytes_to_mb(stats.commit_total_max_bytes)
-            : 0.0
+            "Metric",
+            "Min (MB)",
+            "Avg (MB)",
+            "Max (MB)",
+            "Min->Max (%)"
         );
 
+        cnr3_memory_print_summary_row(
+            "process_working_set",
+            stats.have_process_working_set,
+            stats.process_working_set_min_bytes,
+            stats.process_working_set_sum_bytes,
+            stats.process_working_set_sample_count,
+            stats.process_working_set_max_bytes
+        );
+
+        cnr3_memory_print_summary_row(
+            "process_private_usage",
+            stats.have_process_private_usage,
+            stats.process_private_usage_min_bytes,
+            stats.process_private_usage_sum_bytes,
+            stats.process_private_usage_sample_count,
+            stats.process_private_usage_max_bytes
+        );
+
+        cnr3_memory_print_summary_row(
+            "system_avail_phys",
+            stats.have_system_avail_phys,
+            stats.system_avail_phys_min_bytes,
+            stats.system_avail_phys_sum_bytes,
+            stats.system_avail_phys_sample_count,
+            stats.system_avail_phys_max_bytes
+        );
+
+        cnr3_memory_print_summary_row(
+            "system_used_phys",
+            stats.have_system_used_phys,
+            stats.system_used_phys_min_bytes,
+            stats.system_used_phys_sum_bytes,
+            stats.system_used_phys_sample_count,
+            stats.system_used_phys_max_bytes
+        );
+
+        cnr3_memory_print_summary_row(
+            "commit_total",
+            stats.have_commit_total,
+            stats.commit_total_min_bytes,
+            stats.commit_total_sum_bytes,
+            stats.commit_total_sample_count,
+            stats.commit_total_max_bytes
+        );
+
+        cnr3_memory_print_legend();
         std::fflush(stderr);
     }
 }

@@ -1,5 +1,5 @@
 /*
-    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
+    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2
 
     CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive
     temporal chroma-stabilisation model while using VapourSynth API4 only.
@@ -1121,6 +1121,27 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
         }
 
+        if (
+            CNR3_MEMORY_DIAG_FRAME_INTERVAL > 0 &&
+            n > 0 &&
+            (n % CNR3_MEMORY_DIAG_FRAME_INTERVAL) == 0
+            ) {
+            char memory_label[64];
+            std::snprintf(
+                memory_label,
+                sizeof(memory_label),
+                "frame=%d",
+                n
+            );
+
+            cnr3_memory_record_and_print_snapshot(
+                d->memory_stats,
+                d->debug,
+                d->instance_id,
+                memory_label
+            );
+        }
+
         return dst;
     }
     return nullptr;
@@ -1450,7 +1471,8 @@ static void VS_CC cnr3_create(
         data->memory_stats,
         data->debug,
         data->instance_id,
-        "after cnr3_create configuration before createVideoFilter"
+        "at cnr3_create (baseline)",
+        true
     );
 
     VSFilterDependency deps[] = {

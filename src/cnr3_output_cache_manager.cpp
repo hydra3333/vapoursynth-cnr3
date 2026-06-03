@@ -1171,7 +1171,7 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
     }
 }
 
-bool cnr3_output_cache_find_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_nearest_checkpoint_at_or_before(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
@@ -1186,11 +1186,12 @@ bool cnr3_output_cache_find_nearest_prior_checkpoint(
     */
 
     /*
-        Find the nearest prior checkpoint for requested_frame_number.
+        Find the nearest checkpoint at or before requested_frame_number.
 
         Critical v005 cache-manager ordering rule:
-            "nearest prior checkpoint" means the checkpoint with the highest
-            frame number that is strictly less than requested_frame_number.
+            "nearest checkpoint at or before" means the checkpoint with the
+            highest frame number that is less than or equal to
+            requested_frame_number.
 
         It does not mean most recently inserted, most recently used, most
         recently written, or nearest by any container/insertion/cache-recency
@@ -1200,8 +1201,8 @@ bool cnr3_output_cache_find_nearest_prior_checkpoint(
         checkpoint_pool is std::map<int, Cnr3CheckpointSlot>, so reverse
         iteration visits the highest frame numbers first.
 
-        The first checkpoint whose frame number is strictly less than
-        requested_frame_number is therefore the nearest prior checkpoint.
+        The first checkpoint whose frame number is less than or equal to
+        requested_frame_number is therefore the nearest valid checkpoint.
 
         This is intentionally chosen for maintainability and clarity. The
         checkpoint pool is small, so the cost of reverse scanning is negligible.
@@ -1220,7 +1221,7 @@ bool cnr3_output_cache_find_nearest_prior_checkpoint(
         found != cache.checkpoint_pool.rend();
         ++found
         ) {
-        if (found->first >= requested_frame_number) {
+        if (found->first > requested_frame_number) {
             continue;
         }
 
@@ -1740,7 +1741,7 @@ static bool cnr3_output_cache_check_invariants_externally_locked(
         );
 }
 
-bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
@@ -1754,12 +1755,12 @@ bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
     */
 
     /*
-        Atomically find and pin the nearest prior checkpoint.
+        Atomically find and pin the nearest checkpoint at or before the requested frame.
 
         Critical safety rule:
             Future runtime code must not perform this as separate public calls:
 
-                find nearest prior checkpoint
+                find nearest checkpoint at or before the requested frame
                 unlock
                 later pin checkpoint
 
@@ -1767,7 +1768,7 @@ bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
             the selected checkpoint between the find and the pin.
 
         This helper performs both operations while holding cache.cache_mutex:
-            1. Find the nearest prior checkpoint by strict frame-number order.
+            1. Find the greatest checkpoint frame number <= requested_frame_number.
             2. Verify that the checkpoint slot has a valid frame pointer.
             3. Increment that checkpoint slot's pin_count.
             4. Validate the mutation in development builds.
@@ -1795,7 +1796,7 @@ bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
         found != cache.checkpoint_pool.rend();
         ++found
         ) {
-        if (found->first >= requested_frame_number) {
+        if (found->first > requested_frame_number) {
             continue;
         }
 

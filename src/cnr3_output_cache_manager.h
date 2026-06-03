@@ -577,11 +577,14 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
     This public helper returns only the checkpoint frame number. It deliberately
     does not return a raw cached VSFrame pointer.
 
+    The selected checkpoint is the greatest checkpoint frame number less than or
+    equal to requested_frame_number.
+
     Thread safety:
         Locks cache.cache_mutex internally.
         Caller must not already hold cache.cache_mutex.
 */
-bool cnr3_output_cache_find_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_nearest_checkpoint_at_or_before(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number
@@ -663,11 +666,15 @@ bool cnr3_output_cache_validate_invariants(
 // pin_count is not a VapourSynth frame reference. It does not call addFrameRef()
 // and it does not call freeFrame().
 // 
-// Phase 2H.1 adds atomic find-and-pin support so future runtime code does not
+// CMS02-G.1 adds atomic find-and-pin support so future recovery code does not
 // perform an unsafe find/unlock/pin sequence.
+//
+// The selected checkpoint is the greatest checkpoint frame number less than or
+// equal to requested_frame_number. On success, checkpoint_frame_number receives
+// that frame number and the checkpoint remains pinned until the caller unpins it.
 // -----------------------------------------------------------------------------
 
-bool cnr3_output_cache_find_and_pin_nearest_prior_checkpoint(
+bool cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
     Cnr3OutputCacheManager& cache,
     int requested_frame_number,
     int& checkpoint_frame_number

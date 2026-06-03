@@ -17,8 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION =
-    "CMS02-G2-checkpoint-pin-balance-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G3-recovery-plan-skeleton-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -31,6 +30,25 @@ inline constexpr const char* CNR3_EDIT_VERSION =
     lookup/addref/release path is proven.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_FORCE_CACHE_LOOKUP_PROBE = false;
+
+/*
+    CMS02-G recovery-plan skeleton gate.
+
+    This keeps early recovery-planning helpers available for compile-time and
+    diagnostic proving without changing runtime frame processing. The first
+    skeleton is deliberately not wired into cnr3_get_frame().
+
+    Set true only in a dedicated future proof patch.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON = false;
+
+/*
+    Maximum forward distance allowed by the first bounded recovery-plan helper.
+
+    The helper treats the value as a safety bound only. It does not itself
+    perform recovery, recomputation, or frame generation.
+*/
+static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
 
 /*
     Master development diagnostics switch.

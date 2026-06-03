@@ -2054,6 +2054,79 @@ int64_t cnr3_output_cache_get_total_pin_count(
     return cnr3_output_cache_count_total_pin_count_externally_locked(cache);
 }
 
+bool cnr3_output_cache_prepare_bounded_recovery_plan(
+    Cnr3OutputCacheManager& cache,
+    int requested_frame_number,
+    int max_forward_frame_count,
+    Cnr3OutputCacheRecoveryPlan& recovery_plan
+) {
+    /*
+        Thread safety:
+            Uses public cache-manager helpers that lock internally. The selected
+            checkpoint is pinned before any helper returns success.
+
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+
+        Ownership/lifetime:
+            On success, recovery_plan.checkpoint_pinned is true. The caller must
+            unpin recovery_plan.checkpoint_frame_number exactly once on every
+            success, error, and early-exit path.
+
+        Scope:
+            This helper only prepares bounded recovery metadata. It does not
+            compute frames, read frame pixels, mutate strict-streaming state, or
+            return output frames.
+    */
+
+    recovery_plan = Cnr3OutputCacheRecoveryPlan{};
+
+    if (requested_frame_number < 0 || max_forward_frame_count < 0) {
+        return false;
+    }
+
+    int checkpoint_frame_number = -1;
+
+    if (
+        !cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
+            cache,
+            requested_frame_number,
+            checkpoint_frame_number
+        )
+        ) {
+        return false;
+    }
+
+    const int forward_frame_count =
+        requested_frame_number - checkpoint_frame_number;
+
+    if (
+        checkpoint_frame_number < 0 ||
+        forward_frame_count < 0 ||
+        forward_frame_count > max_forward_frame_count
+        ) {
+        /*
+            The helper acquired a checkpoint pin, but the candidate is outside
+            the caller's recovery bound. Release the pin before returning false
+            so failure never leaves caller-owned pin cleanup behind.
+        */
+        (void)cnr3_output_cache_unpin_checkpoint(
+            cache,
+            checkpoint_frame_number
+        );
+
+        return false;
+    }
+
+    recovery_plan.valid = true;
+    recovery_plan.checkpoint_pinned = true;
+    recovery_plan.requested_frame_number = requested_frame_number;
+    recovery_plan.checkpoint_frame_number = checkpoint_frame_number;
+    recovery_plan.forward_frame_count = forward_frame_count;
+
+    return true;
+}
+
 bool cnr3_output_cache_store_frame(
     Cnr3OutputCacheManager& cache,
     int frame_number,

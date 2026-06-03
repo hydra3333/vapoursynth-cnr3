@@ -575,20 +575,17 @@ void cnr3_output_cache_retire_cold_hot_zones_externally_locked(
 // -----------------------------------------------------------------------------
 
 /*
-    Find the nearest prior checkpoint for requested_frame_number.
+    Find the nearest checkpoint at or before requested_frame_number.
 
     Critical CNR3 output cache manager ordering rule:
-        "nearest prior checkpoint" means the checkpoint with the highest
-        frame number that is strictly less than requested_frame_number.
+        "nearest checkpoint at or before" means the checkpoint with the highest
+        frame number that is less than or equal to requested_frame_number.
 
     It does not mean most recently inserted, most recently used, most recently
     written, or nearest by any container/insertion/cache-recency order.
 
     This public helper returns only the checkpoint frame number. It deliberately
     does not return a raw cached VSFrame pointer.
-
-    The selected checkpoint is the greatest checkpoint frame number less than or
-    equal to requested_frame_number.
 
     Thread safety:
         Locks cache.cache_mutex internally.
@@ -706,6 +703,35 @@ bool cnr3_output_cache_has_pinned_checkpoints(
 
 int64_t cnr3_output_cache_get_total_pin_count(
     Cnr3OutputCacheManager& cache
+);
+
+// -----------------------------------------------------------------------------
+// CNR3 output cache manager recovery-plan helpers - CMS02-G.3
+//
+// These helpers prepare metadata for a future bounded checkpoint recovery walk.
+//
+// They do not perform recovery, recomputation, frame generation, or output-frame
+// return. On success, the selected checkpoint remains pinned and the caller must
+// unpin recovery_plan.checkpoint_frame_number exactly once.
+//
+// This phase is intentionally only a skeleton. It is not wired into
+// cnr3_get_frame().
+// -----------------------------------------------------------------------------
+
+struct Cnr3OutputCacheRecoveryPlan {
+    bool valid = false;
+    bool checkpoint_pinned = false;
+
+    int requested_frame_number = -1;
+    int checkpoint_frame_number = -1;
+    int forward_frame_count = 0;
+};
+
+bool cnr3_output_cache_prepare_bounded_recovery_plan(
+    Cnr3OutputCacheManager& cache,
+    int requested_frame_number,
+    int max_forward_frame_count,
+    Cnr3OutputCacheRecoveryPlan& recovery_plan
 );
 
 // -----------------------------------------------------------------------------

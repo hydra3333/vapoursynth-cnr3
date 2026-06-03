@@ -217,6 +217,16 @@ struct Cnr3OutputCacheStats {
     int64_t checkpoint_unpin_failures = 0;
     int64_t checkpoint_unpin_underflow_errors = 0;
 
+    /*
+        Number of checkpoint pins currently held by callers.
+
+        This is updated with pin_count mutations and must match the sum of all
+        checkpoint_pool slot pin_count values. It makes missing unpin cleanup
+        visible even after cache clear removes the checkpoint slots.
+    */
+    int64_t checkpoint_active_pin_total = 0;
+    int64_t checkpoint_pin_balance_errors = 0;
+
     int64_t cache_integrity_errors = 0;
     int64_t checkpoint_null_frame_errors = 0;
 

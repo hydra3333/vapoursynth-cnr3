@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-    "CMS02-G1-checkpoint-at-or-before-v1";
+    "CMS02-G2-checkpoint-pin-balance-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -73,5 +73,5 @@ constexpr bool CNR3_MEMORY_DIAGNOSTICS =
 
     Set to 0 to disable periodic in-run snapshots entirely.
 */
-static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;
-// static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 5;
+// static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;
+static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 5;

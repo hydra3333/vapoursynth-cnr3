@@ -155,6 +155,23 @@ static int cnr3_output_cache_count_active_hot_zones_externally_locked(
     return active_count;
 }
 
+static int64_t cnr3_output_cache_count_total_pin_count_externally_locked(
+    const Cnr3OutputCacheManager& cache
+)
+{
+    int64_t total_pin_count = 0;
+
+    for (const auto& entry : cache.checkpoint_pool) {
+        const Cnr3CheckpointSlot& slot = entry.second;
+
+        if (slot.pin_count > 0) {
+            total_pin_count += static_cast<int64_t>(slot.pin_count);
+        }
+    }
+
+    return total_pin_count;
+}
+
 static void cnr3_output_cache_record_hot_zone_event_externally_locked(
     Cnr3OutputCacheManager& cache,
     int event_kind,
@@ -1370,19 +1387,10 @@ bool cnr3_output_cache_get_debug_snapshot(
     snapshot.active_ceiling =
         cache.active_ceiling;
 
-    int64_t total_pin_count = 0;
-    bool has_pinned_checkpoints = false;
+    const int64_t total_pin_count =
+        cnr3_output_cache_count_total_pin_count_externally_locked(cache);
 
-    for (const auto& entry : cache.checkpoint_pool) {
-        const Cnr3CheckpointSlot& slot = entry.second;
-
-        if (slot.pin_count > 0) {
-            has_pinned_checkpoints = true;
-            total_pin_count += static_cast<int64_t>(slot.pin_count);
-        }
-    }
-
-    snapshot.has_pinned_checkpoints = has_pinned_checkpoints;
+    snapshot.has_pinned_checkpoints = (total_pin_count > 0);
     snapshot.total_pin_count = total_pin_count;
 
     snapshot.invariants_ok =
@@ -1457,6 +1465,7 @@ static bool cnr3_output_cache_validate_invariants_externally_locked(
     bool valid = true;
 
     int actual_highest_cached_frame_number = -1;
+    int64_t actual_total_pin_count = 0;
 
     for (const auto& entry : cache.non_checkpoint_pool) {
         const int frame_number = entry.first;
@@ -1511,6 +1520,9 @@ static bool cnr3_output_cache_validate_invariants_externally_locked(
             ++cache.stats.cache_integrity_errors;
             ++cache.stats.cache_validation_negative_pin_count_errors;
             valid = false;
+        }
+        else if (slot.pin_count > 0) {
+            actual_total_pin_count += static_cast<int64_t>(slot.pin_count);
         }
 
         if (cache.non_checkpoint_pool.find(frame_number) != cache.non_checkpoint_pool.end()) {
@@ -1584,6 +1596,12 @@ static bool cnr3_output_cache_validate_invariants_externally_locked(
         valid = false;
     }
 
+    if (cache.stats.checkpoint_active_pin_total != actual_total_pin_count) {
+        ++cache.stats.cache_integrity_errors;
+        ++cache.stats.checkpoint_pin_balance_errors;
+        valid = false;
+    }
+
     const int64_t expected_cache_owned_refs =
         static_cast<int64_t>(cache.non_checkpoint_pool.size()) +
         static_cast<int64_t>(cache.checkpoint_pool.size());
@@ -1640,6 +1658,7 @@ static bool cnr3_output_cache_check_invariants_externally_locked(
     */
 
     int actual_highest_cached_frame_number = -1;
+    int64_t actual_total_pin_count = 0;
 
     for (const auto& entry : cache.non_checkpoint_pool) {
         const int frame_number = entry.first;
@@ -1682,6 +1701,9 @@ static bool cnr3_output_cache_check_invariants_externally_locked(
 
         if (slot.pin_count < 0) {
             return false;
+        }
+        else if (slot.pin_count > 0) {
+            actual_total_pin_count += static_cast<int64_t>(slot.pin_count);
         }
 
         if (cache.non_checkpoint_pool.find(frame_number) != cache.non_checkpoint_pool.end()) {
@@ -1733,6 +1755,10 @@ static bool cnr3_output_cache_check_invariants_externally_locked(
                 return false;
             }
         }
+    }
+
+    if (cache.stats.checkpoint_active_pin_total != actual_total_pin_count) {
+        return false;
     }
 
     return (
@@ -1813,6 +1839,7 @@ bool cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
         ++cache.stats.checkpoint_pin_attempts;
 
         ++slot.pin_count;
+        ++cache.stats.checkpoint_active_pin_total;
         checkpoint_frame_number = found->first;
 
         if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
@@ -1823,6 +1850,7 @@ bool cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
                     future caller from missing the matching unpin cleanup.
                 */
                 --slot.pin_count;
+                --cache.stats.checkpoint_active_pin_total;
                 checkpoint_frame_number = -1;
 
                 ++cache.stats.checkpoint_find_and_pin_failures;
@@ -1887,6 +1915,7 @@ bool cnr3_output_cache_pin_checkpoint(
     }
 
     ++slot.pin_count;
+    ++cache.stats.checkpoint_active_pin_total;
 
     if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
@@ -1895,6 +1924,7 @@ bool cnr3_output_cache_pin_checkpoint(
                 caller-visible pin state before returning false.
             */
             --slot.pin_count;
+            --cache.stats.checkpoint_active_pin_total;
 
             ++cache.stats.checkpoint_pin_failures;
             return false;
@@ -1954,7 +1984,16 @@ bool cnr3_output_cache_unpin_checkpoint(
         return false;
     }
 
+    if (cache.stats.checkpoint_active_pin_total <= 0) {
+        ++cache.stats.checkpoint_unpin_failures;
+        ++cache.stats.checkpoint_unpin_underflow_errors;
+        ++cache.stats.checkpoint_pin_balance_errors;
+        ++cache.stats.cache_integrity_errors;
+        return false;
+    }
+
     --slot.pin_count;
+    --cache.stats.checkpoint_active_pin_total;
 
     if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
         if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
@@ -1963,6 +2002,7 @@ bool cnr3_output_cache_unpin_checkpoint(
                 caller-visible pin state before returning false.
             */
             ++slot.pin_count;
+            ++cache.stats.checkpoint_active_pin_total;
 
             ++cache.stats.checkpoint_unpin_failures;
             return false;
@@ -2011,17 +2051,7 @@ int64_t cnr3_output_cache_get_total_pin_count(
 
     std::lock_guard<std::mutex> lock(cache.cache_mutex);
 
-    int64_t total_pin_count = 0;
-
-    for (const auto& entry : cache.checkpoint_pool) {
-        const Cnr3CheckpointSlot& slot = entry.second;
-
-        if (slot.pin_count > 0) {
-            total_pin_count += slot.pin_count;
-        }
-    }
-
-    return total_pin_count;
+    return cnr3_output_cache_count_total_pin_count_externally_locked(cache);
 }
 
 bool cnr3_output_cache_store_frame(

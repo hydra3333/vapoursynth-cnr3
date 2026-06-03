@@ -329,7 +329,7 @@ static void cnr3_memory_print_legend()
         "  commit_total           Total committed virtual memory system-wide; can grow with cache and should mostly recover after cleanup.\n"
         "  peak_working_set       Highest working_set seen this run; reveals worst-case RAM pressure from processing.\n"
         "  peak_private_usage     Highest private committed memory seen this run; compare with after-cleanup value.\n"
-        "  Min->Max (%)           Percentage spread from minimum to maximum sample; shows movement during the run, not proof of a leak.\n"
+        "  Min->Max (%%)           Percentage spread from minimum to maximum sample; shows movement during the run, not proof of a leak.\n"
     );
 }
 

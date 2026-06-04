@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G3-recovery-plan-skeleton-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G4-recovery-plan-probe-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -38,7 +38,8 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_FORCE_CACHE_LOOKUP_PROBE = false;
     diagnostic proving without changing runtime frame processing. The first
     skeleton is deliberately not wired into cnr3_get_frame().
 
-    Set true only in a dedicated future proof patch.
+    Set true only in a dedicated proof patch, then disable again after the
+    recovery-plan pin/unpin path is proven.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON = false;
 

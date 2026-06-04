@@ -840,6 +840,79 @@ static void cnr3_for_debug_only_force_cache_lookup_probe(
     }
 }
 
+static void cnr3_for_debug_only_probe_recovery_plan(
+    Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok
+) {
+    /*
+        Temporary CMS02-G.4 proof hook.
+
+        This calls the real bounded recovery-plan helper after a successful
+        store/prune path, then immediately unpins the selected checkpoint. It
+        proves checkpoint find/pin/unpin balance without performing recovery,
+        recomputation, frame generation, or output-frame replacement.
+
+        Disable CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON after the
+        recovery-plan pin/unpin path is proven.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON) {
+        (void)d;
+        (void)frame_number;
+        (void)output_cache_store_ok;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            frame_number < 0 ||
+            !output_cache_store_ok
+            ) {
+            return;
+        }
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool plan_ok =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+                recovery_plan
+            );
+
+        if (!plan_ok) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_plan # FOR-DEBUG-ONLY-RECOVERY-PLAN-NOT-AVAILABLE # instance=%d # frame=%d # max_forward=%d\n",
+                d->instance_id,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES
+            );
+
+            return;
+        }
+
+        const bool unpin_ok =
+            cnr3_output_cache_unpin_checkpoint(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number
+            );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_plan # FOR-DEBUG-ONLY-RECOVERY-PLAN-PIN-UNPIN # instance=%d # requested=%d # checkpoint=%d # forward=%d # max_forward=%d # unpin_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+            unpin_ok ? 1 : 0
+        );
+    }
+}
+
 static const VSFrame* VS_CC cnr3_get_frame(
     int n,
     int activationReason,
@@ -1101,6 +1174,12 @@ static const VSFrame* VS_CC cnr3_get_frame(
             n,
             output_cache_store_ok,
             vsapi
+        );
+
+        cnr3_for_debug_only_probe_recovery_plan(
+            d,
+            n,
+            output_cache_store_ok
         );
 
         cnr3_debug_print_output_cache_frame_trace(

@@ -1,10 +1,10 @@
 # CNR3 Cache Manager — Revised Design Specification CMS06
 ## Sliding Hot-Zone Pruning with Reference-Count Discipline (Non-Checkpoint Pinning Deferred)
 
-**Date:** 2026-06-02
-**Version:** CMS06
+**Date:** 2026-06-04
+**Version:** CMS06.1
 **Status:** Design specification — ready for coding
-**Supersedes:** CMS05.2b, CMS05.2, CMS05.1, CMS05, CMS04, CMS03, CMS02, CMS01
+**Supersedes:** CMS06, CMS05.2b, CMS05.2, CMS05.1, CMS05, CMS04, CMS03, CMS02, CMS01
 **Also supersedes:** Bounded-recovery policy in handover snapshot v0.14 section 0.9A
 **Companion documents:**
 - CNR3_Handover_Snapshot_v0.14 (for infrastructure already built)
@@ -13,6 +13,12 @@
 ---
 
 ## Changelog
+
+### CMS06.1 — 2026-06-04
+
+Clarifified that the final target is operating safely fmParallel and that interim
+steps of fmUnorderd and fmParallelRequests may be valid interim steps but design
+and coding must lean toward safe operation under fmParallel.
 
 ### CMS06 — 2026-06-02
 
@@ -77,7 +83,15 @@ that policy safe under three VapourSynth execution modes:
 
 - **fmUnordered** — one request in flight at a time, mostly sequential
 - **fmParallelRequests** — multiple concurrent requests, serialised writer
-- **fmParallel** — fully concurrent readers and writers (out of scope)
+- **fmParallel** — fully concurrent readers and writers (final target)
+- Important Notes (repeated in another section):
+    To be very clear, **fmParallel** is specifically the final operational target,
+    hence design and coding should lead toward running safe under fmParallel although
+    iterative design/development may pass through fmUnordered and fmParallelRequests
+    as interim stepping stones.
+    It is conjectured that the cache design is, with correct mutexes in the correct 
+    places, orders and depths, compatible with fmParallel; alignment with this will
+    be subject to later review.
 
 The primary failure modes without the new design:
 
@@ -371,8 +385,21 @@ fill, merges happen too frequently), add `active_request_count` per zone
 (incremented at `arInitial`, decremented at `arAllFramesReady`/`arError`)
 for exact retirement eligibility.
 
-**fmParallel:** out of scope for this iteration.
 
+**fmParallel (full multithreading):**
+
+fmParallel is only potentially out of scope for early to late iteratative development
+in terms of coding.
+    
+Important Notes (repeated in another section):
+    To be very clear, **fmParallel** is specifically the final operational target,
+    hence design and coding should lead toward running safe under fmParallel although
+    iterative design/development may pass through fmUnordered and fmParallelRequests
+    as interim stepping stones.
+    It is conjectured that the cache design is, with correct mutexes in the correct 
+    places, orders and depths, compatible with fmParallel; alignment with this will
+    be subject to later review.
+  
 #### 4.2.5 Zone merge
 
 When all slots are full and no zone is eligible for retirement:

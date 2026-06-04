@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G6-recovery-start-ref-skeleton-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G7A-source-request-plan-skeleton-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -73,8 +73,20 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_WALK_SKELETON = false;
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_START_REF_SKELETON = false;
 
 /*
-    Maximum forward distance allowed by the first bounded recovery-plan helper.
+    CMS02-G per-invocation source-request-plan skeleton gate.
 
+    This proves the frameData shape needed for a future recovery path to carry
+    source-frame request planning from arInitial to arAllFramesReady.
+
+    It must not recompute frames, store recovered frames, return recovered
+    frames, change output authority, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON = false;
+
+/*
+    Maximum forward distance allowed by the first bounded recovery-plan helper.
     The helper treats the value as a safety bound only. It does not itself
     perform recovery, recomputation, or frame generation.
 */

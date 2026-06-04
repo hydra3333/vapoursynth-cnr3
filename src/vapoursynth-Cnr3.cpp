@@ -1104,6 +1104,118 @@ static void cnr3_for_debug_only_probe_recovery_start_ref_skeleton(
     }
 }
 
+struct Cnr3ForDebugOnlyRecoverySourceRequestPlan {
+    /*
+        Temporary CMS02-G.7A frameData payload.
+
+        This is per-invocation state carried from arInitial to arAllFramesReady.
+        It is deliberately separate from Cnr3Data so future fmParallelRequests
+        and fmParallel work does not depend on shared "current request" state.
+
+        This skeleton records the source-frame range that arInitial requested
+        for this invocation. Later phases may widen the range for recovery; this
+        disabled first pass must not change runtime behaviour.
+    */
+    int requested_frame_number = -1;
+    int first_source_frame_number = -1;
+    int last_source_frame_number = -1;
+    int source_frame_count = 0;
+};
+
+static Cnr3ForDebugOnlyRecoverySourceRequestPlan*
+cnr3_for_debug_only_create_recovery_source_request_plan(
+    Cnr3Data* d,
+    int frame_number
+) {
+    /*
+        Temporary CMS02-G.7A proof hook.
+
+        When disabled, this returns nullptr and runtime behaviour is unchanged.
+
+        When enabled in a later proof patch, this creates a per-invocation
+        frameData plan. The first proof keeps the requested source range equal
+        to the normal source frame N so it proves frameData ownership without
+        widening VapourSynth source requests yet.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        (void)d;
+        (void)frame_number;
+        return nullptr;
+    }
+    else {
+        if (d == nullptr || frame_number < 0) {
+            return nullptr;
+        }
+
+        Cnr3ForDebugOnlyRecoverySourceRequestPlan* plan =
+            new Cnr3ForDebugOnlyRecoverySourceRequestPlan;
+
+        plan->requested_frame_number = frame_number;
+        plan->first_source_frame_number = frame_number;
+        plan->last_source_frame_number = frame_number;
+        plan->source_frame_count = 1;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_create_recovery_source_request_plan # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-CREATED # instance=%d # requested=%d # first_source=%d # last_source=%d # count=%d\n",
+            d->instance_id,
+            plan->requested_frame_number,
+            plan->first_source_frame_number,
+            plan->last_source_frame_number,
+            plan->source_frame_count
+        );
+
+        return plan;
+    }
+}
+
+static void cnr3_for_debug_only_destroy_recovery_source_request_plan(
+    Cnr3ForDebugOnlyRecoverySourceRequestPlan*& plan
+) {
+    /*
+        Destroy and null the per-invocation frameData plan.
+
+        This helper deliberately takes the pointer by reference so every cleanup
+        path leaves the caller's local pointer in a known null state.
+    */
+
+    delete plan;
+    plan = nullptr;
+}
+
+static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_plan(
+    void** frameData
+) {
+    /*
+        Defensive cleanup for unexpected activation reasons.
+
+        Normal VapourSynth flow should deliver the per-invocation frameData plan
+        to arAllFramesReady, where the normal cleanup paths handle it. This
+        helper prevents a future enabled proof run from leaking that plan if an
+        unexpected activation reason reaches the function fallback path.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        (void)frameData;
+        return;
+    }
+    else {
+        if (frameData == nullptr || *frameData == nullptr) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan =
+            static_cast<Cnr3ForDebugOnlyRecoverySourceRequestPlan*>(*frameData);
+
+        *frameData = nullptr;
+
+        cnr3_for_debug_only_destroy_recovery_source_request_plan(
+            source_request_plan
+        );
+    }
+}
+
 static const VSFrame* VS_CC cnr3_get_frame(
     int n,
     int activationReason,
@@ -1113,8 +1225,6 @@ static const VSFrame* VS_CC cnr3_get_frame(
     VSCore* core,
     const VSAPI* vsapi
 ) {
-    (void)frameData;
-
     Cnr3Data* d = static_cast<Cnr3Data*>(instanceData);
 
     if (activationReason == arInitial) {
@@ -1142,6 +1252,14 @@ static const VSFrame* VS_CC cnr3_get_frame(
             n
         );
 
+        if (frameData != nullptr) {
+            *frameData =
+                cnr3_for_debug_only_create_recovery_source_request_plan(
+                    d,
+                    n
+                );
+        }
+
         vsapi->requestFrameFilter(n, d->node, frameCtx);
         return nullptr;
     }
@@ -1161,6 +1279,15 @@ static const VSFrame* VS_CC cnr3_get_frame(
         );
         */
 
+        Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan =
+            nullptr;
+
+        if (frameData != nullptr) {
+            source_request_plan =
+                static_cast<Cnr3ForDebugOnlyRecoverySourceRequestPlan*>(*frameData);
+            *frameData = nullptr;
+        }
+
         const VSFrame* cached_output =
             cnr3_output_cache_find_frame_and_add_ref(
                 d->output_cache,
@@ -1169,6 +1296,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
 
         if (cached_output != nullptr) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan(
+                source_request_plan
+            );
+
             cnr3_output_cache_note_lookup_ref_transferred(
                 d->output_cache
             );
@@ -1191,6 +1322,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
         const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
         if (src == nullptr) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan(
+                source_request_plan
+            );
+
             vsapi->setFilterError("CNR3: failed to retrieve source frame.", frameCtx);
             return nullptr;
         }
@@ -1233,6 +1368,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
             );
 
+            cnr3_for_debug_only_destroy_recovery_source_request_plan(
+                source_request_plan
+            );
+
             vsapi->freeFrame(src);
             vsapi->setFilterError(error_message, frameCtx);
             return nullptr;
@@ -1264,6 +1403,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
         );
 
         if (dst == nullptr) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan(
+                source_request_plan
+            );
+
             vsapi->freeFrame(src);
             vsapi->setFilterError("CNR3: failed to allocate destination frame.", frameCtx);
             return nullptr;
@@ -1277,6 +1420,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
             frameCtx,
             vsapi
         )) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan(
+                source_request_plan
+            );
+
             vsapi->freeFrame(src);
             vsapi->freeFrame(dst);
             return nullptr;
@@ -1425,10 +1572,20 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
         }
 
+        cnr3_for_debug_only_destroy_recovery_source_request_plan(
+            source_request_plan
+        );
+
         return dst;
     }
+
+    cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_plan(
+        frameData
+    );
+
     return nullptr;
 }
+
 // -----------------------------------------------------------------------------
 // END CNR3 cache manager
 // -----------------------------------------------------------------------------

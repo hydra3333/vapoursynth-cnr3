@@ -1005,6 +1005,105 @@ static void cnr3_for_debug_only_probe_recovery_walk_skeleton(
     }
 }
 
+static void cnr3_for_debug_only_probe_recovery_start_ref_skeleton(
+    Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.6 proof hook.
+
+        This prepares a bounded recovery plan, obtains a caller-owned reference
+        to the selected checkpoint output frame using the existing atomic
+        lookup/addref helper, then releases that reference.
+
+        The checkpoint pin protects the cache slot from pruning while the plan
+        is active. The caller-owned addref proves the future recovery path can
+        safely hold a usable checkpoint frame reference beyond the cache lookup.
+
+        This deliberately does not request source frames, recompute outputs,
+        store recovered outputs, or return recovered frames.
+    */
+
+    if constexpr (
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON ||
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_START_REF_SKELETON
+        ) {
+        (void)d;
+        (void)frame_number;
+        (void)output_cache_store_ok;
+        (void)vsapi;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            frame_number < 0 ||
+            !output_cache_store_ok ||
+            vsapi == nullptr
+            ) {
+            return;
+        }
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool plan_ok =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+                recovery_plan
+            );
+
+        if (!plan_ok) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_start_ref_skeleton # FOR-DEBUG-ONLY-RECOVERY-START-REF-NOT-AVAILABLE # instance=%d # frame=%d # max_forward=%d\n",
+                d->instance_id,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES
+            );
+
+            return;
+        }
+
+        const VSFrame* checkpoint_ref =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number,
+                vsapi
+            );
+
+        const bool checkpoint_ref_ok =
+            (checkpoint_ref != nullptr);
+
+        if (checkpoint_ref != nullptr) {
+            vsapi->freeFrame(checkpoint_ref);
+            cnr3_output_cache_note_lookup_ref_released(d->output_cache);
+            checkpoint_ref = nullptr;
+        }
+
+        const bool unpin_ok =
+            cnr3_output_cache_unpin_checkpoint(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number
+            );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_start_ref_skeleton # FOR-DEBUG-ONLY-RECOVERY-START-REF-SKELETON # instance=%d # requested=%d # checkpoint=%d # forward=%d # max_forward=%d # checkpoint_ref_ok=%d # released=1 # unpin_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+            checkpoint_ref_ok ? 1 : 0,
+            unpin_ok ? 1 : 0
+        );
+    }
+}
+
 static const VSFrame* VS_CC cnr3_get_frame(
     int n,
     int activationReason,
@@ -1278,6 +1377,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
             d,
             n,
             output_cache_store_ok
+        );
+
+        cnr3_for_debug_only_probe_recovery_start_ref_skeleton(
+            d,
+            n,
+            output_cache_store_ok,
+            vsapi
         );
 
         cnr3_debug_print_output_cache_frame_trace(

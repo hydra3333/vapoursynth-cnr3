@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G5-recovery-walk-skeleton-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G6-recovery-start-ref-skeleton-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -56,6 +56,22 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON = false;
     outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_WALK_SKELETON = false;
+
+/*
+    CMS02-G recovery-start reference skeleton gate.
+
+    This proves that a future recovery path can obtain a caller-owned reference
+    to the selected checkpoint output frame, then release it cleanly.
+
+    It must not recompute frames, store recovered frames, return recovered
+    frames, or change strict-streaming behaviour.
+
+    The proof path requires this flag and
+    CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON to be true. Keep both false
+    outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_START_REF_SKELETON = false;
+
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.
 

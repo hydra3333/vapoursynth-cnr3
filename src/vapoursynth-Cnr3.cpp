@@ -913,6 +913,98 @@ static void cnr3_for_debug_only_probe_recovery_plan(
     }
 }
 
+static void cnr3_for_debug_only_probe_recovery_walk_skeleton(
+    Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok
+) {
+    /*
+        Temporary CMS02-G.5 proof hook.
+
+        This prepares a bounded recovery plan and reports the frame-number range
+        that a future recovery walk would process. It deliberately does not
+        request source frames, recompute outputs, store recovered outputs, or
+        return recovered frames.
+
+        If a plan is obtained, the selected checkpoint must be unpinned exactly
+        once before returning.
+    */
+
+    if constexpr (
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON ||
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_WALK_SKELETON
+        ) {
+        (void)d;
+        (void)frame_number;
+        (void)output_cache_store_ok;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            frame_number < 0 ||
+            !output_cache_store_ok
+            ) {
+            return;
+        }
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool plan_ok =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+                recovery_plan
+            );
+
+        if (!plan_ok) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_walk_skeleton # FOR-DEBUG-ONLY-RECOVERY-WALK-NOT-AVAILABLE # instance=%d # frame=%d # max_forward=%d\n",
+                d->instance_id,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES
+            );
+
+            return;
+        }
+
+        const bool has_frames_to_walk =
+            (recovery_plan.forward_frame_count > 0);
+
+        const int first_recovery_frame =
+            has_frames_to_walk
+            ? recovery_plan.checkpoint_frame_number + 1
+            : -1;
+
+        const int last_recovery_frame =
+            has_frames_to_walk
+            ? recovery_plan.requested_frame_number
+            : -1;
+
+        const bool unpin_ok =
+            cnr3_output_cache_unpin_checkpoint(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number
+            );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_walk_skeleton # FOR-DEBUG-ONLY-RECOVERY-WALK-SKELETON # instance=%d # requested=%d # checkpoint=%d # forward=%d # max_forward=%d # has_walk=%d # first_recovery_frame=%d # last_recovery_frame=%d # unpin_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+            has_frames_to_walk ? 1 : 0,
+            first_recovery_frame,
+            last_recovery_frame,
+            unpin_ok ? 1 : 0
+        );
+    }
+}
+
 static const VSFrame* VS_CC cnr3_get_frame(
     int n,
     int activationReason,
@@ -1177,6 +1269,12 @@ static const VSFrame* VS_CC cnr3_get_frame(
         );
 
         cnr3_for_debug_only_probe_recovery_plan(
+            d,
+            n,
+            output_cache_store_ok
+        );
+
+        cnr3_for_debug_only_probe_recovery_walk_skeleton(
             d,
             n,
             output_cache_store_ok

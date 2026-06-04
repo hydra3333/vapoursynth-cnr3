@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G4-recovery-plan-probe-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G5-recovery-walk-skeleton-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -43,6 +43,19 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_FORCE_CACHE_LOOKUP_PROBE = false;
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON = false;
 
+/*
+    CMS02-G recovery-walk skeleton gate.
+
+    This is a later debug-only scaffold layered above the recovery-plan helper.
+    It logs the checkpoint-to-request walk range that recovery would need, but
+    must not recompute frames, store recovered frames, return recovered frames,
+    or change strict-streaming behaviour.
+
+    The proof path requires both this flag and
+    CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_PLAN_SKELETON to be true. Keep both false
+    outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_WALK_SKELETON = false;
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.
 
@@ -93,4 +106,4 @@ constexpr bool CNR3_MEMORY_DIAGNOSTICS =
     Set to 0 to disable periodic in-run snapshots entirely.
 */
 // static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;
-static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 5;
+static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;

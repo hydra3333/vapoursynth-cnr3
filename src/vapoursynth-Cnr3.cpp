@@ -1927,6 +1927,14 @@ static const VSFrame* VS_CC cnr3_get_frame(
 
         vsapi->freeFrame(src);
 
+        cnr3_for_debug_only_probe_recovery_decision_walk_skeleton(
+            d,
+            n,
+            source_request_plan,
+            true,
+            vsapi
+        );
+
         /*
             CMS05-3A store/prune-only runtime proving.
 
@@ -2004,14 +2012,6 @@ static const VSFrame* VS_CC cnr3_get_frame(
         cnr3_for_debug_only_probe_recovery_start_ref_skeleton(
             d,
             n,
-            output_cache_store_ok,
-            vsapi
-        );
-
-        cnr3_for_debug_only_probe_recovery_decision_walk_skeleton(
-            d,
-            n,
-            source_request_plan,
             output_cache_store_ok,
             vsapi
         );

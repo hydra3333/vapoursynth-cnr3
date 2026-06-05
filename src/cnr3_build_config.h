@@ -17,7 +17,8 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8B-recovery-decision-walk-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8C-pre-store-decision-walk-position-disabled-v1";
+
 /*
     Temporary CMS02-F proof hook.
 

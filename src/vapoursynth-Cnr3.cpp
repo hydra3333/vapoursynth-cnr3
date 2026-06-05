@@ -1557,6 +1557,268 @@ static void cnr3_for_debug_only_probe_recovery_decision_walk_skeleton(
     }
 }
 
+struct Cnr3ForDebugOnlyRecoverySourceFrameSetEntry {
+    int frame_number = -1;
+    const VSFrame* frame = nullptr;
+};
+
+struct Cnr3ForDebugOnlyRecoverySourceFrameSet {
+    int requested_frame_number = -1;
+    int checkpoint_frame_number = -1;
+    int first_walk_frame = -1;
+    int last_walk_frame = -1;
+    std::vector<Cnr3ForDebugOnlyRecoverySourceFrameSetEntry> entries;
+};
+
+static void cnr3_for_debug_only_release_recovery_source_frame_set(
+    const Cnr3Data* d,
+    Cnr3ForDebugOnlyRecoverySourceFrameSet& source_frame_set,
+    const char* reason,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.9 proof helper.
+
+        Release all source frames held by the local per-invocation recovery
+        source-frame set. This helper must be called on both normal and partial
+        failure paths before returning from the proof helper.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_FRAME_SET_SKELETON) {
+        (void)d;
+        (void)source_frame_set;
+        (void)reason;
+        (void)vsapi;
+        return;
+    }
+    else {
+        if (vsapi == nullptr) {
+            return;
+        }
+
+        for (
+            Cnr3ForDebugOnlyRecoverySourceFrameSetEntry& entry :
+            source_frame_set.entries
+            ) {
+            if (entry.frame == nullptr) {
+                continue;
+            }
+
+            vsapi->freeFrame(entry.frame);
+
+            cnr3_debug_printf(
+                d != nullptr ? d->debug : false,
+                "output-cache # cnr3_for_debug_only_release_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-RELEASED # instance=%d # reason=%s # requested=%d # checkpoint=%d # source=%d\n",
+                d != nullptr ? d->instance_id : -1,
+                reason != nullptr ? reason : "unknown",
+                source_frame_set.requested_frame_number,
+                source_frame_set.checkpoint_frame_number,
+                entry.frame_number
+            );
+
+            entry.frame = nullptr;
+        }
+
+        source_frame_set.entries.clear();
+    }
+}
+
+static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
+    Cnr3Data* d,
+    int frame_number,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.9AB proof helper.
+
+        This proves that a future recovery path can retrieve, hold, and release
+        all source frames needed for the checkpoint-to-request walk.
+
+        The source frames are held only in a local per-invocation structure.
+        They are not stored in Cnr3Data, not shared between invocations, and not
+        used to recompute outputs in this proof.
+
+        This must not recompute outputs, store recovered outputs, return
+        recovered outputs, change output authority, or enable any parallel
+        VapourSynth mode.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_FRAME_SET_SKELETON) {
+        (void)d;
+        (void)frame_number;
+        (void)source_request_plan;
+        (void)frameCtx;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            frame_number < 0 ||
+            source_request_plan == nullptr ||
+            frameCtx == nullptr ||
+            vsapi == nullptr
+            ) {
+            return true;
+        }
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool plan_ok =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+                recovery_plan
+            );
+
+        if (!plan_ok) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-NOT-AVAILABLE # instance=%d # requested=%d # max_forward=%d\n",
+                d->instance_id,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES
+            );
+
+            return true;
+        }
+
+        Cnr3ForDebugOnlyRecoverySourceFrameSet source_frame_set;
+
+        source_frame_set.requested_frame_number =
+            recovery_plan.requested_frame_number;
+        source_frame_set.checkpoint_frame_number =
+            recovery_plan.checkpoint_frame_number;
+
+        const bool has_walk =
+            (recovery_plan.forward_frame_count > 0);
+
+        source_frame_set.first_walk_frame =
+            has_walk
+            ? recovery_plan.checkpoint_frame_number + 1
+            : -1;
+
+        source_frame_set.last_walk_frame =
+            has_walk
+            ? recovery_plan.requested_frame_number
+            : -1;
+
+        bool proof_ok = true;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-START # instance=%d # requested=%d # checkpoint=%d # forward=%d # first_walk=%d # last_walk=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            source_frame_set.first_walk_frame,
+            source_frame_set.last_walk_frame
+        );
+
+        if (has_walk) {
+            for (
+                int walk_frame = source_frame_set.first_walk_frame;
+                walk_frame <= source_frame_set.last_walk_frame;
+                ++walk_frame
+                ) {
+                const bool source_covered =
+                    cnr3_for_debug_only_source_request_plan_covers_frame(
+                        source_request_plan,
+                        walk_frame
+                    );
+
+                if (!source_covered) {
+                    cnr3_debug_printf(
+                        d->debug,
+                        "output-cache # cnr3_for_debug_only_probe_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-SOURCE-NOT-COVERED # instance=%d # requested=%d # checkpoint=%d # source=%d # first_source=%d # last_source=%d\n",
+                        d->instance_id,
+                        recovery_plan.requested_frame_number,
+                        recovery_plan.checkpoint_frame_number,
+                        walk_frame,
+                        source_request_plan->first_source_frame_number,
+                        source_request_plan->last_source_frame_number
+                    );
+
+                    proof_ok = false;
+                    break;
+                }
+
+                const VSFrame* source_frame =
+                    vsapi->getFrameFilter(
+                        walk_frame,
+                        d->node,
+                        frameCtx
+                    );
+
+                if (source_frame == nullptr) {
+                    cnr3_debug_printf(
+                        d->debug,
+                        "output-cache # cnr3_for_debug_only_probe_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-ACQUIRE-FAILED # instance=%d # requested=%d # checkpoint=%d # source=%d\n",
+                        d->instance_id,
+                        recovery_plan.requested_frame_number,
+                        recovery_plan.checkpoint_frame_number,
+                        walk_frame
+                    );
+
+                    proof_ok = false;
+                    break;
+                }
+
+                source_frame_set.entries.push_back(
+                    Cnr3ForDebugOnlyRecoverySourceFrameSetEntry{
+                        walk_frame,
+                        source_frame
+                    }
+                );
+
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_probe_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-ACQUIRED # instance=%d # requested=%d # checkpoint=%d # source=%d # held=%llu\n",
+                    d->instance_id,
+                    recovery_plan.requested_frame_number,
+                    recovery_plan.checkpoint_frame_number,
+                    walk_frame,
+                    static_cast<unsigned long long>(source_frame_set.entries.size())
+                );
+            }
+        }
+
+        const size_t acquired_count =
+            source_frame_set.entries.size();
+
+        cnr3_for_debug_only_release_recovery_source_frame_set(
+            d,
+            source_frame_set,
+            proof_ok ? "normal-proof-release" : "failure-release",
+            vsapi
+        );
+
+        const bool unpin_ok =
+            cnr3_output_cache_unpin_checkpoint(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number
+            );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_source_frame_set # FOR-DEBUG-ONLY-RECOVERY-SOURCE-FRAME-SET-END # instance=%d # requested=%d # checkpoint=%d # acquired=%llu # released=%llu # unpin_ok=%d # proof_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            static_cast<unsigned long long>(acquired_count),
+            static_cast<unsigned long long>(acquired_count),
+            unpin_ok ? 1 : 0,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok && unpin_ok;
+    }
+}
+
 static void cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
     const Cnr3Data* d,
     Cnr3ForDebugOnlyRecoverySourceRequestPlan*& plan,
@@ -1934,6 +2196,31 @@ static const VSFrame* VS_CC cnr3_get_frame(
             true,
             vsapi
         );
+
+        if (
+            !cnr3_for_debug_only_probe_recovery_source_frame_set(
+                d,
+                n,
+                source_request_plan,
+                frameCtx,
+                vsapi
+            )
+            ) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "source-frame-set-proof-failure"
+            );
+
+            vsapi->freeFrame(dst);
+
+            vsapi->setFilterError(
+                "CNR3: debug-only recovery source-frame-set proof failed.",
+                frameCtx
+            );
+
+            return nullptr;
+        }
 
         /*
             CMS05-3A store/prune-only runtime proving.

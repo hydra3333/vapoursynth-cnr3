@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8D-pre-store-decision-walk-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G9AB-source-frame-set-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -102,7 +102,20 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SK
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_DECISION_WALK_SKELETON = false;
 
 /*
-    Maximum forward distance allowed by the first bounded recovery-plan helper.    The helper treats the value as a safety bound only. It does not itself
+    CMS02-G.9 recovery source-frame-set skeleton gate.
+
+    This proof-only scaffold retrieves, holds, and releases the source frames
+    needed for the future checkpoint-to-request recovery walk.
+
+    It must not recompute outputs, store recovered outputs, return recovered
+    outputs, change output authority, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_FRAME_SET_SKELETON = false;
+
+/*
+    Maximum forward distance allowed by the first bounded recovery-plan helper.
     perform recovery, recomputation, or frame generation.
 */
 static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;

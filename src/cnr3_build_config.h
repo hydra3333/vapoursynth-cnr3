@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G7C-widened-source-request-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8A-recovery-decision-walk-skeleton-disabled-v1";
 /*
     Temporary CMS02-F proof hook.
 
@@ -83,6 +83,22 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_START_REF_SKELETON = f
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON = false;
+
+/*
+    CMS02-G.8 recovery decision/walk skeleton gate.
+
+    This proof-only scaffold logs the future bounded recovery walk decisions:
+        - selected checkpoint
+        - walk range
+        - whether each frame would use cache or be recomputed
+        - whether the needed source frame is covered by the frameData request plan
+
+    It must not recompute outputs, store recovered outputs, return recovered
+    outputs, change output authority, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_DECISION_WALK_SKELETON = false;
 
 /*
     CMS02-G.7C widened source-request proof range.

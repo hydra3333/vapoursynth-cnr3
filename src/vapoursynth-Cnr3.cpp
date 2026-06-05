@@ -1382,6 +1382,181 @@ static bool cnr3_for_debug_only_retrieve_extra_source_request_plan_frames(
     }
 }
 
+static bool cnr3_for_debug_only_source_request_plan_covers_frame(
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* plan,
+    int frame_number
+) {
+    /*
+        Temporary CMS02-G.8 helper.
+
+        Return whether the per-invocation frameData source-request plan covers
+        frame_number. This is used only by recovery decision/walk diagnostics;
+        it must not request, retrieve, compute, store, or return frames.
+    */
+
+    if (plan == nullptr || frame_number < 0) {
+        return false;
+    }
+
+    return (
+        frame_number >= plan->first_source_frame_number &&
+        frame_number <= plan->last_source_frame_number
+        );
+}
+
+static void cnr3_for_debug_only_probe_recovery_decision_walk_skeleton(
+    Cnr3Data* d,
+    int frame_number,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan,
+    bool output_cache_store_ok,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.8A recovery decision/walk skeleton.
+
+        This is diagnostic scaffolding only. When enabled later, it will prepare
+        a bounded recovery plan, obtain/release a caller-owned checkpoint-start
+        reference, log the future walk range, and log whether each frame would
+        use cache or require computation.
+
+        It must not recompute outputs, store recovered outputs, return recovered
+        outputs, change output authority, or enable any parallel VapourSynth
+        mode.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_DECISION_WALK_SKELETON) {
+        (void)d;
+        (void)frame_number;
+        (void)source_request_plan;
+        (void)output_cache_store_ok;
+        (void)vsapi;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            frame_number < 0 ||
+            !output_cache_store_ok ||
+            vsapi == nullptr
+            ) {
+            return;
+        }
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool plan_ok =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+                recovery_plan
+            );
+
+        if (!plan_ok) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_decision_walk_skeleton # FOR-DEBUG-ONLY-RECOVERY-DECISION-WALK-NOT-AVAILABLE # instance=%d # requested=%d # max_forward=%d\n",
+                d->instance_id,
+                frame_number,
+                CNR3_RECOVERY_MAX_FORWARD_FRAMES
+            );
+
+            return;
+        }
+
+        const VSFrame* checkpoint_ref =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number,
+                vsapi
+            );
+
+        const bool checkpoint_ref_ok =
+            (checkpoint_ref != nullptr);
+
+        if (checkpoint_ref != nullptr) {
+            vsapi->freeFrame(checkpoint_ref);
+            cnr3_output_cache_note_lookup_ref_released(
+                d->output_cache
+            );
+            checkpoint_ref = nullptr;
+        }
+
+        const bool has_walk =
+            (recovery_plan.forward_frame_count > 0);
+
+        const int first_walk_frame =
+            has_walk
+            ? recovery_plan.checkpoint_frame_number + 1
+            : -1;
+
+        const int last_walk_frame =
+            has_walk
+            ? recovery_plan.requested_frame_number
+            : -1;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_decision_walk_skeleton # FOR-DEBUG-ONLY-RECOVERY-DECISION-WALK-START # instance=%d # requested=%d # checkpoint=%d # forward=%d # first_walk=%d # last_walk=%d # checkpoint_ref_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            first_walk_frame,
+            last_walk_frame,
+            checkpoint_ref_ok ? 1 : 0
+        );
+
+        if (has_walk) {
+            for (
+                int walk_frame = first_walk_frame;
+                walk_frame <= last_walk_frame;
+                ++walk_frame
+                ) {
+                const bool already_cached =
+                    cnr3_output_cache_contains_frame(
+                        d->output_cache,
+                        walk_frame
+                    );
+
+                const bool source_covered =
+                    cnr3_for_debug_only_source_request_plan_covers_frame(
+                        source_request_plan,
+                        walk_frame
+                    );
+
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_probe_recovery_decision_walk_skeleton # FOR-DEBUG-ONLY-RECOVERY-DECISION-WALK-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # already_cached=%d # would_compute=%d # source_covered_by_plan=%d\n",
+                    d->instance_id,
+                    recovery_plan.requested_frame_number,
+                    recovery_plan.checkpoint_frame_number,
+                    walk_frame,
+                    already_cached ? 1 : 0,
+                    already_cached ? 0 : 1,
+                    source_covered ? 1 : 0
+                );
+            }
+        }
+
+        const bool unpin_ok =
+            cnr3_output_cache_unpin_checkpoint(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number
+            );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_decision_walk_skeleton # FOR-DEBUG-ONLY-RECOVERY-DECISION-WALK-END # instance=%d # requested=%d # checkpoint=%d # checkpoint_ref_released=%d # unpin_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            checkpoint_ref_ok ? 1 : 0,
+            unpin_ok ? 1 : 0
+        );
+    }
+}
+
 static void cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
     const Cnr3Data* d,
     Cnr3ForDebugOnlyRecoverySourceRequestPlan*& plan,
@@ -1829,6 +2004,14 @@ static const VSFrame* VS_CC cnr3_get_frame(
         cnr3_for_debug_only_probe_recovery_start_ref_skeleton(
             d,
             n,
+            output_cache_store_ok,
+            vsapi
+        );
+
+        cnr3_for_debug_only_probe_recovery_decision_walk_skeleton(
+            d,
+            n,
+            source_request_plan,
             output_cache_store_ok,
             vsapi
         );

@@ -1128,14 +1128,17 @@ cnr3_for_debug_only_create_recovery_source_request_plan(
     int frame_number
 ) {
     /*
-        Temporary CMS02-G.7A proof hook.
+        Temporary CMS02-G.7 source-request proof hook.
 
         When disabled, this returns nullptr and runtime behaviour is unchanged.
 
-        When enabled in a later proof patch, this creates a per-invocation
-        frameData plan. The first proof keeps the requested source range equal
-        to the normal source frame N so it proves frameData ownership without
-        widening VapourSynth source requests yet.
+        When enabled, this creates a per-invocation frameData plan. G.7C widens
+        the requested source range backwards by a small compile-time bounded
+        amount, then proves that arInitial requests that range and
+        arAllFramesReady retrieves only frames from that same plan.
+
+        This must not recompute outputs, store recovered outputs, return
+        recovered outputs, or change output authority.
     */
 
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
@@ -1151,10 +1154,23 @@ cnr3_for_debug_only_create_recovery_source_request_plan(
         Cnr3ForDebugOnlyRecoverySourceRequestPlan* plan =
             new Cnr3ForDebugOnlyRecoverySourceRequestPlan;
 
+        const int bounded_back_frames =
+            std::max(
+                0,
+                CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES
+            );
+
         plan->requested_frame_number = frame_number;
-        plan->first_source_frame_number = frame_number;
+        plan->first_source_frame_number =
+            std::max(
+                0,
+                frame_number - bounded_back_frames
+            );
         plan->last_source_frame_number = frame_number;
-        plan->source_frame_count = 1;
+        plan->source_frame_count =
+            plan->last_source_frame_number -
+            plan->first_source_frame_number +
+            1;
 
         cnr3_debug_printf(
             d->debug,
@@ -1167,6 +1183,68 @@ cnr3_for_debug_only_create_recovery_source_request_plan(
         );
 
         return plan;
+    }
+}
+
+static void cnr3_for_debug_only_request_recovery_source_request_plan_frames(
+    const Cnr3Data* d,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* plan,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.7C proof helper.
+
+        Request every source frame described by the per-invocation frameData
+        plan. arAllFramesReady must later retrieve only frames that were
+        requested by this same invocation's arInitial.
+
+        This is request/retrieve scaffolding only. It must not perform recovery
+        or change output authority.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        (void)d;
+        (void)plan;
+        (void)frameCtx;
+        (void)vsapi;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            d->node == nullptr ||
+            plan == nullptr ||
+            frameCtx == nullptr ||
+            vsapi == nullptr ||
+            plan->first_source_frame_number < 0 ||
+            plan->last_source_frame_number < plan->first_source_frame_number
+            ) {
+            return;
+        }
+
+        for (
+            int source_frame_number = plan->first_source_frame_number;
+            source_frame_number <= plan->last_source_frame_number;
+            ++source_frame_number
+            ) {
+            vsapi->requestFrameFilter(
+                source_frame_number,
+                d->node,
+                frameCtx
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_request_recovery_source_request_plan_frames # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-REQUESTED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
+                d->instance_id,
+                plan->requested_frame_number,
+                source_frame_number,
+                plan->first_source_frame_number,
+                plan->last_source_frame_number,
+                plan->source_frame_count
+            );
+        }
     }
 }
 
@@ -1215,6 +1293,92 @@ static void cnr3_for_debug_only_trace_recovery_source_request_plan_consumed(
             plan->last_source_frame_number,
             plan->source_frame_count
         );
+    }
+}
+
+static bool cnr3_for_debug_only_retrieve_extra_source_request_plan_frames(
+    const Cnr3Data* d,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* plan,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.7C proof helper.
+
+        Retrieve and immediately release source frames in the plan, excluding
+        the normal requested source frame N. The normal path still retrieves N
+        exactly where it did before this proof patch.
+
+        This proves widened source-frame request/retrieve discipline without
+        performing recovery or changing output authority.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        (void)d;
+        (void)plan;
+        (void)frameCtx;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            d->node == nullptr ||
+            plan == nullptr ||
+            frameCtx == nullptr ||
+            vsapi == nullptr ||
+            plan->first_source_frame_number < 0 ||
+            plan->last_source_frame_number < plan->first_source_frame_number
+            ) {
+            return true;
+        }
+
+        for (
+            int source_frame_number = plan->first_source_frame_number;
+            source_frame_number <= plan->last_source_frame_number;
+            ++source_frame_number
+            ) {
+            if (source_frame_number == plan->requested_frame_number) {
+                continue;
+            }
+
+            const VSFrame* extra_source =
+                vsapi->getFrameFilter(
+                    source_frame_number,
+                    d->node,
+                    frameCtx
+                );
+
+            if (extra_source == nullptr) {
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_retrieve_extra_source_request_plan_frames # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-EXTRA-RETRIEVE-FAILED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
+                    d->instance_id,
+                    plan->requested_frame_number,
+                    source_frame_number,
+                    plan->first_source_frame_number,
+                    plan->last_source_frame_number,
+                    plan->source_frame_count
+                );
+
+                return false;
+            }
+
+            vsapi->freeFrame(extra_source);
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_retrieve_extra_source_request_plan_frames # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-EXTRA-RETRIEVED-RELEASED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
+                d->instance_id,
+                plan->requested_frame_number,
+                source_frame_number,
+                plan->first_source_frame_number,
+                plan->last_source_frame_number,
+                plan->source_frame_count
+            );
+        }
+
+        return true;
     }
 }
 
@@ -1336,15 +1500,31 @@ static const VSFrame* VS_CC cnr3_get_frame(
             n
         );
 
+        Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan =
+            nullptr;
+
         if (frameData != nullptr) {
-            *frameData =
+            source_request_plan =
                 cnr3_for_debug_only_create_recovery_source_request_plan(
                     d,
                     n
                 );
+
+            *frameData = source_request_plan;
         }
 
-        vsapi->requestFrameFilter(n, d->node, frameCtx);
+        if (source_request_plan != nullptr) {
+            cnr3_for_debug_only_request_recovery_source_request_plan_frames(
+                d,
+                source_request_plan,
+                frameCtx,
+                vsapi
+            );
+        }
+        else {
+            vsapi->requestFrameFilter(n, d->node, frameCtx);
+        }
+
         return nullptr;
     }
 
@@ -1376,6 +1556,28 @@ static const VSFrame* VS_CC cnr3_get_frame(
             d,
             source_request_plan
         );
+
+        if (
+            !cnr3_for_debug_only_retrieve_extra_source_request_plan_frames(
+                d,
+                source_request_plan,
+                frameCtx,
+                vsapi
+            )
+            ) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "extra-source-retrieval-failure"
+            );
+
+            vsapi->setFilterError(
+                "CNR3: debug-only widened source-request proof failed to retrieve an extra source frame.",
+                frameCtx
+            );
+
+            return nullptr;
+        }
 
         const VSFrame* cached_output =
             cnr3_output_cache_find_frame_and_add_ref(

@@ -17,8 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G7B-source-request-plan-proof-disabled-v1";
-
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G7C-widened-source-request-proof-disabled-v1";
 /*
     Temporary CMS02-F proof hook.
 
@@ -86,8 +85,20 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_START_REF_SKELETON = f
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON = false;
 
 /*
-    Maximum forward distance allowed by the first bounded recovery-plan helper.
-    The helper treats the value as a safety bound only. It does not itself
+    CMS02-G.7C widened source-request proof range.
+
+    When CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON is
+    true, arInitial requests this many predecessor source frames plus the normal
+    requested source frame.
+
+    This is proof-only request/retrieve scaffolding. It must not recompute
+    outputs, store recovered outputs, return recovered outputs, or change output
+    authority.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
+
+/*
+    Maximum forward distance allowed by the first bounded recovery-plan helper.    The helper treats the value as a safety bound only. It does not itself
     perform recovery, recomputation, or frame generation.
 */
 static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;

@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8C-pre-store-decision-walk-position-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8D-pre-store-decision-walk-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -119,7 +119,6 @@ static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
     authority.
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
-
 
 /*
     Master development diagnostics switch.

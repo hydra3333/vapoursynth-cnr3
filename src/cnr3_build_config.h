@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G7A-source-request-plan-skeleton-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G7B-source-request-plan-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.

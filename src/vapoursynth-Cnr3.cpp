@@ -1184,8 +1184,81 @@ static void cnr3_for_debug_only_destroy_recovery_source_request_plan(
     plan = nullptr;
 }
 
+static void cnr3_for_debug_only_trace_recovery_source_request_plan_consumed(
+    const Cnr3Data* d,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* plan
+) {
+    /*
+        Temporary CMS02-G.7B proof trace.
+
+        This proves that arAllFramesReady received the same per-invocation
+        frameData plan that arInitial created. It does not change the requested
+        source-frame range or runtime output behaviour.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        (void)d;
+        (void)plan;
+        return;
+    }
+    else {
+        if (d == nullptr || plan == nullptr) {
+            return;
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-CONSUMED # instance=%d # requested=%d # first_source=%d # last_source=%d # count=%d\n",
+            d->instance_id,
+            plan->requested_frame_number,
+            plan->first_source_frame_number,
+            plan->last_source_frame_number,
+            plan->source_frame_count
+        );
+    }
+}
+
+static void cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+    const Cnr3Data* d,
+    Cnr3ForDebugOnlyRecoverySourceRequestPlan*& plan,
+    const char* reason
+) {
+    /*
+        Temporary CMS02-G.7B proof trace.
+
+        This logs destruction of the per-invocation frameData plan before
+        deleting it. The delete/null action is still performed even when the
+        proof flag is false, so cleanup remains safe if the helper is reused.
+    */
+
+    if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        if (d != nullptr && plan != nullptr) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-DESTROYED # instance=%d # reason=%s # requested=%d # first_source=%d # last_source=%d # count=%d\n",
+                d->instance_id,
+                reason != nullptr ? reason : "unknown",
+                plan->requested_frame_number,
+                plan->first_source_frame_number,
+                plan->last_source_frame_number,
+                plan->source_frame_count
+            );
+        }
+    }
+    else {
+        (void)d;
+        (void)reason;
+    }
+
+    cnr3_for_debug_only_destroy_recovery_source_request_plan(
+        plan
+    );
+}
+
 static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_plan(
-    void** frameData
+    const Cnr3Data* d,
+    void** frameData,
+    int activationReason
 ) {
     /*
         Defensive cleanup for unexpected activation reasons.
@@ -1197,7 +1270,9 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
     */
 
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON) {
+        (void)d;
         (void)frameData;
+        (void)activationReason;
         return;
     }
     else {
@@ -1210,8 +1285,17 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
 
         *frameData = nullptr;
 
-        cnr3_for_debug_only_destroy_recovery_source_request_plan(
-            source_request_plan
+        cnr3_debug_printf(
+            d != nullptr ? d->debug : false,
+            "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-SOURCE-REQUEST-PLAN-UNEXPECTED-FALLBACK # instance=%d # activation_reason=%d\n",
+            d != nullptr ? d->instance_id : -1,
+            activationReason
+        );
+
+        cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+            d,
+            source_request_plan,
+            "unexpected-activation-fallback"
         );
     }
 }
@@ -1288,6 +1372,11 @@ static const VSFrame* VS_CC cnr3_get_frame(
             *frameData = nullptr;
         }
 
+        cnr3_for_debug_only_trace_recovery_source_request_plan_consumed(
+            d,
+            source_request_plan
+        );
+
         const VSFrame* cached_output =
             cnr3_output_cache_find_frame_and_add_ref(
                 d->output_cache,
@@ -1296,8 +1385,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
 
         if (cached_output != nullptr) {
-            cnr3_for_debug_only_destroy_recovery_source_request_plan(
-                source_request_plan
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "cache-hit-return"
             );
 
             cnr3_output_cache_note_lookup_ref_transferred(
@@ -1322,8 +1413,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
         const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
 
         if (src == nullptr) {
-            cnr3_for_debug_only_destroy_recovery_source_request_plan(
-                source_request_plan
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "source-retrieval-failure"
             );
 
             vsapi->setFilterError("CNR3: failed to retrieve source frame.", frameCtx);
@@ -1368,15 +1461,16 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
             );
 
-            cnr3_for_debug_only_destroy_recovery_source_request_plan(
-                source_request_plan
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "out-of-order-failure"
             );
 
             vsapi->freeFrame(src);
             vsapi->setFilterError(error_message, frameCtx);
             return nullptr;
         }
-
         /*
             Normally too noisy for routine debugging.
 
@@ -1403,8 +1497,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
         );
 
         if (dst == nullptr) {
-            cnr3_for_debug_only_destroy_recovery_source_request_plan(
-                source_request_plan
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "destination-allocation-failure"
             );
 
             vsapi->freeFrame(src);
@@ -1420,8 +1516,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
             frameCtx,
             vsapi
         )) {
-            cnr3_for_debug_only_destroy_recovery_source_request_plan(
-                source_request_plan
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "process-frame-failure"
             );
 
             vsapi->freeFrame(src);
@@ -1572,15 +1670,19 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
         }
 
-        cnr3_for_debug_only_destroy_recovery_source_request_plan(
-            source_request_plan
+        cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+            d,
+            source_request_plan,
+            "computed-frame-return"
         );
 
         return dst;
     }
 
     cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_plan(
-        frameData
+        d,
+        frameData,
+        activationReason
     );
 
     return nullptr;

@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8A-recovery-decision-walk-skeleton-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G8B-recovery-decision-walk-proof-disabled-v1";
 /*
     Temporary CMS02-F proof hook.
 
@@ -101,6 +101,12 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SK
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_DECISION_WALK_SKELETON = false;
 
 /*
+    Maximum forward distance allowed by the first bounded recovery-plan helper.    The helper treats the value as a safety bound only. It does not itself
+    perform recovery, recomputation, or frame generation.
+*/
+static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
+
+/*
     CMS02-G.7C widened source-request proof range.
 
     When CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON is
@@ -113,11 +119,6 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_DECISION_WALK_SKELETON
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
 
-/*
-    Maximum forward distance allowed by the first bounded recovery-plan helper.    The helper treats the value as a safety bound only. It does not itself
-    perform recovery, recomputation, or frame generation.
-*/
-static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
 
 /*
     Master development diagnostics switch.

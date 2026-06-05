@@ -1,7 +1,7 @@
-# CNR3 Cache Manager — Revised Design Specification CMS06
+# CNR3 Cache Manager — Revised Design Specification CMS06.1
 ## Sliding Hot-Zone Pruning with Reference-Count Discipline (Non-Checkpoint Pinning Deferred)
 
-**Date:** 2026-06-04
+**Date:** 2026-06-05
 **Version:** CMS06.1
 **Status:** Design specification — ready for coding
 **Supersedes:** CMS06, CMS05.2b, CMS05.2, CMS05.1, CMS05, CMS04, CMS03, CMS02, CMS01
@@ -14,7 +14,7 @@
 
 ## Changelog
 
-### CMS06.1 — 2026-06-04
+### CMS06.1 — 2026-06-05
 
 Clarifified that the final target is operating safely fmParallel and that interim
 steps of fmUnorderd and fmParallelRequests may be valid interim steps but design
@@ -1237,7 +1237,7 @@ Every failure path returning a VS error must execute cleanup:
 > 6. Pruning sees output[449] as outside all hot zones and removes it.
 > 7. Request A no longer has the predecessor it expected.
 
-**Resolution by CMS06 design:**
+**Resolution by CMS06.1-or-later design:**
 
 - **Step 5 in fmUnordered:** The previous request has completed before
   this `arInitial` fires. Request A is not in flight at the time of the
@@ -1316,7 +1316,7 @@ After completing each implementation phase (Section 8) or a coherent
 block of phases, perform a design-compliance review of all changed code
 paths and all unchanged helper functions invoked by those changed paths.
 
-The review must verify that the resulting execution paths follow CMS06,
+The review must verify that the resulting execution paths follow CMS06.1-or-later,
 not older pre-rename or pre-CMS05 assumptions.
 
 ### 12.2 Verification checklist

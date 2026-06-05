@@ -1,11 +1,11 @@
 # CNR3 Handover Pack Production Specification
 
 **Document type:** Specification for producing future CNR3 handover packs  
-**Version:** v1.1  
-**Date:** 2026-06-03  
+**Version:** v1.2  
+**Date:** 2026-06-05  
 **Status:** Current handover-pack production standard  
 **Applies to:** Future CNR3 handover packs, not to a single coding session only  
-**Current design authority wording:** CMS06 or any later cache design spec that explicitly supersedes CMS06
+**Current design authority wording:** CMS06.1 or any later cache design spec that explicitly supersedes CMS06
 
 ---
 
@@ -36,23 +36,23 @@ A single handover document cannot reliably serve every purpose. Stable project c
 
 The CNR3 handover pack therefore consists of:
 
-1. `CNR3_Project_Context_and_Rules_<version>.md`
-2. `CNR3_Decision_Log_<version>.md`
-3. `CNR3_Current_Session_Handover_<version>.md`
-4. Companion reference documents, especially the latest CMS06-or-later cache design specification
+1. `Document_A_CNR3_Project_Context_and_Rules_<version>.md`
+2. `Document_B_CNR3_Decision_Log_<version>.md`
+3. `Document_C_CNR3_Current_Session_Handover_<version>.md`
+4. Companion reference documents, especially the latest CMS06.1-or-later cache design specification
 5. Current source files and logs relevant to the next task
 
 The intended new-chat boot sequence is:
 
-1. Read `CNR3_Project_Context_and_Rules_<version>.md`.
-2. Read `CNR3_Decision_Log_<version>.md`.
-3. Read `CNR3_Current_Session_Handover_<version>.md`.
-4. Read the latest CMS06-or-later cache design document if the task touches cache management.
+1. Read `Document_A_CNR3_Project_Context_and_Rules_<version>.md`.
+2. Read `Document_B_CNR3_Decision_Log_<version>.md`.
+3. Read `Document_C_CNR3_Current_Session_Handover_<version>.md`.
+4. Read the latest CMS06.1-or-later cache design document if the task touches cache management.
 5. Inspect the latest relevant source files before proposing code changes.
 6. Inspect latest logs if the task depends on test evidence.
 7. Treat the current session handover as the source of truth for current implementation state.
 8. Treat the decision log as the source of truth for settled decisions.
-9. Treat CMS06-or-later as the detailed design reference for cache-manager behaviour.
+9. Treat CMS06.1-or-later as the detailed design reference for cache-manager behaviour.
 10. Do not re-litigate settled decisions unless current code, logs, or tests prove a genuine problem.
 
 This structure is designed to be successful for handover from one chat to the next because it gives a new AI three different kinds of information in the order it needs them:
@@ -70,9 +70,9 @@ This is especially important for CNR3 because the cache manager is not a minor o
 A complete handover pack contains exactly these three authored handover documents:
 
 ```text
-A. CNR3_Project_Context_and_Rules_<version>.md
-B. CNR3_Decision_Log_<version>.md
-C. CNR3_Current_Session_Handover_<version>.md
+A. Document_A_CNR3_Project_Context_and_Rules_<version>.md
+B. Document_B_CNR3_Decision_Log_<version>.md
+C. Document_C_CNR3_Current_Session_Handover_<version>.md
 ```
 
 The same version number must be used for A, B, and C in a matched pack.
@@ -80,21 +80,21 @@ The same version number must be used for A, B, and C in a matched pack.
 Example:
 
 ```text
-CNR3_Project_Context_and_Rules_v1.1.md
-CNR3_Decision_Log_v1.1.md
-CNR3_Current_Session_Handover_v1.1.md
+Document_A_CNR3_Project_Context_and_Rules_v1.2.md
+Document_B_CNR3_Decision_Log_v1.2.md
+Document_C_CNR3_Current_Session_Handover_v1.2.md
 ```
 
-The handover pack should normally also be bundled into a zip file:
+The latest version of the handover pack should normally also be bundled into a zip file eg:
 
 ```text
-CNR3_Handover_Pack_v1.1.zip
+CNR3_Handover_Pack_v1.2.zip
 ```
 
 Companion documents are not part of the three-document handover pack, but are required when relevant. These include:
 
 ```text
-latest CMS06-or-later cache design spec
+latest CMS06.1-or-later cache design spec
 latest source files relevant to the next task
 latest logs relevant to the next task
 review/simulation plans when applicable
@@ -102,13 +102,20 @@ review/simulation plans when applicable
 
 ---
 
-# 3. Document A — `CNR3_Project_Context_and_Rules_<version>.md`
+# 3. Document A — `Document_A_CNR3_Project_Context_and_Rules_<version>.md`
 
 ## 3.1 Purpose
 
 Document A is the stable preamble and operating-rules document.
 
-It should change rarely. It should be uploaded at the start of every new CNR3 development chat.
+It seeks to provide context and relevent unformation to facilitate understanding for both humans and AIs.    
+It must not lose context or detail without excellent reason.    
+It should change rarely.    
+It should be based on the previous version of Document A to ensure no loss of context or detail; generally, some prior version were reviewed and approved.    
+It should not contain very long wordy prose without excellent reason.    
+It should not be re-summarized (generally losing relevant detail) without excellent reason.    
+
+It should be uploaded at the start of every new CNR3 development chat.
 
 Its purpose is to give a new AI or human maintainer enough grounding to understand:
 
@@ -117,6 +124,7 @@ Its purpose is to give a new AI or human maintainer enough grounding to understa
 - what VapourSynth is doing that makes the project difficult;
 - why recursive temporal filtering is fragile under out-of-order scheduling;
 - why cache management is central to correctness;
+- evolving relevant interim and long term goals (eg operating safely under fmUNORDERED, fmPARALLELREQUESTS, fmPARALLEL);
 - what safety constraints are non-negotiable;
 - what coding and handover rules must be followed.
 
@@ -255,7 +263,17 @@ It must explain that the cache manager exists to support:
 - no double frees;
 - no stale cache index entries.
 
-### 3.2.6 What safety means
+### 3.2.6 Outline Interim and Long Term goals
+
+ It must outloine interim and long term goals, with the understanding that over time goals will evolve.   
+ For example,
+    Interim:
+        ensure designing and coding which operates safely under fmUNORDERED then fmPARALLELREQUESTS then fmPARALLEL
+        but always with a view to ensuring alignment with the long term goals    
+    Long Term:
+        operating safely under fmPARALLEL
+
+### 3.2.7 What safety means
 
 Document A must define cache/threading safety in concrete terms:
 
@@ -271,7 +289,7 @@ Document A must define cache/threading safety in concrete terms:
 - `addFrameRef`/`freeFrame` ownership must be provably balanced;
 - lookup-owned references must be freed or transferred on every exit path.
 
-### 3.2.7 Why diagnostics are mandatory
+### 3.2.8 Why diagnostics are mandatory
 
 Document A must state that instrumentation is proof of safety, not decoration.
 
@@ -297,7 +315,7 @@ Do not proceed until the discrepancy is understood.
 
 ## 3.3 Required Document A sections
 
-Document A must include these sections or clear equivalents:
+Document A must include at least these sections or clear equivalents:
 
 ```text
 A1. Purpose of this document
@@ -306,12 +324,13 @@ A3. Algorithmic core
 A4. Why VapourSynth scheduling is central
 A5. VapourSynth filter modes relevant to CNR3
 A6. Why the cache manager exists
-A7. Current high-level architecture
-A8. Safety-critical rules
-A9. Diagnostic philosophy
-A10. Coding Rule 1 — Code comments
-A11. Coding Rule 2 — Code update instructions
-A12. New-chat boot sequence
+A7. Prevailing Interim and Long Term Goals
+A8. Current high-level architecture
+A9. Safety-critical rules
+A10. Diagnostic philosophy
+A11. Coding Rule 1 — Code comments
+A12. Coding Rule 2 — Code update instructions
+A13. New-chat boot sequence
 ```
 
 Additional sections may be added when useful, but the listed material must not be omitted.
@@ -331,7 +350,7 @@ cnr3_response_tables.h/.cpp:
     Response table building and table diagnostics.
 
 cnr3_output_cache_manager.h/.cpp:
-    CMS06-or-later output-cache manager.
+    CMS06.1-or-later output-cache manager.
 
 old_cnr3_strict_cache_*:
     Old strict-streaming cache functions retained while output_cache is not yet output-authoritative.
@@ -385,16 +404,16 @@ When producing code changes for a human to apply:
 - Each phase or set of changes, and each individual change within them, must be uniquely identifiable.
 - State the file and function/location explicitly before each block.
 - Use before/after blocks showing exact existing code and exact replacement.
-- Include enough surrounding context to make the before block uniquely findable.
+- Akways include enough surrounding context to make the before block uniquely findable.
 - The before block must match exactly one location in the named file.
 - If a snippet would match multiple locations, extend the context until unique.
 - The after block must be the exact intended replacement.
-- Avoid abstract “insert near” instructions unless backed by actual file context.
+- Avoid abstract “insert near” instructions unless backed by actual file context and ensure it would be very clear to a human reader.
 - When adding a new function, show the insertion point using the end of the preceding function and the start of the following function.
 
 ---
 
-# 4. Document B — `CNR3_Decision_Log_<version>.md`
+# 4. Document B — `Document_B_CNR3_Decision_Log_<version>.md`
 
 ## 4.1 Purpose
 
@@ -426,7 +445,7 @@ Implementation consequence:
     What the code must or must not do.
 
 Reference:
-    CMS06-or-later section, appendix, handover section, source file, or test evidence.
+    CMS06.1-or-later section, appendix, handover section, source file, or test evidence.
 ```
 
 The “Implementation consequence” field is mandatory. It tells the next AI what the decision means in code.
@@ -474,7 +493,7 @@ Do not update Document B for every small code patch.
 
 ---
 
-# 5. Document C — `CNR3_Current_Session_Handover_<version>.md`
+# 5. Document C — `Document_C_CNR3_Current_Session_Handover_<version>.md`
 
 ## 5.1 Purpose
 
@@ -482,7 +501,7 @@ Document C is the volatile current-state/session handover document.
 
 It must be updated at every chat/session boundary.
 
-It must be current, exact, and action-oriented. It must not repeat all design rationale. It should point to Document A, Document B, CMS06-or-later, current source files, and logs.
+It must be current, exact, and action-oriented. It must not repeat all design rationale. It should point to Document A, Document B, CMS06.1-or-later, current source files, and logs.
 
 Document C is the current-state authority.
 
@@ -522,7 +541,7 @@ If the design spec and current code appear to conflict, stop and ask for clarifi
 It must also state when companion design-spec implementation snapshots are known to predate later work, for example:
 
 ```text
-CMS06 Section 14 predates the latest diagnostic work completed in this chat.
+CMS06.1 Section 14 predates the latest diagnostic work completed in this chat.
 Use this Document C as the current implementation-state authority.
 ```
 
@@ -709,10 +728,10 @@ When a new chat is asked to modify output-cache code, upload CMS06-or-later with
 The new chat should be instructed:
 
 ```text
-Use CMS06-or-later as the detailed design reference.
+Use CMS06.1-or-later as the detailed design reference.
 Use the current session handover as the current implementation-state authority.
 Use the decision log to avoid re-opening settled decisions.
-If CMS06-or-later and current code appear to conflict, stop and ask for clarification rather than guessing.
+If CMS06.1-or-later and current code appear to conflict, stop and ask for clarification rather than guessing.
 ```
 
 ---
@@ -761,17 +780,17 @@ We are continuing CNR3 development.
 
 Please read the uploaded documents in this order:
 
-1. CNR3_Project_Context_and_Rules_<version>.md
-2. CNR3_Decision_Log_<version>.md
-3. CNR3_Current_Session_Handover_<version>.md
-4. CMS06 or later cache design specification
+1. Document_A_CNR3_Project_Context_and_Rules_<version>.md
+2. Document_B_CNR3_Decision_Log_<version>.md
+3. Document_C_CNR3_Current_Session_Handover_<version>.md
+4. CMS06.1 or later cache design specification
 5. Current source files/logs
 
 Important:
 - The new chat has no memory of prior chats.
-- Treat CNR3_Current_Session_Handover_<version>.md as the source of truth for current state.
-- Treat CNR3_Decision_Log_<version>.md as the source of truth for settled decisions.
-- Treat CMS06 or later as the detailed design reference.
+- Treat Document_C_CNR3_Current_Session_Handover_<version>.md as the source of truth for current state.
+- Treat Document_B_CNR3_Decision_Log_<version>.md as the source of truth for settled decisions.
+- Treat CMS06.1 or later as the detailed design reference.
 - Do not re-litigate settled decisions unless current code or logs prove a real problem.
 - Follow Rule 1 for code comments.
 - Follow Rule 2 for before/after code update instructions.
@@ -842,7 +861,7 @@ What is fmParallelRequests, and why does it increase cache safety risk?
 Why is full fmParallel out of scope?
 Why is recursive output[N] dependent on filtered output[N - 1]?
 What is the current output-authoritative path?
-What CMS06-or-later phase are we in?
+What CMS06.1-or-later phase are we in?
 What exactly was tested last?
 What exactly is the next task?
 What must not be implemented yet?
@@ -871,13 +890,13 @@ Before issuing a new handover pack, confirm:
 [ ] Document A states cache management is a correctness subsystem.
 [ ] Document A includes Rule 1 and Rule 2.
 [ ] Document B includes current settled decisions and new major decisions.
-[ ] Document B references CMS06-or-later, not stale CMS05 authority wording.
+[ ] Document B references CMS06.1-or-later, not stale CMS05 authority wording.
 [ ] Document C is updated to the exact latest state.
 [ ] Document C explicitly overrides stale implementation snapshots in companion specs.
 [ ] Document C includes latest test evidence and hard-gate result.
 [ ] Document C includes the next task and do-not-implement list.
 [ ] Document C includes current diagnostic policy.
-[ ] Companion CMS06-or-later design spec is identified.
+[ ] Companion CMS06.1-or-later design spec is identified.
 [ ] Required source files/logs for the next task are identified.
 [ ] The handover zip contains exactly the matched A/B/C documents.
 ```

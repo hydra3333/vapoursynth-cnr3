@@ -60,6 +60,8 @@
 #include <cstdio>
 #include <cstdarg>
 #include <cmath>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "VapourSynth4.h"
@@ -585,6 +587,499 @@ static void cnr3_debug_print_output_cache_frame_trace(
     );
 }
 
+struct Cnr3ForDebugOnlyFrameDifferenceStats {
+    int compared_planes = 0;
+    int compared_rows = 0;
+    int64_t samples_compared = 0;
+    int64_t samples_different = 0;
+    int64_t sum_abs_sample_diff = 0;
+    int max_abs_sample_diff = 0;
+};
+
+struct Cnr3ForDebugOnlyRecoveryDifferenceSummary {
+    int64_t frames_checked = 0;
+    int64_t frames_measured = 0;
+    int64_t frames_skipped_no_cached_output = 0;
+    int64_t frames_exact_match = 0;
+    int64_t frames_with_differences = 0;
+    int64_t structural_failures = 0;
+    int64_t lookup_refs_released = 0;
+    int64_t samples_compared = 0;
+    int64_t samples_different = 0;
+    int64_t sum_abs_sample_diff = 0;
+    int max_abs_sample_diff = 0;
+};
+
+static std::mutex g_cnr3_for_debug_only_recovery_difference_summary_mutex;
+
+static std::unordered_map<
+    int,
+    Cnr3ForDebugOnlyRecoveryDifferenceSummary
+> g_cnr3_for_debug_only_recovery_difference_summaries;
+
+static void cnr3_for_debug_only_record_recovery_difference_summary(
+    const Cnr3Data* d,
+    bool lookup_ok,
+    bool measurement_ok,
+    const Cnr3ForDebugOnlyFrameDifferenceStats& frame_stats
+) {
+    /*
+        Temporary CMS02-G.10D.6 proof summary.
+
+        This accumulates per-instance difference-measurement totals for the
+        current proof run. It is diagnostic-only and does not affect cache
+        ownership, output authority, or returned frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASUREMENT_PROOF) {
+        (void)d;
+        (void)lookup_ok;
+        (void)measurement_ok;
+        (void)frame_stats;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_recovery_difference_summary_mutex
+        );
+
+        Cnr3ForDebugOnlyRecoveryDifferenceSummary& summary =
+            g_cnr3_for_debug_only_recovery_difference_summaries[
+                d->instance_id
+            ];
+
+        ++summary.frames_checked;
+
+        if (!lookup_ok) {
+            ++summary.frames_skipped_no_cached_output;
+            return;
+        }
+
+        ++summary.lookup_refs_released;
+
+        if (!measurement_ok) {
+            ++summary.structural_failures;
+            return;
+        }
+
+        ++summary.frames_measured;
+
+        if (frame_stats.samples_different == 0) {
+            ++summary.frames_exact_match;
+        }
+        else {
+            ++summary.frames_with_differences;
+        }
+
+        summary.samples_compared += frame_stats.samples_compared;
+        summary.samples_different += frame_stats.samples_different;
+        summary.sum_abs_sample_diff += frame_stats.sum_abs_sample_diff;
+
+        if (frame_stats.max_abs_sample_diff > summary.max_abs_sample_diff) {
+            summary.max_abs_sample_diff = frame_stats.max_abs_sample_diff;
+        }
+    }
+}
+
+static void cnr3_for_debug_only_print_recovery_difference_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Temporary CMS02-G.10D.6 proof summary print.
+
+        Print one final scan-friendly line so the enabled proof can be audited
+        without counting per-frame measurement lines by hand.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASUREMENT_PROOF) {
+        (void)d;
+        (void)where;
+        return;
+    }
+    else {
+        if (d == nullptr || !d->debug) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyRecoveryDifferenceSummary summary;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                g_cnr3_for_debug_only_recovery_difference_summary_mutex
+            );
+
+            const auto found =
+                g_cnr3_for_debug_only_recovery_difference_summaries.find(
+                    d->instance_id
+                );
+
+            if (
+                found !=
+                g_cnr3_for_debug_only_recovery_difference_summaries.end()
+                ) {
+                summary = found->second;
+            }
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_print_recovery_difference_summary # FOR-DEBUG-ONLY-RECOVERY-STORE-DIFFERENCE-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # frames_measured=%lld # frames_skipped_no_cached_output=%lld # frames_exact_match=%lld # frames_with_differences=%lld # structural_failures=%lld # lookup_refs_released=%lld # samples_compared=%lld # samples_different=%lld # max_abs_sample_diff=%d # sum_abs_sample_diff=%lld # output_authoritative=0 # would_return_recovered_output=0\n",
+            d->instance_id,
+            where != nullptr ? where : "unknown",
+            static_cast<long long>(summary.frames_checked),
+            static_cast<long long>(summary.frames_measured),
+            static_cast<long long>(summary.frames_skipped_no_cached_output),
+            static_cast<long long>(summary.frames_exact_match),
+            static_cast<long long>(summary.frames_with_differences),
+            static_cast<long long>(summary.structural_failures),
+            static_cast<long long>(summary.lookup_refs_released),
+            static_cast<long long>(summary.samples_compared),
+            static_cast<long long>(summary.samples_different),
+            summary.max_abs_sample_diff,
+            static_cast<long long>(summary.sum_abs_sample_diff)
+        );
+    }
+}
+
+static void cnr3_for_debug_only_erase_recovery_difference_summary(
+    const Cnr3Data* d
+) {
+    /*
+        Remove the per-instance proof summary when the filter instance is freed.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASUREMENT_PROOF) {
+        (void)d;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_recovery_difference_summary_mutex
+        );
+
+        g_cnr3_for_debug_only_recovery_difference_summaries.erase(
+            d->instance_id
+        );
+    }
+}
+
+static bool cnr3_for_debug_only_measure_frame_sample_differences(
+    const Cnr3Data* d,
+    int frame_number,
+    const VSFrame* cached_frame,
+    const VSFrame* strict_frame,
+    Cnr3ForDebugOnlyFrameDifferenceStats& total_stats,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.10D.6 proof helper.
+
+        Measure sample differences between a recovery-stored cached output and
+        the normal strict-path output for the same frame. Differences are
+        diagnostic data, not proof failures. Structural mismatches still fail.
+
+        This helper does not own either frame reference.
+    */
+
+    if (
+        d == nullptr ||
+        d->vi == nullptr ||
+        cached_frame == nullptr ||
+        strict_frame == nullptr ||
+        vsapi == nullptr
+        ) {
+        return false;
+    }
+
+    const int bytes_per_sample =
+        (d->vi->format.bitsPerSample + 7) / 8;
+
+    if (bytes_per_sample != 1 && bytes_per_sample != 2) {
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_measure_frame_sample_differences # FOR-DEBUG-ONLY-RECOVERY-STORE-DIFFERENCE-STRUCTURAL-FAILURE # instance=%d # frame=%d # reason=unsupported-bytes-per-sample # bytes_per_sample=%d\n",
+            d->instance_id,
+            frame_number,
+            bytes_per_sample
+        );
+
+        return false;
+    }
+
+    for (int plane = 0; plane < d->vi->format.numPlanes; ++plane) {
+        const int cached_width =
+            vsapi->getFrameWidth(cached_frame, plane);
+
+        const int strict_width =
+            vsapi->getFrameWidth(strict_frame, plane);
+
+        const int cached_height =
+            vsapi->getFrameHeight(cached_frame, plane);
+
+        const int strict_height =
+            vsapi->getFrameHeight(strict_frame, plane);
+
+        if (
+            cached_width != strict_width ||
+            cached_height != strict_height
+            ) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_measure_frame_sample_differences # FOR-DEBUG-ONLY-RECOVERY-STORE-DIFFERENCE-STRUCTURAL-FAILURE # instance=%d # frame=%d # reason=dimension-mismatch # plane=%d # cached_width=%d # strict_width=%d # cached_height=%d # strict_height=%d\n",
+                d->instance_id,
+                frame_number,
+                plane,
+                cached_width,
+                strict_width,
+                cached_height,
+                strict_height
+            );
+
+            return false;
+        }
+
+        const uint8_t* cached_base =
+            vsapi->getReadPtr(cached_frame, plane);
+
+        const uint8_t* strict_base =
+            vsapi->getReadPtr(strict_frame, plane);
+
+        const ptrdiff_t cached_stride =
+            vsapi->getStride(cached_frame, plane);
+
+        const ptrdiff_t strict_stride =
+            vsapi->getStride(strict_frame, plane);
+
+        int64_t plane_samples_compared = 0;
+        int64_t plane_samples_different = 0;
+        int64_t plane_sum_abs_sample_diff = 0;
+        int plane_max_abs_sample_diff = 0;
+        int plane_rows_with_differences = 0;
+
+        for (int y = 0; y < cached_height; ++y) {
+            const uint8_t* cached_row =
+                cached_base + static_cast<ptrdiff_t>(y) * cached_stride;
+
+            const uint8_t* strict_row =
+                strict_base + static_cast<ptrdiff_t>(y) * strict_stride;
+
+            bool row_has_difference = false;
+
+            for (int x = 0; x < cached_width; ++x) {
+                int cached_sample = 0;
+                int strict_sample = 0;
+
+                if (bytes_per_sample == 1) {
+                    cached_sample =
+                        static_cast<int>(cached_row[x]);
+
+                    strict_sample =
+                        static_cast<int>(strict_row[x]);
+                }
+                else {
+                    const uint16_t* cached_row_u16 =
+                        reinterpret_cast<const uint16_t*>(cached_row);
+
+                    const uint16_t* strict_row_u16 =
+                        reinterpret_cast<const uint16_t*>(strict_row);
+
+                    cached_sample =
+                        static_cast<int>(cached_row_u16[x]);
+
+                    strict_sample =
+                        static_cast<int>(strict_row_u16[x]);
+                }
+
+                const int abs_diff =
+                    cached_sample >= strict_sample
+                    ? cached_sample - strict_sample
+                    : strict_sample - cached_sample;
+
+                ++plane_samples_compared;
+
+                if (abs_diff > 0) {
+                    ++plane_samples_different;
+                    plane_sum_abs_sample_diff += abs_diff;
+                    row_has_difference = true;
+
+                    if (abs_diff > plane_max_abs_sample_diff) {
+                        plane_max_abs_sample_diff = abs_diff;
+                    }
+                }
+            }
+
+            if (row_has_difference) {
+                ++plane_rows_with_differences;
+            }
+        }
+
+        ++total_stats.compared_planes;
+        total_stats.compared_rows += cached_height;
+        total_stats.samples_compared += plane_samples_compared;
+        total_stats.samples_different += plane_samples_different;
+        total_stats.sum_abs_sample_diff += plane_sum_abs_sample_diff;
+
+        if (plane_max_abs_sample_diff > total_stats.max_abs_sample_diff) {
+            total_stats.max_abs_sample_diff = plane_max_abs_sample_diff;
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_measure_frame_sample_differences # FOR-DEBUG-ONLY-RECOVERY-STORE-DIFFERENCE-PLANE # instance=%d # frame=%d # plane=%d # width=%d # height=%d # samples_compared=%lld # samples_different=%lld # rows_with_differences=%d # max_abs_sample_diff=%d # sum_abs_sample_diff=%lld # exact_match=%d\n",
+            d->instance_id,
+            frame_number,
+            plane,
+            cached_width,
+            cached_height,
+            static_cast<long long>(plane_samples_compared),
+            static_cast<long long>(plane_samples_different),
+            plane_rows_with_differences,
+            plane_max_abs_sample_diff,
+            static_cast<long long>(plane_sum_abs_sample_diff),
+            plane_samples_different == 0 ? 1 : 0
+        );
+    }
+
+    cnr3_debug_printf(
+        d->debug,
+        "output-cache # cnr3_for_debug_only_measure_frame_sample_differences # FOR-DEBUG-ONLY-RECOVERY-STORE-DIFFERENCE-MEASURED # instance=%d # frame=%d # compared_planes=%d # compared_rows=%d # samples_compared=%lld # samples_different=%lld # max_abs_sample_diff=%d # sum_abs_sample_diff=%lld # exact_match=%d # output_authoritative=0 # would_return_recovered_output=0\n",
+        d->instance_id,
+        frame_number,
+        total_stats.compared_planes,
+        total_stats.compared_rows,
+        static_cast<long long>(total_stats.samples_compared),
+        static_cast<long long>(total_stats.samples_different),
+        total_stats.max_abs_sample_diff,
+        static_cast<long long>(total_stats.sum_abs_sample_diff),
+        total_stats.samples_different == 0 ? 1 : 0
+    );
+
+    return true;
+}
+
+static bool cnr3_for_debug_only_probe_recovery_store_difference_measurement(
+    Cnr3Data* d,
+    int frame_number,
+    const VSFrame* strict_frame,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.10D.6 proof helper.
+
+        Look up the recovery-stored cached frame for frame_number and measure
+        sample differences from the normal strict-path output frame. The lookup
+        reference is caller-owned and must be released on every path.
+
+        Sample differences are expected to be possible once recovery starts from
+        a checkpoint rather than the full recursive history. They are measured,
+        not treated as proof failures.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASUREMENT_PROOF) {
+        (void)d;
+        (void)frame_number;
+        (void)strict_frame;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            strict_frame == nullptr ||
+            vsapi == nullptr ||
+            frame_number < 0
+            ) {
+            return true;
+        }
+
+        const VSFrame* cached_frame =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                frame_number,
+                vsapi
+            );
+
+        const bool lookup_ok =
+            (cached_frame != nullptr);
+
+        Cnr3ForDebugOnlyFrameDifferenceStats total_stats;
+        bool measurement_ok = false;
+
+        if (cached_frame != nullptr) {
+            measurement_ok =
+                cnr3_for_debug_only_measure_frame_sample_differences(
+                    d,
+                    frame_number,
+                    cached_frame,
+                    strict_frame,
+                    total_stats,
+                    vsapi
+                );
+
+            vsapi->freeFrame(cached_frame);
+            cnr3_output_cache_note_lookup_ref_released(
+                d->output_cache
+            );
+
+            cached_frame = nullptr;
+        }
+
+        const bool exact_match =
+            (
+                measurement_ok &&
+                total_stats.samples_different == 0
+                );
+
+        /*
+            Frame 0 and any frame not recovery-stored before this point have no
+            cached recovery output to measure. That is not a proof failure. The
+            proof only measures frames for which a recovery-stored cached output
+            is already present before the normal strict-path duplicate store.
+        */
+        const bool proof_ok =
+            (
+                !lookup_ok ||
+                measurement_ok
+                );
+
+        cnr3_for_debug_only_record_recovery_difference_summary(
+            d,
+            lookup_ok,
+            measurement_ok,
+            total_stats
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_store_difference_measurement # FOR-DEBUG-ONLY-RECOVERY-STORE-DIFFERENCE-END # instance=%d # frame=%d # lookup_ok=%d # measurement_ok=%d # measured=%d # exact_match=%d # samples_compared=%lld # samples_different=%lld # max_abs_sample_diff=%d # sum_abs_sample_diff=%lld # released_lookup_ref=%d # no_cached_recovery_output_is_ok=%d # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            frame_number,
+            lookup_ok ? 1 : 0,
+            measurement_ok ? 1 : 0,
+            lookup_ok ? 1 : 0,
+            exact_match ? 1 : 0,
+            static_cast<long long>(total_stats.samples_compared),
+            static_cast<long long>(total_stats.samples_different),
+            total_stats.max_abs_sample_diff,
+            static_cast<long long>(total_stats.sum_abs_sample_diff),
+            lookup_ok ? 1 : 0,
+            lookup_ok ? 0 : 1,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok;
+    }
+}
+
 static int64_t get_optional_int(
     const VSMap* in,
     const VSAPI* vsapi,
@@ -733,6 +1228,11 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
+        cnr3_for_debug_only_print_recovery_difference_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
         cnr3_memory_record_and_print_snapshot(
             d->memory_stats,
             d->debug,
@@ -767,6 +1267,8 @@ static void VS_CC cnr3_free(
             d->instance_id,
             "before Cnr3Data delete"
         );
+
+        cnr3_for_debug_only_erase_recovery_difference_summary(d);
 
         delete d;
     }
@@ -3001,6 +3503,30 @@ static const VSFrame* VS_CC cnr3_get_frame(
             return nullptr;
         }
 
+        if (
+            !cnr3_for_debug_only_probe_recovery_store_difference_measurement(
+                d,
+                n,
+                dst,
+                vsapi
+            )
+            ) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "recovery-store-difference-measurement-proof-failure"
+            );
+
+            vsapi->freeFrame(dst);
+
+            vsapi->setFilterError(
+                "CNR3: debug-only recovery-store difference measurement proof failed.",
+                frameCtx
+            );
+
+            return nullptr;
+        }
+
         /*
             CMS05-3A store/prune-only runtime proving.
 
@@ -3008,8 +3534,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
             The already-produced dst frame remains the frame returned to
             VapourSynth.
 
-            Purpose:
-                - store the produced output frame in output_cache;
+            Purpose:                - store the produced output frame in output_cache;
                 - exercise addFrameRef/freeFrame ownership accounting;
                 - exercise active_ceiling, hot zones, and pruning on real frames;
                 - collect diagnostics before any future output-cache read path is

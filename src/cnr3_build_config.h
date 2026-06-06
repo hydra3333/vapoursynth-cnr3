@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D5-local-bounded-walk-store-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D6-recovery-store-difference-measurement-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -183,6 +183,27 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_COM
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_STORE_PROOF = false;
+
+/*
+    CMS02-G.10D.6 recovery-store difference-measurement proof gate.
+
+    This proof-only scaffold compares a recovery-stored cached output frame
+    against the normal strict-streaming output frame before the normal path's
+    duplicate store no-op.
+
+    Sample differences are measured and reported. They do not fail the proof by
+    themselves, because bounded recovery from a checkpoint can legitimately
+    produce subtly different recursive history from full strict-streaming output.
+
+    Structural failures such as lookup failure, dimension mismatch, unsupported
+    sample size, or lookup-reference cleanup failure remain proof failures.
+
+    It must not return recovered outputs, change output authority, mutate old
+    strict-streaming state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASUREMENT_PROOF = false;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

@@ -772,6 +772,237 @@ static void cnr3_for_debug_only_erase_recovery_difference_summary(
     }
 }
 
+struct Cnr3ForDebugOnlyRecoveryReturnDecisionSummary {
+    int64_t frames_checked = 0;
+    int64_t candidates_found = 0;
+    int64_t frames_skipped_no_candidate = 0;
+    int64_t would_be_returnable = 0;
+    int64_t lookup_refs_released = 0;
+    int64_t lookup_failures = 0;
+    int64_t actual_recovered_returns = 0;
+};
+
+static std::mutex g_cnr3_for_debug_only_recovery_return_decision_summary_mutex;
+
+static std::unordered_map<
+    int,
+    Cnr3ForDebugOnlyRecoveryReturnDecisionSummary
+> g_cnr3_for_debug_only_recovery_return_decision_summaries;
+
+static void cnr3_for_debug_only_record_recovery_return_decision_summary(
+    const Cnr3Data* d,
+    bool candidate_found,
+    bool lookup_ref_released
+) {
+    /*
+        Temporary CMS02-G.10D.7 proof summary.
+
+        This records whether a recovery-stored cached output was available at
+        the future return-decision point. It is diagnostic-only and does not
+        affect cache ownership, output authority, or returned frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+        (void)d;
+        (void)candidate_found;
+        (void)lookup_ref_released;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_recovery_return_decision_summary_mutex
+        );
+
+        Cnr3ForDebugOnlyRecoveryReturnDecisionSummary& summary =
+            g_cnr3_for_debug_only_recovery_return_decision_summaries[
+                d->instance_id
+            ];
+
+        ++summary.frames_checked;
+
+        if (!candidate_found) {
+            ++summary.frames_skipped_no_candidate;
+            return;
+        }
+
+        ++summary.candidates_found;
+        ++summary.would_be_returnable;
+
+        if (lookup_ref_released) {
+            ++summary.lookup_refs_released;
+        }
+        else {
+            ++summary.lookup_failures;
+        }
+    }
+}
+
+static void cnr3_for_debug_only_print_recovery_return_decision_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Temporary CMS02-G.10D.7 proof summary print.
+
+        Print one final scan-friendly line so the enabled return-decision proof
+        can be audited without counting per-frame decision lines by hand.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+        (void)d;
+        (void)where;
+        return;
+    }
+    else {
+        if (d == nullptr || !d->debug) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyRecoveryReturnDecisionSummary summary;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                g_cnr3_for_debug_only_recovery_return_decision_summary_mutex
+            );
+
+            const auto found =
+                g_cnr3_for_debug_only_recovery_return_decision_summaries.find(
+                    d->instance_id
+                );
+
+            if (
+                found !=
+                g_cnr3_for_debug_only_recovery_return_decision_summaries.end()
+                ) {
+                summary = found->second;
+            }
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_print_recovery_return_decision_summary # FOR-DEBUG-ONLY-RECOVERY-RETURN-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # candidates_found=%lld # frames_skipped_no_candidate=%lld # would_be_returnable=%lld # lookup_refs_released=%lld # lookup_failures=%lld # actual_recovered_returns=%lld # output_authoritative=0 # would_transfer_lookup_ref_to_vapoursynth=0\n",
+            d->instance_id,
+            where != nullptr ? where : "unknown",
+            static_cast<long long>(summary.frames_checked),
+            static_cast<long long>(summary.candidates_found),
+            static_cast<long long>(summary.frames_skipped_no_candidate),
+            static_cast<long long>(summary.would_be_returnable),
+            static_cast<long long>(summary.lookup_refs_released),
+            static_cast<long long>(summary.lookup_failures),
+            static_cast<long long>(summary.actual_recovered_returns)
+        );
+    }
+}
+
+static void cnr3_for_debug_only_erase_recovery_return_decision_summary(
+    const Cnr3Data* d
+) {
+    /*
+        Remove the per-instance proof summary when the filter instance is freed.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+        (void)d;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_recovery_return_decision_summary_mutex
+        );
+
+        g_cnr3_for_debug_only_recovery_return_decision_summaries.erase(
+            d->instance_id
+        );
+    }
+}
+
+static bool cnr3_for_debug_only_probe_recovery_return_decision_dry_run(
+    Cnr3Data* d,
+    int frame_number,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.10D.7 proof helper.
+
+        Look up the recovery-stored cached output that a future
+        output-authoritative path could return. This dry-run releases the
+        caller-owned lookup reference immediately and always lets the normal
+        strict-path output continue.
+
+        Frame 0 and any frame with no recovery-stored output yet are skipped as
+        non-failures.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+        (void)d;
+        (void)frame_number;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            vsapi == nullptr ||
+            frame_number < 0
+            ) {
+            return true;
+        }
+
+        const VSFrame* candidate_frame =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                frame_number,
+                vsapi
+            );
+
+        const bool candidate_found =
+            (candidate_frame != nullptr);
+
+        bool lookup_ref_released = false;
+
+        if (candidate_frame != nullptr) {
+            vsapi->freeFrame(candidate_frame);
+            cnr3_output_cache_note_lookup_ref_released(
+                d->output_cache
+            );
+
+            candidate_frame = nullptr;
+            lookup_ref_released = true;
+        }
+
+        const bool would_be_returnable =
+            candidate_found &&
+            lookup_ref_released;
+
+        cnr3_for_debug_only_record_recovery_return_decision_summary(
+            d,
+            candidate_found,
+            lookup_ref_released
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_return_decision_dry_run # FOR-DEBUG-ONLY-RECOVERY-RETURN-DECISION # instance=%d # frame=%d # candidate_lookup_ok=%d # would_be_returnable=%d # released_lookup_ref=%d # no_cached_recovery_output_is_ok=%d # actual_returned_recovered_output=0 # returned_normal_strict_output=1 # output_authoritative=0 # would_transfer_lookup_ref_to_vapoursynth=0 # mutates_old_strict=0 # proof_ok=1\n",
+            d->instance_id,
+            frame_number,
+            candidate_found ? 1 : 0,
+            would_be_returnable ? 1 : 0,
+            lookup_ref_released ? 1 : 0,
+            candidate_found ? 0 : 1
+        );
+
+        return true;
+    }
+}
+
 static bool cnr3_for_debug_only_measure_frame_sample_differences(
     const Cnr3Data* d,
     int frame_number,
@@ -1233,6 +1464,11 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
+        cnr3_for_debug_only_print_recovery_return_decision_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
         cnr3_memory_record_and_print_snapshot(
             d->memory_stats,
             d->debug,
@@ -1269,6 +1505,7 @@ static void VS_CC cnr3_free(
         );
 
         cnr3_for_debug_only_erase_recovery_difference_summary(d);
+        cnr3_for_debug_only_erase_recovery_return_decision_summary(d);
 
         delete d;
     }
@@ -3521,6 +3758,29 @@ static const VSFrame* VS_CC cnr3_get_frame(
 
             vsapi->setFilterError(
                 "CNR3: debug-only recovery-store difference measurement proof failed.",
+                frameCtx
+            );
+
+            return nullptr;
+        }
+
+        if (
+            !cnr3_for_debug_only_probe_recovery_return_decision_dry_run(
+                d,
+                n,
+                vsapi
+            )
+            ) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "recovery-return-decision-dry-run-failure"
+            );
+
+            vsapi->freeFrame(dst);
+
+            vsapi->setFilterError(
+                "CNR3: debug-only recovery-return decision dry-run failed.",
                 frameCtx
             );
 

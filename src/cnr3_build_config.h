@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D6-recovery-store-difference-measurement-proof-v1-PASSED";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D7-recovery-return-decision-dry-run-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -204,6 +204,21 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_STO
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASUREMENT_PROOF = false;
+
+/*
+    CMS02-G.10D.7 recovery-return decision dry-run gate.
+
+    This proof-only scaffold looks up the recovery-stored cached output that a
+    future output-authoritative path could return, records whether it would be
+    returnable, then releases the caller-owned lookup reference.
+
+    It must not return recovered outputs, transfer lookup references to
+    VapourSynth, change output authority, skip normal strict-path computation,
+    mutate old strict-streaming state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN = false;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

@@ -1639,6 +1639,22 @@ static bool cnr3_for_debug_only_source_frame_set_holds_frame(
     return false;
 }
 
+static const VSFrame* cnr3_for_debug_only_find_source_frame_in_set(
+    const Cnr3ForDebugOnlyRecoverySourceFrameSet& source_frame_set,
+    int frame_number
+) {
+    for (
+        const Cnr3ForDebugOnlyRecoverySourceFrameSetEntry& entry :
+        source_frame_set.entries
+        ) {
+        if (entry.frame_number == frame_number) {
+            return entry.frame;
+        }
+    }
+
+    return nullptr;
+}
+
 static bool cnr3_for_debug_only_probe_recovery_compute_dry_run(
     Cnr3Data* d,
     const Cnr3OutputCacheRecoveryPlan& recovery_plan,
@@ -1781,11 +1797,183 @@ static bool cnr3_for_debug_only_probe_recovery_compute_dry_run(
     }
 }
 
+static bool cnr3_for_debug_only_probe_recovery_local_single_compute(
+    Cnr3Data* d,
+    const Cnr3OutputCacheRecoveryPlan& recovery_plan,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan,
+    const Cnr3ForDebugOnlyRecoverySourceFrameSet& source_frame_set,
+    VSFrameContext* frameCtx,
+    VSCore* core,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.10D.1 proof helper.
+
+        This proves one actual local recovery computation only when the selected
+        checkpoint is the immediate predecessor of the requested frame. The
+        computed frame is released immediately. It is not stored, returned, or
+        made output-authoritative.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_SINGLE_COMPUTE_PROOF) {
+        (void)d;
+        (void)recovery_plan;
+        (void)source_request_plan;
+        (void)source_frame_set;
+        (void)frameCtx;
+        (void)core;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            d->vi == nullptr ||
+            source_request_plan == nullptr ||
+            frameCtx == nullptr ||
+            core == nullptr ||
+            vsapi == nullptr ||
+            !recovery_plan.valid ||
+            !recovery_plan.checkpoint_pinned
+            ) {
+            return true;
+        }
+
+        const bool immediate_predecessor_case =
+            (
+                recovery_plan.forward_frame_count == 1 &&
+                recovery_plan.requested_frame_number ==
+                recovery_plan.checkpoint_frame_number + 1
+                );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_local_single_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-SINGLE-COMPUTE-START # instance=%d # requested=%d # checkpoint=%d # forward=%d # immediate_predecessor_case=%d # output_authoritative=0 # mutates_old_strict=0\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            immediate_predecessor_case ? 1 : 0
+        );
+
+        if (!immediate_predecessor_case) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_local_single_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-SINGLE-COMPUTE-SKIP # instance=%d # requested=%d # checkpoint=%d # reason=not-immediate-predecessor-case # actual_compute=0\n",
+                d->instance_id,
+                recovery_plan.requested_frame_number,
+                recovery_plan.checkpoint_frame_number
+            );
+
+            return true;
+        }
+
+        const bool source_covered =
+            cnr3_for_debug_only_source_request_plan_covers_frame(
+                source_request_plan,
+                recovery_plan.requested_frame_number
+            );
+
+        const VSFrame* source_frame =
+            cnr3_for_debug_only_find_source_frame_in_set(
+                source_frame_set,
+                recovery_plan.requested_frame_number
+            );
+
+        const bool source_held =
+            (source_frame != nullptr);
+
+        const VSFrame* checkpoint_ref =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number,
+                vsapi
+            );
+
+        const bool checkpoint_ref_ok =
+            (checkpoint_ref != nullptr);
+
+        bool proof_ok =
+            source_covered &&
+            source_held &&
+            checkpoint_ref_ok;
+
+        VSFrame* recovered_frame = nullptr;
+
+        bool recovered_frame_allocated = false;
+
+        if (proof_ok) {
+            recovered_frame = vsapi->newVideoFrame(
+                &d->vi->format,
+                d->vi->width,
+                d->vi->height,
+                source_frame,
+                core
+            );
+
+            recovered_frame_allocated =
+                (recovered_frame != nullptr);
+
+            if (recovered_frame == nullptr) {
+                proof_ok = false;
+            }
+        }
+
+        bool process_ok = false;
+
+        if (proof_ok) {
+            process_ok =
+                process_cnr3_frame_with_explicit_previous_output(
+                    d,
+                    recovery_plan.requested_frame_number,
+                    source_frame,
+                    checkpoint_ref,
+                    recovered_frame,
+                    frameCtx,
+                    vsapi
+                );
+
+            proof_ok = process_ok;
+        }
+
+        if (recovered_frame != nullptr) {
+            vsapi->freeFrame(recovered_frame);
+            recovered_frame = nullptr;
+        }
+
+        if (checkpoint_ref != nullptr) {
+            vsapi->freeFrame(checkpoint_ref);
+            cnr3_output_cache_note_lookup_ref_released(
+                d->output_cache
+            );
+            checkpoint_ref = nullptr;
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_local_single_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-SINGLE-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # source_covered=%d # source_held=%d # checkpoint_ref_ok=%d # allocated_output=%d # process_ok=%d # released_output=1 # released_checkpoint_ref=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            source_covered ? 1 : 0,
+            source_held ? 1 : 0,
+            checkpoint_ref_ok ? 1 : 0,
+            recovered_frame_allocated ? 1 : 0,
+            process_ok ? 1 : 0,
+            checkpoint_ref_ok ? 1 : 0,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok;
+    }
+}
+
 static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
     Cnr3Data* d,
     int frame_number,
     const Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan,
     VSFrameContext* frameCtx,
+    VSCore* core,
     const VSAPI* vsapi
 ) {
     /*
@@ -1808,6 +1996,7 @@ static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
         (void)frame_number;
         (void)source_request_plan;
         (void)frameCtx;
+        (void)core;
         (void)vsapi;
         return true;
     }
@@ -1955,6 +2144,21 @@ static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
                 recovery_plan,
                 source_request_plan,
                 source_frame_set
+            )
+            ) {
+            proof_ok = false;
+        }
+
+        if (
+            proof_ok &&
+            !cnr3_for_debug_only_probe_recovery_local_single_compute(
+                d,
+                recovery_plan,
+                source_request_plan,
+                source_frame_set,
+                frameCtx,
+                core,
+                vsapi
             )
             ) {
             proof_ok = false;
@@ -2373,6 +2577,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 n,
                 source_request_plan,
                 frameCtx,
+                core,
                 vsapi
             )
             ) {

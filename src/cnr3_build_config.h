@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D-prep-explicit-predecessor-boundary-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D1-local-single-compute-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -130,6 +130,21 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_FRAME_SET_SKELE
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_COMPUTE_DRY_RUN_SKELETON = false;
 
 /*
+    CMS02-G.10D.1 local single-frame recovery compute proof gate.
+
+    This proof-only scaffold computes at most one local recovered frame when
+    the selected checkpoint is the immediate predecessor. The recovered frame is
+    released immediately and is never stored, returned, or made authoritative.
+
+    It must not call process_cnr3_frame() for recovery, store recovered outputs,
+    return recovered outputs, change output authority, mutate old strict-streaming
+    state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_SINGLE_COMPUTE_PROOF = false;
+
+/*
     Maximum forward distance allowed by the first bounded recovery-plan helper.
     perform recovery, recomputation, or frame generation.
 */
@@ -147,6 +162,7 @@ static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
     authority.
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
+// static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = CNR3_RECOVERY_MAX_FORWARD_FRAMES;
 
 /*
     Master development diagnostics switch.

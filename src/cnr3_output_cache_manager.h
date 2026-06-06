@@ -281,7 +281,22 @@ struct Cnr3OutputCacheStats {
     int64_t cache_addframeref_total = 0;
     int64_t cache_freeframe_total = 0;
 
-    // CMS02-F cache-hit lookup diagnostics.
+    /*
+        Output-cache lookup diagnostics.
+
+        Historical note:
+            cache_hits_at_arAllFramesReady was introduced for CMS02-F direct
+            cache-hit return proving.
+
+        Current scope:
+            cnr3_output_cache_find_frame_and_add_ref() increments this counter
+            for every successful caller-owned lookup reference. Enabled recovery
+            proof scaffolds also use that helper, so proof-internal recovery-walk
+            lookups can increase this counter.
+
+        Use lookup_owned_ref_* and local proof diagnostics when auditing caller
+        reference balance.
+    */
     int64_t cache_hits_at_arAllFramesReady = 0;
     int64_t cache_misses = 0;
     int64_t lookup_owned_ref_acquired_total = 0;

@@ -169,11 +169,18 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_COM
 static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
 
 /*
-    CMS02-G.7C widened source-request proof range.
+    CMS02-G.7C source-request proof range.
 
     When CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON is
     true, arInitial requests this many predecessor source frames plus the normal
     requested source frame.
+
+    Normal disabled-state value:
+        2
+
+    Enabled whole-walk proof runs:
+        Temporarily switch to CNR3_RECOVERY_MAX_FORWARD_FRAMES when the active
+        proof validates all source frames from checkpoint+1 to requested.
 
     This is proof-only request/retrieve scaffolding. It must not recompute
     outputs, store recovered outputs, return recovered outputs, or change output

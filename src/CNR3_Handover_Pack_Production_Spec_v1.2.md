@@ -108,7 +108,7 @@ review/simulation plans when applicable
 
 Document A is the stable preamble and operating-rules document.
 
-It seeks to provide context and relevent unformation to facilitate understanding for both humans and AIs.    
+It seeks to provide context and relevant information to facilitate understanding for both humans and AIs.    
 It must not lose context or detail without excellent reason.    
 It should change rarely.    
 It should be based on the previous version of Document A to ensure no loss of context or detail; generally, some prior version were reviewed and approved.    
@@ -124,7 +124,7 @@ Its purpose is to give a new AI or human maintainer enough grounding to understa
 - what VapourSynth is doing that makes the project difficult;
 - why recursive temporal filtering is fragile under out-of-order scheduling;
 - why cache management is central to correctness;
-- evolving relevant interim and long term goals (eg operating safely under fmUNORDERED, fmPARALLELREQUESTS, fmPARALLEL);
+- evolving relevant interim and long term goals (eg operating safely under fmUnordered, fmParallelRequests, fmParallel);
 - what safety constraints are non-negotiable;
 - what coding and handover rules must be followed.
 
@@ -223,7 +223,11 @@ Required explanation:
 - fully concurrent processing is more difficult;
 - metadata mutexes alone are not enough to prove recursive correctness;
 - correctness may require active-computation tracking, dependency waits, or condition variables;
-- full `fmParallel` is explicitly out of scope unless a later design spec says otherwise.
+- Full `fmParallel` is a significant final design goal, however is out of scope for
+  interim development and testing; interim design and development may not 
+  (unless absolutely necessary to the interim step) implement anything which
+  prevents progress toward full `fmParallel`, and should keep in mind a need to
+  be compatible with the final goal;
 
 ### 3.2.4 Why recursive processing is dangerous under out-of-order scheduling
 
@@ -265,13 +269,13 @@ It must explain that the cache manager exists to support:
 
 ### 3.2.6 Outline Interim and Long Term goals
 
- It must outloine interim and long term goals, with the understanding that over time goals will evolve.   
+ It must outline interim and long term goals, with the understanding that over time goals will evolve.   
  For example,
     Interim:
-        ensure designing and coding which operates safely under fmUNORDERED then fmPARALLELREQUESTS then fmPARALLEL
+        ensure designing and coding which operates safely under fmUnordered then fmParallelRequests then fmParallel
         but always with a view to ensuring alignment with the long term goals    
     Long Term:
-        operating safely under fmPARALLEL
+        operating safely under fmParallel
 
 ### 3.2.7 What safety means
 
@@ -404,7 +408,7 @@ When producing code changes for a human to apply:
 - Each phase or set of changes, and each individual change within them, must be uniquely identifiable.
 - State the file and function/location explicitly before each block.
 - Use before/after blocks showing exact existing code and exact replacement.
-- Akways include enough surrounding context to make the before block uniquely findable.
+- Always include enough surrounding context to make the before block uniquely findable.
 - The before block must match exactly one location in the named file.
 - If a snippet would match multiple locations, extend the context until unique.
 - The after block must be the exact intended replacement.
@@ -525,6 +529,10 @@ C10. Recent commit messages or suggested commit messages
 C11. New-chat starter prompt
 ```
 
+Document C should also include a “Do not lose / named deferred items” subsection when there are named safety, diagnostic, or phase-planning notes that must be carried forward. Examples include hot-zone scheduling prerequisites, deferred diagnostic histograms, and long-run diagnostic verbosity controls.
+
+Document C may include dated appendices for session-boundary summaries, provided the main current-state sections remain concise, current, and action-oriented.
+
 Additional sections may be added when useful.
 
 ## 5.3 Required current-state precedence wording
@@ -640,6 +648,11 @@ For cache-hit reuse work, it should normally include:
 - mass diagnostic string renames
 - diagnostic mode redesign unless explicitly chosen
 ```
+
+Document C should separately preserve named deferred items that are
+not immediate tasks but must not be forgotten; these should not be
+mixed into the immediate “do not implement” list unless they are also
+prohibited for the next session.
 
 ## 5.8 Required safety checks and hard gate
 
@@ -843,6 +856,8 @@ It must always contain:
 - deferred/cleanup notes.
 
 Document C is the most volatile document and must be treated as the current-state authority.
+
+Document C may include dated appendices for session-boundary summaries, provided the main current-state sections remain concise, current, and action-oriented.
 
 ---
 

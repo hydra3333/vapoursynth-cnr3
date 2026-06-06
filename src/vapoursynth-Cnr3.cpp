@@ -1978,15 +1978,16 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
     const VSAPI* vsapi
 ) {
     /*
-        Temporary CMS02-G.10D.2 proof helper.
+        Temporary CMS02-G.10D.2/G.10D.5 proof helper.
 
         This proves the local checkpoint-to-request recovery walk shape with
         rolling predecessor ownership. Cached walk outputs are reused through
         caller-owned lookup references. Missing walk outputs are computed
         locally through the explicit-predecessor processing boundary.
 
-        Locally computed outputs remain proof-local only. They are never stored,
-        returned, or made output-authoritative.
+        When the G.10D.5 store proof gate is enabled, locally computed outputs
+        are stored in output_cache after successful computation. They are still
+        never returned or made output-authoritative in this phase.
     */
 
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_COMPUTE_PROOF) {
@@ -2102,6 +2103,13 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
         int local_output_allocated_count = 0;
         int process_success_count = 0;
         int lookup_ref_acquired_count = checkpoint_ref_ok ? 1 : 0;
+        int recovery_store_attempt_count = 0;
+        int recovery_store_success_count = 0;
+        int recovery_store_failure_count = 0;
+        int recovery_store_duplicate_before_count = 0;
+        int recovery_prune_attempt_count = 0;
+        int recovery_prune_success_count = 0;
+        int recovery_prune_failure_count = 0;
 
         for (
             int walk_frame = first_walk_frame;
@@ -2185,16 +2193,81 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
                     }
                 }
 
+                bool recovery_store_attempted = false;
+                bool recovery_store_ok = true;
+                bool recovery_prune_ok = true;
+                bool recovery_store_duplicate_before = false;
+
                 if (process_ok) {
                     ++process_success_count;
 
-                    release_predecessor_ref();
+                    if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_STORE_PROOF) {
+                        recovery_store_attempted = true;
+                        ++recovery_store_attempt_count;
 
-                    predecessor_ref = recovered_frame;
-                    predecessor_ref_is_lookup_ref = false;
-                    predecessor_frame_number = walk_frame;
-                    recovered_frame = nullptr;
-                    ++computed_step_count;
+                        recovery_store_duplicate_before =
+                            cnr3_output_cache_contains_frame(
+                                d->output_cache,
+                                walk_frame
+                            );
+
+                        if (recovery_store_duplicate_before) {
+                            ++recovery_store_duplicate_before_count;
+                        }
+
+                        recovery_store_ok =
+                            cnr3_output_cache_store_frame(
+                                d->output_cache,
+                                walk_frame,
+                                recovered_frame,
+                                vsapi
+                            );
+
+                        if (recovery_store_ok) {
+                            ++recovery_store_success_count;
+
+                            ++recovery_prune_attempt_count;
+                            recovery_prune_ok =
+                                cnr3_output_cache_prune_after_store(
+                                    d->output_cache,
+                                    vsapi
+                                );
+
+                            if (recovery_prune_ok) {
+                                ++recovery_prune_success_count;
+                            }
+                            else {
+                                ++recovery_prune_failure_count;
+                            }
+                        }
+                        else {
+                            ++recovery_store_failure_count;
+                        }
+
+                        process_ok =
+                            process_ok &&
+                            recovery_store_ok &&
+                            recovery_prune_ok;
+                    }
+
+                    if (process_ok) {
+                        release_predecessor_ref();
+
+                        predecessor_ref = recovered_frame;
+                        predecessor_ref_is_lookup_ref = false;
+                        predecessor_frame_number = walk_frame;
+                        recovered_frame = nullptr;
+                        ++computed_step_count;
+                    }
+                    else {
+                        if (recovered_frame != nullptr) {
+                            vsapi->freeFrame(recovered_frame);
+                            recovered_frame = nullptr;
+                            ++local_output_released_count;
+                        }
+
+                        proof_ok = false;
+                    }
                 }
                 else {
                     if (recovered_frame != nullptr) {
@@ -2208,7 +2281,7 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
 
                 cnr3_debug_printf(
                     d->debug,
-                    "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # cached_step=0 # computed_step=%d # source_covered=%d # source_held=%d # allocated_output=%d # process_ok=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # step_ok=%d\n",
+                    "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # cached_step=0 # computed_step=%d # source_covered=%d # source_held=%d # allocated_output=%d # process_ok=%d # recovery_store_attempted=%d # recovery_store_ok=%d # recovery_store_duplicate_before=%d # recovery_prune_ok=%d # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # step_ok=%d\n",
                     d->instance_id,
                     recovery_plan.requested_frame_number,
                     recovery_plan.checkpoint_frame_number,
@@ -2219,6 +2292,10 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
                     source_held ? 1 : 0,
                     recovered_frame_allocated ? 1 : 0,
                     process_ok ? 1 : 0,
+                    recovery_store_attempted ? 1 : 0,
+                    recovery_store_ok ? 1 : 0,
+                    recovery_store_duplicate_before ? 1 : 0,
+                    recovery_prune_ok ? 1 : 0,
                     proof_ok ? 1 : 0
                 );
             }
@@ -2226,7 +2303,7 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
             if (cached_walk_ref_ok) {
                 cnr3_debug_printf(
                     d->debug,
-                    "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # cached_step=1 # computed_step=0 # source_covered=%d # source_held=%d # allocated_output=0 # process_ok=0 # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # step_ok=1\n",
+                    "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # cached_step=1 # computed_step=0 # source_covered=%d # source_held=%d # allocated_output=0 # process_ok=0 # recovery_store_attempted=0 # recovery_store_ok=1 # recovery_store_duplicate_before=0 # recovery_prune_ok=1 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # step_ok=1\n",
                     d->instance_id,
                     recovery_plan.requested_frame_number,
                     recovery_plan.checkpoint_frame_number,
@@ -2252,7 +2329,7 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # steps=%d # cached_steps=%d # computed_steps=%d # local_outputs_allocated=%d # local_outputs_released=%d # process_successes=%d # lookup_refs_acquired=%d # lookup_refs_released=%d # local_cleanup_ok=%d # checkpoint_ref_ok=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # steps=%d # cached_steps=%d # computed_steps=%d # local_outputs_allocated=%d # local_outputs_released=%d # process_successes=%d # lookup_refs_acquired=%d # lookup_refs_released=%d # local_cleanup_ok=%d # recovery_store_attempts=%d # recovery_store_successes=%d # recovery_store_failures=%d # recovery_store_duplicate_before=%d # recovery_prune_attempts=%d # recovery_prune_successes=%d # recovery_prune_failures=%d # checkpoint_ref_ok=%d # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d->instance_id,
             recovery_plan.requested_frame_number,
             recovery_plan.checkpoint_frame_number,
@@ -2265,6 +2342,13 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
             lookup_ref_acquired_count,
             lookup_ref_released_count,
             local_cleanup_ok ? 1 : 0,
+            recovery_store_attempt_count,
+            recovery_store_success_count,
+            recovery_store_failure_count,
+            recovery_store_duplicate_before_count,
+            recovery_prune_attempt_count,
+            recovery_prune_success_count,
+            recovery_prune_failure_count,
             checkpoint_ref_ok ? 1 : 0,
             proof_ok ? 1 : 0
         );

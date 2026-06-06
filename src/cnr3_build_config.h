@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D3-recovery-compute-diagnostics-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D5-local-bounded-walk-store-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -161,6 +161,28 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_SINGLE_COMPUTE_P
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_COMPUTE_PROOF = false;
+
+/*
+    CMS02-G.10D.5 local bounded recovery-walk store proof gate.
+
+    This proof-only scaffold stores locally computed recovered outputs into
+    output_cache after successful local recovery computation.
+
+    Stored recovered outputs are never returned in this phase and output_cache
+    remains non-authoritative. The normal strict-streaming path still returns
+    the frame produced by the normal path.
+
+    If recovery proof stores frame N before the normal strict-streaming path
+    stores frame N, the later normal store must be a safe first-in-best-dressed
+    duplicate/no-op. It must not replace the cached frame, leak references, or
+    count as a store failure.
+
+    It must not return recovered outputs, change output authority, mutate old
+    strict-streaming state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_STORE_PROOF = false;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

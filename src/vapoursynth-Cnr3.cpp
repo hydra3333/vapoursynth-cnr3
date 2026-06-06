@@ -1968,6 +1968,290 @@ static bool cnr3_for_debug_only_probe_recovery_local_single_compute(
     }
 }
 
+static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
+    Cnr3Data* d,
+    const Cnr3OutputCacheRecoveryPlan& recovery_plan,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan,
+    const Cnr3ForDebugOnlyRecoverySourceFrameSet& source_frame_set,
+    VSFrameContext* frameCtx,
+    VSCore* core,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.10D.2 proof helper.
+
+        This proves the local checkpoint-to-request recovery walk shape with
+        rolling predecessor ownership. Cached walk outputs are reused through
+        caller-owned lookup references. Missing walk outputs are computed
+        locally through the explicit-predecessor processing boundary.
+
+        Locally computed outputs remain proof-local only. They are never stored,
+        returned, or made output-authoritative.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_COMPUTE_PROOF) {
+        (void)d;
+        (void)recovery_plan;
+        (void)source_request_plan;
+        (void)source_frame_set;
+        (void)frameCtx;
+        (void)core;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            d->vi == nullptr ||
+            source_request_plan == nullptr ||
+            frameCtx == nullptr ||
+            core == nullptr ||
+            vsapi == nullptr ||
+            !recovery_plan.valid ||
+            !recovery_plan.checkpoint_pinned
+            ) {
+            return true;
+        }
+
+        const bool has_walk =
+            (recovery_plan.forward_frame_count > 0);
+
+        const int first_walk_frame =
+            has_walk
+            ? recovery_plan.checkpoint_frame_number + 1
+            : -1;
+
+        const int last_walk_frame =
+            has_walk
+            ? recovery_plan.requested_frame_number
+            : -1;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-START # instance=%d # requested=%d # checkpoint=%d # forward=%d # first_walk=%d # last_walk=%d # output_authoritative=0 # mutates_old_strict=0\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            first_walk_frame,
+            last_walk_frame
+        );
+
+        if (!has_walk) {
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # steps=0 # cached_steps=0 # computed_steps=0 # proof_ok=1 # output_authoritative=0 # mutates_old_strict=0\n",
+                d->instance_id,
+                recovery_plan.requested_frame_number,
+                recovery_plan.checkpoint_frame_number
+            );
+
+            return true;
+        }
+
+        const VSFrame* predecessor_ref =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                recovery_plan.checkpoint_frame_number,
+                vsapi
+            );
+
+        bool predecessor_ref_is_lookup_ref =
+            (predecessor_ref != nullptr);
+
+        int predecessor_frame_number =
+            recovery_plan.checkpoint_frame_number;
+
+        int owned_refs_released = 0;
+
+        const auto release_predecessor_ref = [&]() {
+            if (predecessor_ref == nullptr) {
+                return;
+            }
+
+            vsapi->freeFrame(predecessor_ref);
+
+            if (predecessor_ref_is_lookup_ref) {
+                cnr3_output_cache_note_lookup_ref_released(
+                    d->output_cache
+                );
+            }
+
+            predecessor_ref = nullptr;
+            predecessor_ref_is_lookup_ref = false;
+            ++owned_refs_released;
+            };
+
+        const bool checkpoint_ref_ok =
+            (predecessor_ref != nullptr);
+
+        bool proof_ok =
+            checkpoint_ref_ok;
+
+        int step_count = 0;
+        int cached_step_count = 0;
+        int computed_step_count = 0;
+        int local_output_allocated_count = 0;
+        int process_success_count = 0;
+        int lookup_ref_acquired_count = checkpoint_ref_ok ? 1 : 0;
+
+        for (
+            int walk_frame = first_walk_frame;
+            proof_ok && walk_frame <= last_walk_frame;
+            ++walk_frame
+            ) {
+            ++step_count;
+
+            const bool source_covered =
+                cnr3_for_debug_only_source_request_plan_covers_frame(
+                    source_request_plan,
+                    walk_frame
+                );
+
+            const VSFrame* source_frame =
+                cnr3_for_debug_only_find_source_frame_in_set(
+                    source_frame_set,
+                    walk_frame
+                );
+
+            const bool source_held =
+                (source_frame != nullptr);
+
+            const VSFrame* cached_walk_ref =
+                cnr3_output_cache_find_frame_and_add_ref(
+                    d->output_cache,
+                    walk_frame,
+                    vsapi
+                );
+
+            const bool cached_walk_ref_ok =
+                (cached_walk_ref != nullptr);
+
+            if (cached_walk_ref_ok) {
+                ++lookup_ref_acquired_count;
+
+                release_predecessor_ref();
+
+                predecessor_ref = cached_walk_ref;
+                predecessor_ref_is_lookup_ref = true;
+                predecessor_frame_number = walk_frame;
+                cached_walk_ref = nullptr;
+                ++cached_step_count;
+            }
+            else {
+                VSFrame* recovered_frame = nullptr;
+                bool recovered_frame_allocated = false;
+                bool process_ok = false;
+
+                const bool can_compute =
+                    source_covered &&
+                    source_held &&
+                    predecessor_ref != nullptr &&
+                    predecessor_frame_number == walk_frame - 1;
+
+                if (can_compute) {
+                    recovered_frame = vsapi->newVideoFrame(
+                        &d->vi->format,
+                        d->vi->width,
+                        d->vi->height,
+                        source_frame,
+                        core
+                    );
+
+                    recovered_frame_allocated =
+                        (recovered_frame != nullptr);
+
+                    if (recovered_frame_allocated) {
+                        ++local_output_allocated_count;
+
+                        process_ok =
+                            process_cnr3_frame_with_explicit_previous_output(
+                                d,
+                                walk_frame,
+                                source_frame,
+                                predecessor_ref,
+                                recovered_frame,
+                                frameCtx,
+                                vsapi
+                            );
+                    }
+                }
+
+                if (process_ok) {
+                    ++process_success_count;
+
+                    release_predecessor_ref();
+
+                    predecessor_ref = recovered_frame;
+                    predecessor_ref_is_lookup_ref = false;
+                    predecessor_frame_number = walk_frame;
+                    recovered_frame = nullptr;
+                    ++computed_step_count;
+                }
+                else {
+                    if (recovered_frame != nullptr) {
+                        vsapi->freeFrame(recovered_frame);
+                        recovered_frame = nullptr;
+                    }
+
+                    proof_ok = false;
+                }
+
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # cached_step=0 # computed_step=%d # source_covered=%d # source_held=%d # allocated_output=%d # process_ok=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # step_ok=%d\n",
+                    d->instance_id,
+                    recovery_plan.requested_frame_number,
+                    recovery_plan.checkpoint_frame_number,
+                    walk_frame,
+                    walk_frame - 1,
+                    process_ok ? 1 : 0,
+                    source_covered ? 1 : 0,
+                    source_held ? 1 : 0,
+                    recovered_frame_allocated ? 1 : 0,
+                    process_ok ? 1 : 0,
+                    proof_ok ? 1 : 0
+                );
+            }
+
+            if (cached_walk_ref_ok) {
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # cached_step=1 # computed_step=0 # source_covered=%d # source_held=%d # allocated_output=0 # process_ok=0 # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # step_ok=1\n",
+                    d->instance_id,
+                    recovery_plan.requested_frame_number,
+                    recovery_plan.checkpoint_frame_number,
+                    walk_frame,
+                    walk_frame - 1,
+                    source_covered ? 1 : 0,
+                    source_held ? 1 : 0
+                );
+            }
+        }
+
+        release_predecessor_ref();
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # steps=%d # cached_steps=%d # computed_steps=%d # local_outputs_allocated=%d # process_successes=%d # lookup_refs_acquired=%d # owned_refs_released=%d # checkpoint_ref_ok=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            step_count,
+            cached_step_count,
+            computed_step_count,
+            local_output_allocated_count,
+            process_success_count,
+            lookup_ref_acquired_count,
+            owned_refs_released,
+            checkpoint_ref_ok ? 1 : 0,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok;
+    }
+}
+
 static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
     Cnr3Data* d,
     int frame_number,
@@ -2152,6 +2436,21 @@ static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
         if (
             proof_ok &&
             !cnr3_for_debug_only_probe_recovery_local_single_compute(
+                d,
+                recovery_plan,
+                source_request_plan,
+                source_frame_set,
+                frameCtx,
+                core,
+                vsapi
+            )
+            ) {
+            proof_ok = false;
+        }
+
+        if (
+            proof_ok &&
+            !cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
                 d,
                 recovery_plan,
                 source_request_plan,

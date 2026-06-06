@@ -1,11 +1,11 @@
 # Document A - CNR3 Project Context and Rules
 
 **Document:** A of CNR3 handover pack  
-**Version:** v1.3  
+**Version:** v1.4  
 **Date:** 2026-06-06  
 **Status:** Stable project context and operating-rules document; update rarely.  
-**Companion design authority:** CMS06.1, or any later cache design specification that explicitly supersedes CMS06.1.  
-**Current matched pack:** A/B/C v1.3
+**Companion design authority:** CMS06.2, or any later cache design specification that explicitly supersedes CMS06.2.  
+**Current matched pack:** A/B/C v1.4
 
 ---
 
@@ -25,13 +25,13 @@ A new chat must assume it remembers nothing from earlier chats. This document ex
 
 This document is part of a three-document handover pack:
 
-1. `Document_A_CNR3_Project_Context_and_Rules_v1.3.md`
-2. `Document_B_CNR3_Decision_Log_v1.3.md`
-3. `Document_C_CNR3_Current_Session_Handover_v1.3.md`
+1. `Document_A_CNR3_Project_Context_and_Rules_v1.4.md`
+2. `Document_B_CNR3_Decision_Log_v1.4.md`
+3. `Document_C_CNR3_Current_Session_Handover_v1.4.md`
 
 Companion documents should be uploaded with this pack when relevant:
 
-- the latest CMS06.1 or later cache design specification;
+- the latest CMS06.2 or later cache design specification;
 - current relevant `.h` and `.cpp` files;
 - latest build/test logs where the next task depends on them;
 - any review or simulation plan required by the current phase.
@@ -216,7 +216,7 @@ The cache manager must not allow output[100] to be pruned, lost,
 observed through a dangling pointer, or double-owned.
 ```
 
-CMS06.1 must be followed before attempting future `fmParallelRequests` support.
+CMS06.2 must be followed before attempting future `fmParallelRequests` support. CMS06.2 also records that hot-zone request registration at `arInitial` is now implemented and must be preserved, and that actual recovery computation needs an explicit-predecessor processing boundary before CMS02-G.10D.
 
 ### A6.3 `fmParallel`
 
@@ -302,7 +302,7 @@ cnr3_response_tables.h/.cpp:
     Response-table building and table diagnostics.
 
 cnr3_output_cache_manager.h/.cpp:
-    CMS06.1-or-later output-cache manager, including pools, index,
+    CMS06.2-or-later output-cache manager, including pools, index,
     checkpoint pinning, hot zones, store/prune, lookup addref helpers,
     validation, and diagnostics.
 
@@ -420,10 +420,10 @@ When producing code changes for a human to apply:
 
 Read in this order:
 
-1. `Document_A_CNR3_Project_Context_and_Rules_v1.3.md`
-2. `Document_B_CNR3_Decision_Log_v1.3.md`
-3. `Document_C_CNR3_Current_Session_Handover_v1.3.md`
-4. CMS06.1 or later cache design specification
+1. `Document_A_CNR3_Project_Context_and_Rules_v1.4.md`
+2. `Document_B_CNR3_Decision_Log_v1.4.md`
+3. `Document_C_CNR3_Current_Session_Handover_v1.4.md`
+4. CMS06.2 or later cache design specification
 5. Current source files/logs relevant to the next task
 
 Rules for the new chat:
@@ -431,8 +431,8 @@ Rules for the new chat:
 ```text
 Treat Document C as the source of truth for current implementation status.
 Treat Document B as the source of truth for settled decisions.
-Treat CMS06.1-or-later as the detailed cache-manager design reference.
-If CMS06.1-or-later and current code appear to conflict, stop and ask for clarification.
+Treat CMS06.2-or-later as the detailed cache-manager design reference.
+If CMS06.2-or-later and current code appear to conflict, stop and ask for clarification.
 Do not re-litigate settled decisions unless current code or logs prove a real problem.
 Follow Rule 1 for code comments.
 Follow Rule 2 for before/after code update instructions.

@@ -1,12 +1,12 @@
 # Document C - CNR3 Current Session Handover
 
 **Document:** C of CNR3 handover pack  
-**Version:** v1.3  
+**Version:** v1.4  
 **Date:** 2026-06-06  
 **Status:** Volatile current-state/session handover document; update at every session boundary.  
-**Current design authority:** CMS06.1, or any later cache design specification that explicitly supersedes CMS06.1.  
+**Current design authority:** CMS06.2, or any later cache design specification that explicitly supersedes CMS06.2.  
 **Current implementation authority:** This document, plus the uploaded current source files and latest logs.  
-**Current matched pack:** A/B/C v1.3
+**Current matched pack:** A/B/C v1.4
 
 ---
 
@@ -14,10 +14,10 @@
 
 Read in this order:
 
-1. `Document_A_CNR3_Project_Context_and_Rules_v1.3.md`
-2. `Document_B_CNR3_Decision_Log_v1.3.md`
-3. `Document_C_CNR3_Current_Session_Handover_v1.3.md`
-4. `cnr3_cache_manager_design_v6.1.md`, or any later spec explicitly superseding CMS06.1
+1. `Document_A_CNR3_Project_Context_and_Rules_v1.4.md`
+2. `Document_B_CNR3_Decision_Log_v1.4.md`
+3. `Document_C_CNR3_Current_Session_Handover_v1.4.md`
+4. `cnr3_CMS06.2_cache_manager_design_v6_2.md`, or any later spec explicitly superseding CMS06.2
 5. current relevant source files
 6. latest logs if the task depends on test evidence
 
@@ -26,7 +26,7 @@ Rules for the new chat:
 ```text
 Treat this current session handover as the source of truth for current status.
 Treat the decision log as the source of truth for settled decisions.
-Treat CMS06.1-or-later as the detailed cache-manager design authority.
+Treat CMS06.2-or-later as the detailed cache-manager design authority.
 If the design spec and current code appear to conflict, stop and ask for clarification.
 Do not re-litigate settled decisions unless current code or logs prove a real problem.
 Follow Rule 1 for code comments.
@@ -34,9 +34,11 @@ Follow Rule 2 for before/after code update instructions.
 Do not implement anything listed in "Do not implement in the next session".
 ```
 
-CMS06.1 is the current cache design authority. Earlier CMS05.x documents are superseded except as history.
+CMS06.2 is the current cache design authority. Earlier CMS05.x and CMS06.1 documents are superseded except as history.
 
-If a companion design spec contains a current implementation state snapshot, this Document C overrides it for current implementation status. CMS06.1 predates the completed CMS02-G.7/G.8/G.9AB proof sequence. Use this Document C as the current implementation-state authority.
+CMS06.2 incorporates the accepted CMS06.1 update recommendations after CMS02-G.9AB. The separate `CNR3_CMS06_1_Update_Recommendations_after_CMS02_G9AB.md` file is now historical and should not be treated as the primary design authority.
+
+If a companion design spec contains a current implementation state snapshot, this Document C overrides it for current implementation status. CMS06.2 is aligned with the completed CMS02-G.7/G.8/G.9AB proof sequence and with the planned CMS02-G.10ABC dry-run compute orchestration phase.
 
 ---
 
@@ -91,7 +93,7 @@ CNR3_CACHE_MANAGER_DEV_DIAGNOSTICS
 v005 wording in new comments
 ```
 
-Some comments and diagnostic labels still contain CMS05 or CMS05-3A because they identify historical proving phases or have not yet been renamed. CMS06.1 is the design authority. Treat CMS05 wording drift as cleanup, not as a reason to change logic during G.10ABC.
+Some comments and diagnostic labels still contain CMS05 or CMS05-3A because they identify historical proving phases or have not yet been renamed. CMS06.2 is the design authority. Treat CMS05/CMS06 wording drift as cleanup, not as a reason to change logic during G.10ABC.
 
 ---
 
@@ -147,7 +149,7 @@ CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_FRAME_SET_SKELETON = false
 CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2
 ```
 
-Completed since the CMS06.1 implementation snapshot:
+Completed and recorded in CMS06.2:
 
 ```text
 CMS02-G.7A:
@@ -187,10 +189,9 @@ Important G.10 implication:
 process_cnr3_frame() currently reads the recursive predecessor from:
     d->old_strict_cache.prev_output
 
-Therefore CMS02-G.10ABC must be dry-run only, or must only prepare a future
-non-mutating processing boundary. It must not perform actual recovery
-computation through process_cnr3_frame() until predecessor input is refactored
-or otherwise made explicit and safe.
+Therefore CMS02-G.10ABC must remain dry-run only. It may design toward a future non-mutating processing boundary, but it must not perform actual recovery computation through `process_cnr3_frame()`.
+
+CMS06.2 Section 13.4 names the hard precondition for CMS02-G.10D: a safe processing boundary must exist that accepts an explicit predecessor `VSFrame*` or an equivalent explicit-predecessor mechanism, without depending on or mutating `old_strict_cache.prev_output` or `old_strict_cache.next_needed`.
 ```
 
 ---
@@ -371,13 +372,16 @@ Safety constraints:
 - Do not enable fmParallel.
 ```
 
+Preferred future processing-boundary direction:
+
+```text
+CMS06.2 prefers, but does not mandate, a refactor or additional processing entry point that accepts an explicit predecessor VSFrame* parameter. The coder may choose the exact implementation shape, but any approach must satisfy the non-mutation and explicit-predecessor requirements before G.10D.
+```
+
 Design-compliance review requirement:
 
 ```text
-Before real recovered-frame computation, explicitly review the processing
-boundary because process_cnr3_frame() currently obtains the predecessor from
-old_strict_cache.prev_output. Actual recovery needs an explicit predecessor
-input path or an equivalent non-mutating design.
+Before real recovered-frame computation, explicitly review the processing boundary required by CMS06.2 Section 13.4. `process_cnr3_frame()` currently obtains the predecessor from `old_strict_cache.prev_output`; actual recovery needs an explicit predecessor input path or an equivalent non-mutating design before CMS02-G.10D starts.
 ```
 
 ---
@@ -415,7 +419,9 @@ Hot-zone updates should be treated as prerequisite work before `fmParallelReques
 Current status:
 
 ```text
-The current code appears to update hot zones at arInitial. Preserve this.
+Resolved in CMS06.2.
+The current committed code updates hot zones at arInitial before requestFrameFilter(). Preserve this.
+Do not move hot-zone updates back to arAllFramesReady.
 ```
 
 ### G-DIAG-RECALC-HIST-01 - compile-time recalculation histogram
@@ -449,12 +455,11 @@ Existing detailed logs should remain available behind compile-time flags because
 Deferred cleanup:
 
 ```text
-- Some comments and diagnostics still say CMS05 even though CMS06.1 is current.
+- Some comments and diagnostics still say CMS05/CMS06 even though CMS06.2 is current.
   Do not mix broad wording cleanup into G.10ABC unless it is required to avoid
   a specific misunderstanding.
 
-- Consider updating CMS06.1 Section 14 or creating a successor spec snapshot to
-  reflect CMS02-G.7/G.8/G.9AB completion.
+- CMS06.2 now reflects CMS02-G.7/G.8/G.9AB completion and adds the G.10ABC/G.10D boundary notes. Do not rely on the old CMS06.1 recommendation document as current authority.
 
 - Consider moving from proof-only recovery scaffolding to production recovery
   only after dry-run and local-compute proofs are complete.
@@ -574,17 +579,17 @@ We are continuing CNR3 development.
 
 Please read the uploaded documents in this order:
 
-1. Document_A_CNR3_Project_Context_and_Rules_v1.3.md
-2. Document_B_CNR3_Decision_Log_v1.3.md
-3. Document_C_CNR3_Current_Session_Handover_v1.3.md
-4. cnr3_cache_manager_design_v6.1.md, or any later CMS06.1-or-later cache design specification
+1. Document_A_CNR3_Project_Context_and_Rules_v1.4.md
+2. Document_B_CNR3_Decision_Log_v1.4.md
+3. Document_C_CNR3_Current_Session_Handover_v1.4.md
+4. cnr3_CMS06.2_cache_manager_design_v6_2.md
 5. Current source files/logs
 
 Important:
 - The new chat has no memory of prior chats.
-- Treat Document_C_CNR3_Current_Session_Handover_v1.3.md as the source of truth for current state.
-- Treat Document_B_CNR3_Decision_Log_v1.3.md as the source of truth for settled decisions.
-- Treat CMS06.1 or later as the detailed design reference.
+- Treat Document_C_CNR3_Current_Session_Handover_v1.4.md as the source of truth for current state.
+- Treat Document_B_CNR3_Decision_Log_v1.4.md as the source of truth for settled decisions.
+- Treat CMS06.2 as the current detailed cache-manager design reference.
 - Do not re-litigate settled decisions unless current code or logs prove a real problem.
 - Follow Rule 1 for code comments.
 - Follow Rule 2 for before/after code update instructions.
@@ -706,4 +711,4 @@ Then wait for the current code files if they have not already been uploaded.
   - review hot-zone timing and mutex placement for `fmParallelRequests` and `fmParallel`;
   - add recalculation histogram diagnostics;
   - add log-volume controls for longer 50+ and 100+ frame tests;
-  - update final design against CMS06.1 and the handover notes.
+  - continue checking future work against CMS06.2 and the handover notes.

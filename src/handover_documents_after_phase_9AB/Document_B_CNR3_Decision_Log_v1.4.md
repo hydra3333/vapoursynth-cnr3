@@ -1,11 +1,11 @@
 # Document B - CNR3 Decision Log
 
 **Document:** B of CNR3 handover pack  
-**Version:** v1.3  
+**Version:** v1.4  
 **Date:** 2026-06-06  
 **Status:** Stable decision record; update when major decisions change.  
-**Companion design authority:** CMS06.1, or any later cache design specification that explicitly supersedes CMS06.1.  
-**Current matched pack:** A/B/C v1.3
+**Companion design authority:** CMS06.2, or any later cache design specification that explicitly supersedes CMS06.2.  
+**Current matched pack:** A/B/C v1.4
 
 ---
 
@@ -70,7 +70,7 @@ Implementation consequence:
     Until explicitly changed, returned output remains strict-path output. The output cache may store/prune/prove behaviour but must not replace returned pixels.
 
 Reference:
-    Document C; `Cnr3Data`; `process_cnr3_frame`; CMS06.1.
+    Document C; `Cnr3Data`; `process_cnr3_frame`; CMS06.2.
 
 ---
 
@@ -108,7 +108,7 @@ Implementation consequence:
     All checkpoint lookup, pruning, and recovery logic must use frame-number ordering.
 
 Reference:
-    CMS06.1 Sections 2 and 4; `cnr3_output_cache_manager.*`.
+    CMS06.2 Sections 2 and 4; `cnr3_output_cache_manager.*`.
 
 ---
 
@@ -127,7 +127,7 @@ Implementation consequence:
     Store takes `addFrameRef`. Remove/clear release pool-owned refs exactly once. `cache_index` entries must never be freed separately.
 
 Reference:
-    CMS06.1 Section 2.2; output-cache manager comments.
+    CMS06.2 Section 2.2; output-cache manager comments.
 
 ---
 
@@ -146,7 +146,7 @@ Implementation consequence:
     Use `cnr3_output_cache_find_frame_and_add_ref()` for caller-owned lookup references. The caller must free or transfer every returned reference on every path.
 
 Reference:
-    CMS06.1 Section 2.1; `cnr3_output_cache_find_frame_and_add_ref`.
+    CMS06.2 Section 2.1; `cnr3_output_cache_find_frame_and_add_ref`.
 
 ---
 
@@ -165,7 +165,7 @@ Implementation consequence:
     First stored frame remains source of truth. Losing duplicate computation must release its own computed frame normally.
 
 Reference:
-    CMS06.1 Section 4.9.
+    CMS06.2 Section 4.9.
 
 ---
 
@@ -184,7 +184,7 @@ Implementation consequence:
     Hot-zone update should be frame-number based and request-driven. Pruning must avoid active hot zones.
 
 Reference:
-    CMS06.1 Section 4.2.
+    CMS06.2 Section 4.2.
 
 ---
 
@@ -203,7 +203,7 @@ Implementation consequence:
     Use central remove helper. Preserve cache-side reference balance and ordered frame-number semantics.
 
 Reference:
-    CMS06.1 Sections 4.3 and 4.7.
+    CMS06.2 Sections 4.3 and 4.7.
 
 ---
 
@@ -222,7 +222,7 @@ Implementation consequence:
     `cnr3_output_cache_set_ceiling()` computes `active_ceiling`. Store/prune logic enforces that ceiling.
 
 Reference:
-    CMS06.1 Section 4.6; `cnr3_output_cache_set_ceiling`.
+    CMS06.2 Section 4.6; `cnr3_output_cache_set_ceiling`.
 
 ---
 
@@ -241,7 +241,7 @@ Implementation consequence:
     Hard-ceiling abort should occur only after allowed pruning cannot make space.
 
 Reference:
-    CMS06.1 Section 4.6.
+    CMS06.2 Section 4.6.
 
 ---
 
@@ -279,7 +279,7 @@ Implementation consequence:
     Promote non-checkpoint pinning only if diagnostics show predecessor-missing or prune-active-use hazards.
 
 Reference:
-    CMS06.1 Section 4.4.
+    CMS06.2 Section 4.4.
 
 ---
 
@@ -317,7 +317,7 @@ Implementation consequence:
     Treat hot-zone-at-`arInitial` as a prerequisite before `fmParallelRequests`/`fmParallel` work. Do not move it back to `arAllFramesReady` without a new design decision.
 
 Reference:
-    G-PAR-HZ-ARINITIAL-01; CMS06.1 Section 4.8; Document C.
+    G-PAR-HZ-ARINITIAL-01; CMS06.2 Sections 4.8, 13.3, and 14.4; Document C.
 
 ---
 
@@ -393,7 +393,7 @@ Implementation consequence:
     G.10ABC may log intended compute steps, but must not allocate recovered outputs, call the real processing function for recovery, store recovered outputs, return recovered outputs, or mutate old strict-streaming state.
 
 Reference:
-    `cnr3_frame_internal_processing.cpp`; Document C immediate next task.
+    `cnr3_frame_internal_processing.cpp`; CMS06.2 Section 13.4; Document C immediate next task.
 
 ---
 
@@ -413,3 +413,23 @@ Implementation consequence:
 
 Reference:
     G-DIAG-LOG-VOLUME-01; Document C.
+
+---
+
+## D21 - Safe explicit-predecessor processing boundary is required before G.10D
+
+Decision:
+    Actual local recovery computation must not depend on or mutate `d->old_strict_cache.prev_output` or `d->old_strict_cache.next_needed`.
+
+Rejected alternatives:
+    Temporarily poke the strict-streaming previous-output slot so existing `process_cnr3_frame()` can be reused unchanged for recovery.
+
+Reason:
+    That shortcut would conflate local recovery state with the normal strict-streaming path. It could pass a simple smoke test while creating fragile ownership, ordering, and future-parallel hazards.
+
+Implementation consequence:
+    Before CMS02-G.10D begins, define or implement a safe processing boundary that computes `output[K]` from `source[K]`, an explicit previous filtered output frame for `K - 1`, and local per-invocation recovery state. The preferred, but not mandated, approach is to refactor or add a processing entry point that accepts an explicit predecessor `VSFrame*` parameter.
+
+Reference:
+    CMS06.2 Section 13.4; Document C immediate next task.
+

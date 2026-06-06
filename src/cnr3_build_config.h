@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D2-local-bounded-walk-compute-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D3-recovery-compute-diagnostics-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -161,6 +161,7 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_SINGLE_COMPUTE_P
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_LOCAL_BOUNDED_WALK_COMPUTE_PROOF = false;
+
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.
     perform recovery, recomputation, or frame generation.
@@ -178,8 +179,8 @@ static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
     outputs, store recovered outputs, return recovered outputs, or change output
     authority.
 */
-// static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
-static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = CNR3_RECOVERY_MAX_FORWARD_FRAMES;
+static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
+// static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = CNR3_RECOVERY_MAX_FORWARD_FRAMES;
 
 /*
     Master development diagnostics switch.
@@ -222,5 +223,5 @@ constexpr bool CNR3_MEMORY_DIAGNOSTICS =
 
     Set to 0 to disable periodic in-run snapshots entirely.
 */
-static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;
 // static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;
+static constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 500;

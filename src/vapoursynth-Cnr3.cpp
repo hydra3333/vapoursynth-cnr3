@@ -2062,24 +2062,32 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
         int predecessor_frame_number =
             recovery_plan.checkpoint_frame_number;
 
-        int owned_refs_released = 0;
+        int lookup_ref_released_count = 0;
+        int local_output_released_count = 0;
 
         const auto release_predecessor_ref = [&]() {
             if (predecessor_ref == nullptr) {
                 return;
             }
 
+            const bool released_lookup_ref =
+                predecessor_ref_is_lookup_ref;
+
             vsapi->freeFrame(predecessor_ref);
 
-            if (predecessor_ref_is_lookup_ref) {
+            if (released_lookup_ref) {
                 cnr3_output_cache_note_lookup_ref_released(
                     d->output_cache
                 );
+
+                ++lookup_ref_released_count;
+            }
+            else {
+                ++local_output_released_count;
             }
 
             predecessor_ref = nullptr;
             predecessor_ref_is_lookup_ref = false;
-            ++owned_refs_released;
             };
 
         const bool checkpoint_ref_ok =
@@ -2192,6 +2200,7 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
                     if (recovered_frame != nullptr) {
                         vsapi->freeFrame(recovered_frame);
                         recovered_frame = nullptr;
+                        ++local_output_released_count;
                     }
 
                     proof_ok = false;
@@ -2231,9 +2240,19 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
 
         release_predecessor_ref();
 
+        const bool local_cleanup_ok =
+            (
+                lookup_ref_released_count == lookup_ref_acquired_count &&
+                local_output_released_count == local_output_allocated_count
+                );
+
+        proof_ok =
+            proof_ok &&
+            local_cleanup_ok;
+
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # steps=%d # cached_steps=%d # computed_steps=%d # local_outputs_allocated=%d # process_successes=%d # lookup_refs_acquired=%d # owned_refs_released=%d # checkpoint_ref_ok=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute # FOR-DEBUG-ONLY-RECOVERY-LOCAL-BOUNDED-WALK-COMPUTE-END # instance=%d # requested=%d # checkpoint=%d # steps=%d # cached_steps=%d # computed_steps=%d # local_outputs_allocated=%d # local_outputs_released=%d # process_successes=%d # lookup_refs_acquired=%d # lookup_refs_released=%d # local_cleanup_ok=%d # checkpoint_ref_ok=%d # would_store_recovered_output=0 # would_return_recovered_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d->instance_id,
             recovery_plan.requested_frame_number,
             recovery_plan.checkpoint_frame_number,
@@ -2241,9 +2260,11 @@ static bool cnr3_for_debug_only_probe_recovery_local_bounded_walk_compute(
             cached_step_count,
             computed_step_count,
             local_output_allocated_count,
+            local_output_released_count,
             process_success_count,
             lookup_ref_acquired_count,
-            owned_refs_released,
+            lookup_ref_released_count,
+            local_cleanup_ok ? 1 : 0,
             checkpoint_ref_ok ? 1 : 0,
             proof_ok ? 1 : 0
         );

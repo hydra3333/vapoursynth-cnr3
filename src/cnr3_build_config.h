@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10ABC-dry-run-compute-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D-prep-explicit-predecessor-boundary-v1";
 
 /*
     Temporary CMS02-F proof hook.

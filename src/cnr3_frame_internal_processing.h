@@ -16,6 +16,16 @@
 // data, but it must not own cache policy or VapourSynth scheduling policy.
 // -----------------------------------------------------------------------------
 
+bool process_cnr3_frame_with_explicit_previous_output(
+    const Cnr3Data* d,
+    int frame_number,
+    const VSFrame* src,
+    const VSFrame* previous_output,
+    VSFrame* dst,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi
+);
+
 bool process_cnr3_frame(
     const Cnr3Data* d,
     int frame_number,

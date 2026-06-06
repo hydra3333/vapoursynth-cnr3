@@ -1651,16 +1651,17 @@ static bool process_cnr3_chroma_plane(
     return false;
 }
 
-bool process_cnr3_frame(
+bool process_cnr3_frame_with_explicit_previous_output(
     const Cnr3Data* d,
     int frame_number,
     const VSFrame* src,
+    const VSFrame* previous_output,
     VSFrame* dst,
     VSFrameContext* frameCtx,
     const VSAPI* vsapi
 ) {
     /*
-        Frame-processing function.
+        Frame-processing function with explicit predecessor input.
 
         Processing structure:
             Y:
@@ -1676,12 +1677,14 @@ bool process_cnr3_frame(
         Recursive precondition:
             frame 0 does not need a previous output frame.
 
-            frame N > 0 must have d->old_strict_cache.prev_output available, because CNR3
-            uses output[N - 1] when producing output[N].
+            frame N > 0 must receive the already-filtered output[N - 1] through
+            previous_output.
 
-        Strict streaming note:
-            until the fuller cache manager exists, frame requests must arrive
-            in strictly increasing order. Use vspipe -r 1 for current tests.
+        G.10D-prep safety:
+            This boundary does not read or mutate old_strict_cache state.
+            The strict-streaming wrapper supplies old_strict_cache.prev_output
+            for the current normal path. Future recovery code can supply a local
+            predecessor reference without touching old strict-streaming state.
     */
     if (d == nullptr) {
         vsapi->setFilterError("CNR3: internal error: filter data is null.", frameCtx);
@@ -1698,7 +1701,7 @@ bool process_cnr3_frame(
         return false;
     }
 
-    const VSFrame* prev_output = d->old_strict_cache.prev_output;
+    const VSFrame* prev_output = previous_output;
 
     if (frame_number == 0) {
         /*
@@ -1911,3 +1914,33 @@ bool process_cnr3_frame(
     return true;
 }
 
+bool process_cnr3_frame(
+    const Cnr3Data* d,
+    int frame_number,
+    const VSFrame* src,
+    VSFrame* dst,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi
+) {
+    /*
+        Strict-streaming compatibility wrapper.
+
+        The current authoritative path still supplies old_strict_cache.prev_output.
+        Keep that dependency isolated here so recovery code can use
+        process_cnr3_frame_with_explicit_previous_output() without mutating old
+        strict-streaming state.
+    */
+
+    const VSFrame* previous_output =
+        (d != nullptr) ? d->old_strict_cache.prev_output : nullptr;
+
+    return process_cnr3_frame_with_explicit_previous_output(
+        d,
+        frame_number,
+        src,
+        previous_output,
+        dst,
+        frameCtx,
+        vsapi
+    );
+}

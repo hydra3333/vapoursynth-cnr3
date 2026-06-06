@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G9AB-source-frame-set-proof-disabled-v1";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10ABC-dry-run-compute-proof-disabled-v1";
 
 /*
     Temporary CMS02-F proof hook.
@@ -113,6 +113,21 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_DECISION_WALK_SKELETON
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_FRAME_SET_SKELETON = false;
+
+/*
+    CMS02-G.10ABC recovery compute dry-run skeleton gate.
+
+    This proof-only scaffold logs the future recovery compute orchestration
+    while the local G.9 source-frame set is still held.
+
+    It must not allocate recovered output frames, compute recovered pixels,
+    call process_cnr3_frame() for recovery, store recovered outputs, return
+    recovered outputs, change output authority, mutate old strict-streaming
+    state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_COMPUTE_DRY_RUN_SKELETON = false;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

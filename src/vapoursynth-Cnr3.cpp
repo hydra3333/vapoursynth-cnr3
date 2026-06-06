@@ -1623,6 +1623,164 @@ static void cnr3_for_debug_only_release_recovery_source_frame_set(
     }
 }
 
+static bool cnr3_for_debug_only_source_frame_set_holds_frame(
+    const Cnr3ForDebugOnlyRecoverySourceFrameSet& source_frame_set,
+    int frame_number
+) {
+    for (
+        const Cnr3ForDebugOnlyRecoverySourceFrameSetEntry& entry :
+        source_frame_set.entries
+        ) {
+        if (entry.frame_number == frame_number && entry.frame != nullptr) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool cnr3_for_debug_only_probe_recovery_compute_dry_run(
+    Cnr3Data* d,
+    const Cnr3OutputCacheRecoveryPlan& recovery_plan,
+    const Cnr3ForDebugOnlyRecoverySourceRequestPlan* source_request_plan,
+    const Cnr3ForDebugOnlyRecoverySourceFrameSet& source_frame_set
+) {
+    /*
+        Temporary CMS02-G.10ABC dry-run helper.
+
+        This proves the future recovery compute orchestration shape while the
+        local source-frame set is still held. It logs what recovery would need
+        and what it would compute, but deliberately performs no pixel work and
+        does not mutate any output-authority or old strict-streaming state.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_COMPUTE_DRY_RUN_SKELETON) {
+        (void)d;
+        (void)recovery_plan;
+        (void)source_request_plan;
+        (void)source_frame_set;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            source_request_plan == nullptr ||
+            !recovery_plan.valid ||
+            !recovery_plan.checkpoint_pinned
+            ) {
+            return true;
+        }
+
+        const bool has_walk =
+            (recovery_plan.forward_frame_count > 0);
+
+        const int first_walk_frame =
+            has_walk
+            ? recovery_plan.checkpoint_frame_number + 1
+            : -1;
+
+        const int last_walk_frame =
+            has_walk
+            ? recovery_plan.requested_frame_number
+            : -1;
+
+        bool proof_ok = true;
+        int dry_run_step_count = 0;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_compute_dry_run # FOR-DEBUG-ONLY-RECOVERY-COMPUTE-DRY-RUN-START # instance=%d # requested=%d # checkpoint=%d # forward=%d # first_walk=%d # last_walk=%d # actual_compute=0 # output_authoritative=0 # mutates_old_strict=0\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            recovery_plan.forward_frame_count,
+            first_walk_frame,
+            last_walk_frame
+        );
+
+        if (has_walk) {
+            for (
+                int walk_frame = first_walk_frame;
+                walk_frame <= last_walk_frame;
+                ++walk_frame
+                ) {
+                const bool already_cached =
+                    cnr3_output_cache_contains_frame(
+                        d->output_cache,
+                        walk_frame
+                    );
+
+                const bool source_covered =
+                    cnr3_for_debug_only_source_request_plan_covers_frame(
+                        source_request_plan,
+                        walk_frame
+                    );
+
+                const bool source_held =
+                    cnr3_for_debug_only_source_frame_set_holds_frame(
+                        source_frame_set,
+                        walk_frame
+                    );
+
+                const int predecessor_frame =
+                    walk_frame - 1;
+
+                const bool predecessor_is_checkpoint =
+                    (predecessor_frame == recovery_plan.checkpoint_frame_number);
+
+                const bool predecessor_is_prior_walk_output =
+                    (
+                        predecessor_frame >= first_walk_frame &&
+                        predecessor_frame < walk_frame
+                        );
+
+                const bool would_compute =
+                    !already_cached;
+
+                const bool step_ok =
+                    source_covered &&
+                    source_held &&
+                    predecessor_frame >= recovery_plan.checkpoint_frame_number;
+
+                if (!step_ok) {
+                    proof_ok = false;
+                }
+
+                ++dry_run_step_count;
+
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_probe_recovery_compute_dry_run # FOR-DEBUG-ONLY-RECOVERY-COMPUTE-DRY-RUN-STEP # instance=%d # requested=%d # checkpoint=%d # walk_frame=%d # predecessor=%d # predecessor_is_checkpoint=%d # predecessor_is_prior_walk_output=%d # already_cached=%d # would_compute=%d # would_need_prev_output=1 # source_covered_by_plan=%d # source_held=%d # would_allocate_output=0 # would_call_process_cnr3_frame=0 # would_store_recovered_output=0 # step_ok=%d\n",
+                    d->instance_id,
+                    recovery_plan.requested_frame_number,
+                    recovery_plan.checkpoint_frame_number,
+                    walk_frame,
+                    predecessor_frame,
+                    predecessor_is_checkpoint ? 1 : 0,
+                    predecessor_is_prior_walk_output ? 1 : 0,
+                    already_cached ? 1 : 0,
+                    would_compute ? 1 : 0,
+                    source_covered ? 1 : 0,
+                    source_held ? 1 : 0,
+                    step_ok ? 1 : 0
+                );
+            }
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_compute_dry_run # FOR-DEBUG-ONLY-RECOVERY-COMPUTE-DRY-RUN-END # instance=%d # requested=%d # checkpoint=%d # steps=%d # proof_ok=%d # actual_compute=0 # output_authoritative=0 # mutates_old_strict=0\n",
+            d->instance_id,
+            recovery_plan.requested_frame_number,
+            recovery_plan.checkpoint_frame_number,
+            dry_run_step_count,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok;
+    }
+}
+
 static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
     Cnr3Data* d,
     int frame_number,
@@ -1789,6 +1947,18 @@ static bool cnr3_for_debug_only_probe_recovery_source_frame_set(
 
         const size_t acquired_count =
             source_frame_set.entries.size();
+
+        if (
+            proof_ok &&
+            !cnr3_for_debug_only_probe_recovery_compute_dry_run(
+                d,
+                recovery_plan,
+                source_request_plan,
+                source_frame_set
+            )
+            ) {
+            proof_ok = false;
+        }
 
         cnr3_for_debug_only_release_recovery_source_frame_set(
             d,

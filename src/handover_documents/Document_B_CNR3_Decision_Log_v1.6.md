@@ -400,7 +400,7 @@ Reference:
 ## D20 - Compact/full diagnostic mode is deferred
 
 Decision:
-    A diagnostic verbosity redesign is deferred.
+    A diagnostic verbosity redesign is deferred. This includes the remembered compact/expanded debug-options investigation.
 
 Rejected alternatives:
     Redesign diagnostics during recovery proof phases.
@@ -409,7 +409,7 @@ Reason:
     Recovery proofs need detailed logs. Long-run tests will eventually need less noise, but adding that during the safety-critical proof chain risks distracting from current invariants.
 
 Implementation consequence:
-    Preserve existing proof logs. Add compile-time log-volume controls later under G-DIAG-LOG-VOLUME-01.
+    Preserve existing proof logs. Add compile-time compact/expanded log-volume controls later under G-DIAG-LOG-VOLUME-01. Detailed proof logs must remain available when proving a specific cache/recovery invariant.
 
 Reference:
     G-DIAG-LOG-VOLUME-01; Document C.

@@ -539,9 +539,11 @@ Useful-store ratio:
 
 This should not replace grep-friendly one-line summaries. It is an additional human audit aid.
 
-### G-DIAG-LOG-VOLUME-01 - long-run diagnostic throttling
+### G-DIAG-LOG-VOLUME-01 - long-run diagnostic throttling / compact-expanded debug options
 
-As recovery testing moves to 50+ and 100+ frame runs, add compile-time diagnostic verbosity controls so routine long-run logs show only:
+As recovery testing moves to 50+ and 100+ frame runs, add compile-time diagnostic verbosity controls so routine long-run logs can run in a compact mode while preserving an expanded/full mode for proof work.
+
+Compact mode should show only:
 
 ```text
 - edit/version marker
@@ -551,7 +553,25 @@ As recovery testing moves to 50+ and 100+ frame runs, add compile-time diagnosti
 - detailed proof logs for the currently active change only
 ```
 
-Existing detailed logs should remain available behind compile-time flags because they are still useful when proving a specific cache/recovery invariant.
+Expanded/full mode must remain available behind compile-time flags because detailed logs are still useful when proving a specific cache/recovery invariant.
+
+This item is the remembered compact/expanded debug-options investigation. Do not redesign diagnostics casually during an unrelated safety phase; implement it as a focused diagnostic/log-volume task when chosen.
+
+### DEBUG-GATE-CODE-REVIEW-01 - check debug-gated code for production-required logic
+
+At a later cleanup/review point, check whether any code currently inside debug/proof compile-time gates should be outside those gates for normal runtime correctness, required diagnostics, or cleanup.
+
+Do not move code out of debug gates casually. Review each case for:
+
+```text
+- output-authority impact;
+- reference ownership and lookup-ref accounting;
+- mutex/locking consequences;
+- log-volume impact;
+- whether the code is proof-only, diagnostic-only, or required for normal runtime correctness.
+```
+
+This review is deferred and must not be mixed into CMS02-G / SubPhase G10D.9 unless a specific issue blocks that phase.
 
 ### G-FMPAR-OLD-STRICT-AUTH-01 - old strict authority is not final fmParallel authority
 
@@ -583,6 +603,13 @@ Deferred cleanup:
 
 - CMS02-F-labelled obligations are not a blanket blocker but must be audited
   item-by-item before final output authority.
+
+- Check whether any code inside debug/proof gates should later move outside
+  those gates only as a focused review item. Do not mix that cleanup into
+  CMS02-G / SubPhase G10D.9 unless it becomes necessary.
+
+- Investigate compact/expanded debug options as the focused implementation of
+  G-DIAG-LOG-VOLUME-01, not as an incidental cleanup during unrelated phases.
 ```
 
 Optional next diagnostic before or during G10D.9:

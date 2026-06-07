@@ -2,10 +2,10 @@
 
 **Document type:** Specification for producing future CNR3 handover packs  
 **Applies to:** Future CNR3 handover packs, not to a single coding session only  
-**Version:** v1.3
+**Version:** v1.4
 **Date:** 2026-06-07
-**Status:** Current handover-pack production standard
-**Current design authority wording:** CMS06.2 or any later cache design spec that explicitly supersedes CMS06.2
+**Status:** Current handover-pack production standard with user approval
+**Current design authority wording:** CMS06.3 or any later cache design spec that explicitly supersedes CMS06.3
 
 ---
 
@@ -22,15 +22,27 @@ The handover pack exists so that a new AI chat, with no memory of previous chats
 - suggesting unsafe changes to the cache manager, threading model, reference-count discipline, or VapourSynth scheduling model;
 - failing to understand which state is current and which design notes are historical.
 
-The goal is not to make the handover as short as possible. The goal is to make it:
+The goal is explicitly not to make the handover as short as possible, not to re-summarize it with less detail,
+and not to omit previous valid detail.
+The goal is to preserve excellent context and usefulness for both humans and new AI chats.
 
+The goal is to make it:
 - current;
 - structured;
 - precise;
 - resistant to stale or contradictory interpretation;
 - sufficiently detailed for safe C++ development;
 - compact enough that the most important information remains visible and usable;
-- explicitly grounded in companion design documents, current source code, and current logs.
+- explicitly grounded in companion design documents, current source code, and current logs;
+- explicitly continuity-preserving, so validated context, detail, examples, rationale, and warnings
+  from the previous approved handover pack are not lost or resummarized with less detail
+  merely because a new version is produced;
+- non-regressive in explanatory value, especially in Document A, unless a
+  previous statement is obsolete, misleading, or contradicted by current source,
+  logs, decisions, or CMS06.3-or-later design authority =
+  where a previous statement is obsolete, misleading, or contradicted by current source,
+  logs, decisions, or CMS06.3-or-later design authority, correct it in-place where possible;
+  omit it only as a last resort when accuracy cannot otherwise be preserved;
 
 A single handover document cannot reliably serve every purpose. Stable project context, stable decision rationale, and volatile session state have different lifetimes and must not be mixed into one long diary-style document.
 
@@ -39,7 +51,7 @@ The CNR3 handover pack therefore consists of:
 1. `Document_A_CNR3_Project_Context_and_Rules_<version>.md`
 2. `Document_B_CNR3_Decision_Log_<version>.md`
 3. `Document_C_CNR3_Current_Session_Handover_<version>.md`
-4. Companion reference documents, especially the latest CMS06.2-or-later cache design specification
+4. Companion reference documents, especially the latest CMS06.3-or-later cache design specification
 5. Current source files and logs relevant to the next task
 
 The intended new-chat boot sequence is:
@@ -47,12 +59,12 @@ The intended new-chat boot sequence is:
 1. Read `Document_A_CNR3_Project_Context_and_Rules_<version>.md`.
 2. Read `Document_B_CNR3_Decision_Log_<version>.md`.
 3. Read `Document_C_CNR3_Current_Session_Handover_<version>.md`.
-4. Read the latest CMS06.2-or-later cache design document if the task touches cache management.
+4. Read the latest CMS06.3-or-later cache design document if the task touches cache management.
 5. Inspect the latest relevant source files before proposing code changes.
 6. Inspect latest logs if the task depends on test evidence.
 7. Treat the current session handover as the source of truth for current implementation state.
 8. Treat the decision log as the source of truth for settled decisions.
-9. Treat CMS06.2-or-later as the detailed design reference for cache-manager behaviour.
+9. Treat CMS06.3-or-later as the detailed design reference for cache-manager behaviour.
 10. Do not re-litigate settled decisions unless current code, logs, or tests prove a genuine problem.
 
 This structure is designed to be successful for handover from one chat to the next because it gives a new AI three different kinds of information in the order it needs them:
@@ -94,11 +106,135 @@ CNR3_Handover_Pack_v1.2.zip
 Companion documents are not part of the three-document handover pack, but are required when relevant. These include:
 
 ```text
-latest CMS06.2-or-later cache design spec
+latest CMS06.3-or-later cache design spec
 latest source files relevant to the next task
 latest logs relevant to the next task
 review/simulation plans when applicable
 ```
+
+---
+
+# 2A. Continuity, Detail-Preservation, and Non-Regression Rules
+
+## 2A.1 Previous approved handover pack as the drafting baseline
+
+When producing a new handover pack version, use the previous approved A/B/C
+handover documents as the drafting baseline. Do not create the new pack by
+writing a fresh short summary unless the user explicitly asks for a condensed
+replacement and even in this case maintain excellent context useful for humans.
+
+The normal update process is:
+
+```text
+1. Start from the previous approved Document A, B, and C.
+2. Preserve all still-valid context, examples, warnings, and rationale.
+3. Amend only the parts that are obsolete, misleading, incomplete, or now
+   contradicted by current source, logs, decisions, or CMS06.3-or-later.
+4. Add new material required by the latest development work.
+5. Remove detail only when it is genuinely invalid, duplicative without value,
+   or explicitly superseded.
+```
+
+Although this rule applies to Documents A, B, and C, it is especially important for Document A,
+because Document A is the human and AI orientation document. It must retain/maintain enough
+excellent background and examples for a new reader to understand the project before touching code.
+
+## 2A.2 No abbreviation-by-default rule
+
+A new handover version must not be shorter merely because it is newer.
+
+Do not abbreviate, omit, or compress validated explanatory material for the sake
+of brevity if that material remains useful to a human maintainer or to a new AI
+chat. In particular, do not abbreviate:
+
+```text
+- project background and motivation;
+- VapourSynth scheduling explanations;
+- recursive-filter examples;
+- cache-manager correctness rationale;
+- mutex, ownership, and reference-count safety rules;
+- examples showing why a naive approach fails;
+- known hazards and hard-stop conditions;
+- named deferred items and cleanup obligations.
+```
+
+A shorter replacement is acceptable only when it preserves the same meaning and
+explanatory value, especially to humans, or when the removed material is obsolete
+and the replacement explains the current truth at least as clearly.
+
+## 2A.3 Invalid material must be corrected, not silently removed
+
+If previous handover material is no longer valid, do not simply delete it when
+the deleted text carried important context. Replace it with updated clear wording
+that preserves the useful background while clearly stating what changed.
+
+Example:
+
+```text
+Bad:    Remove an old strict-streaming explanation because output_cache now has
+        a cache-hit return path.
+
+Better: Explain that strict-streaming remains the cache-miss/new-computation
+        path while cache hits may now return from output_cache, and preserve the
+        reason old_strict_cache.next_needed is not final fmParallel authority.
+```
+
+## 2A.4 Document A non-regression rule
+
+Document A must be treated as a stable or expanding knowledge base, not a disposable summary.
+
+Document A is a keystone, setting the scene for AI and humans, so that future actions and
+decisions are grounded in the knowledge of what is attempting to be achieved at a global level.
+
+When updating Document A:
+
+```text
+- preserve the previous approved structure unless there is a clear reason to
+  change it;
+- preserve detailed context in A1, A2, A3, A4 and equivalent early orientation
+  sections unless the content is invalid;
+- preserve examples that teach the scheduling or recursive-dependency hazard;
+- preserve explanatory material useful to humans, even if it seems obvious to
+  the current chat;
+- add new rules or corrections in-place rather than replacing large sections
+  with shorter paraphrases.
+```
+
+If a future handover creator believes Document A should be substantially
+shortened, it must first state what would be removed and why, and obtain explicit
+user agreement before producing the shortened version.
+
+## 2A.5 Document B and Document C continuity rules
+
+Document B must preserve settled decisions and their implementation consequences.
+Do not drop older decisions merely because they have not changed recently. If a
+decision is superseded, keep enough historical context to prevent the same
+rabbit-hole from reopening, and mark the supersession clearly.
+
+Document C is more volatile, but it still must preserve named deferred items,
+current-state caveats, latest meaningful test evidence, and the immediate next
+task. Do not omit a deferred item because it is not the next task.
+
+## 2A.6 Review requirement for generated handover packs
+
+Before a generated handover pack is treated as final, compare it against the
+previous approved handover pack for accidental loss of important information.
+
+At minimum, verify:
+
+```text
+- Document A has not lost valid project-orientation detail or examples.
+- Document B has not lost settled decisions or implementation consequences.
+- Document C has not lost named deferred items, hard gates, latest evidence, or
+  next-task constraints.
+- Any shorter section is shorter because obsolete material was corrected or
+  because equivalent detail was preserved more clearly, not because context was
+  silently dropped.
+```
+
+If such a comparison cannot be performed because the previous approved pack is
+not available, the handover creator must say so before producing replacement
+documents.
 
 ---
 
@@ -111,10 +247,12 @@ Document A is the stable preamble and operating-rules document.
 It seeks to provide context and relevant information to facilitate understanding for both humans and AIs.    
 It must not lose context or detail without excellent reason.    
 It should change rarely.    
-It should be based on the previous version of Document A to ensure no loss of context or detail; 
-generally, some prior version were reviewed and approved.    
+It should be based on the previous approved version of Document A to ensure no loss of context or detail;
+generally, prior versions were reviewed and approved.    
 It should not contain very long wordy prose without excellent reason.    
-It should not be re-summarized (generally losing relevant detail) without excellent reason.    
+It must not be re-summarized, abbreviated, or regenerated from scratch if that would lose excellent valid context, examples, rationale, or human-orientation detail.    
+If a previous section is too wordy but still valid, improve it very carefully while still preserving its clear meaning and explanatory value.    
+If a previous section is invalid or stale, correct it in-place and preserve any useful background context rather than silently deleting it.    
 
 It should be uploaded at the start of every new CNR3 development chat.
 
@@ -338,6 +476,7 @@ A12. Coding Rule 2 — Code update instructions
 A13. Required Phase and SubPhase Naming Rules
 A14. Commit Title and Body Rules
 A15. New-chat boot sequence
+A16. Continuity and non-regression notes if Document A changed materially
 ```
 
 Additional sections may be added when useful, but the listed material must not be omitted.
@@ -357,7 +496,7 @@ cnr3_response_tables.h/.cpp:
     Response table building and table diagnostics.
 
 cnr3_output_cache_manager.h/.cpp:
-    CMS06.2-or-later output-cache manager.
+    CMS06.3-or-later output-cache manager.
 
 old_cnr3_strict_cache_*:
     Old strict-streaming cache functions retained while output_cache is not yet output-authoritative.
@@ -435,9 +574,9 @@ Preferred format:
 
 Compact labels such as "CMS02-G.10D.7" may be used in log markers,
 compact tables, and commit titles. However, the expanded form must always
-appear in chat responses and handover documents and in CMS06.2-or-later.
-It must always appear and in the commit body whenever the compact form
-in the title could lead to misinterpretation or phase/subphase confusion with identification.
+appear in chat responses and handover documents and in CMS06.3-or-later.
+It must also appear in the commit body whenever the compact form in the title
+could lead to phase/subphase confusion.
 Preferred commit title style:
 ```
 Complete CMS02-G / SubPhase G10D.7 recovery-return decision dry-run
@@ -498,7 +637,7 @@ Implementation consequence:
     What the code must or must not do.
 
 Reference:
-    CMS06.2-or-later section, appendix, handover section, source file, or test evidence.
+    CMS06.3-or-later section, appendix, handover section, source file, or test evidence.
 ```
 
 The “Implementation consequence” field is mandatory. It tells the next AI what the decision means in code.
@@ -569,7 +708,7 @@ Document C is the volatile current-state/session handover document.
 
 It must be updated at every chat/session boundary.
 
-It must be current, exact, and action-oriented. It must not repeat all design rationale. It should point to Document A, Document B, CMS06.2-or-later, current source files, and logs.
+It must be current, exact, and action-oriented. It must not repeat all design rationale. It should point to Document A, Document B, CMS06.3-or-later, current source files, and logs.
 
 Document C is the current-state authority.
 
@@ -602,7 +741,7 @@ Additional sections may be added when useful.
 Clarification re C3. Current exact implementation status, it must incorporate:
 When a later phase/subphase has overtaken an older phase/subphase label, 
 then Document C must audit the older phase item-by-item.
-For example, if CMS06.2 says CMS02-F was not started, but current source shows
+For example, if CMS06.3 says CMS02-F was not started, but current source shows
 some CMS02-F-labelled primitives or behaviours now exist, Document C must say:
 - completed;
 - superseded/overtaken;
@@ -618,14 +757,14 @@ Document C must explicitly state:
 ```text
 Treat this current session handover as the source of truth for current status.
 Treat the decision log as the source of truth for settled decisions.
-Treat CMS06.2-or-later as the detailed cache-manager design authority.
+Treat CMS06.3-or-later as the detailed cache-manager design authority.
 If the design spec and current code appear to conflict, stop and ask for clarification.
 ```
 
 It must also state when companion design-spec implementation snapshots are known to predate later work, for example:
 
 ```text
-CMS06.2 Section 14 predates the latest diagnostic work completed in this chat.
+CMS06.3 Section 14 predates the latest diagnostic work completed in this chat.
 Use this Document C as the current implementation-state authority.
 ```
 
@@ -635,11 +774,11 @@ that snapshot may be stale. Document C must explicitly identify any known stale
 snapshot sections and state which later commits, logs, or handover entries
 supersede them.
 
-When a companion design spec (eg CMS06.2) says a phase or item is "not started"
+When a companion design spec (eg CMS06.3) says a phase or item is "not started"
 or "not yet implemented", the next chat must audit that statement against current
 source and logs before treating it as current truth.
     Example:
-        CMS06.2 says CMS02-F was not started at the time of its implementation
+        CMS06.3 says CMS02-F was not started at the time of its implementation
         snapshot. Later source and logs may have completed or superseded some
         CMS02-F-labelled obligations. Audit CMS02-F item-by-item against current
         source and logs; do not treat the old snapshot as a blanket blocker.
@@ -857,33 +996,33 @@ Future option:
 The current cache design authority must be described as:
 
 ```text
-CMS06.2 or any later cache design spec that explicitly supersedes CMS06.2.
+CMS06.3 or any later cache design spec that explicitly supersedes CMS06.3.
 ```
 
 Do not write new handover specs that say “CMS05 is the authority” unless the project deliberately reverts to CMS05, which is not the current state.
 
-The handover documents do not need to duplicate every CMS06.2 detail. They must identify:
+The handover documents do not need to duplicate every CMS06.3 detail. They must identify:
 
-- which CMS06.2 decisions are already implemented;
+- which CMS06.3 decisions are already implemented;
 - which are pending;
 - which are deferred;
 - which are explicitly out of scope.
 
-When a new chat is asked to modify output-cache code, upload CMS06.2-or-later with the handover pack.
+When a new chat is asked to modify output-cache code, upload CMS06.3-or-later with the handover pack.
 
 The new chat should be instructed:
 
 ```text
-Use CMS06.2-or-later as the detailed design reference.
+Use CMS06.3-or-later as the detailed design reference.
 Use the current session handover as the current implementation-state authority.
 Use the decision log to avoid re-opening settled decisions.
-If CMS06.2-or-later and current code appear to conflict, stop and ask for clarification rather than guessing.
+If CMS06.3-or-later and current code appear to conflict, stop and ask for clarification rather than guessing.
 ```
 
 When a later phase/subphase has overtaken an older phase/subphase label, 
 then Document C must audit the older phase item-by-item.
 
-For example, if CMS06.2 says CMS02-F was not started, but current source shows
+For example, if CMS06.3 says CMS02-F was not started, but current source shows
 some CMS02-F-labelled primitives or behaviours now exist, Document C must say:
 ```
 - completed;
@@ -944,14 +1083,14 @@ Please read the uploaded documents in this order:
 1. Document_A_CNR3_Project_Context_and_Rules_<version>.md
 2. Document_B_CNR3_Decision_Log_<version>.md
 3. Document_C_CNR3_Current_Session_Handover_<version>.md
-4. CMS06.2-or-later cache design specification
+4. CMS06.3-or-later cache design specification
 5. Current source files/logs
 
 Important:
 - The new chat has no memory of prior chats.
 - Treat Document_C_CNR3_Current_Session_Handover_<version>.md as the source of truth for current state.
 - Treat Document_B_CNR3_Decision_Log_<version>.md as the source of truth for settled decisions.
-- Treat CMS06.2-or-later as the detailed design reference.
+- Treat CMS06.3-or-later as the detailed design reference.
 - Do not re-litigate settled decisions unless current code or logs prove a real problem.
 - Follow Rule 1 for code comments.
 - Follow Rule 2 for before/after code update instructions.
@@ -975,6 +1114,12 @@ Update Document A only when:
 - the required explanatory preamble needs correction or expansion.
 
 Do not update Document A for every phase.
+
+When Document A is updated, it must be updated from the previous approved
+Document A, not from memory and not from a short outline. The update must be
+continuity-preserving. If any major section becomes shorter, the handover creator
+must be able to explain why any valid human-useful context, examples, rationale,
+or warnings were removed.
 
 ## 9.2 Updating Document B
 
@@ -1024,7 +1169,7 @@ What is fmParallelRequests, and why does it increase cache safety risk?
 Why is full fmParallel out of scope?
 Why is recursive output[N] dependent on filtered output[N - 1]?
 What is the current output-authoritative path?
-What CMS06.2-or-later phase are we in?
+What CMS06.3-or-later phase are we in?
 What exactly was tested last?
 What exactly is the next task?
 What must not be implemented yet?
@@ -1048,12 +1193,14 @@ Before issuing a new handover pack, confirm:
 
 ```text
 [ ] A, B, and C use the same version number.
+[ ] Document A was based on the previous approved Document A, not regenerated as a short summary.
 [ ] Document A includes the mandatory extended project-orientation preamble.
 [ ] Document A explains VapourSynth request order and modes in enough detail.
+[ ] Document A preserves valid human-useful context, examples, and rationale from the previous approved version.
 [ ] Document A states cache management is a correctness subsystem.
 [ ] Document A includes Rule 1 and Rule 2.
 [ ] Document B includes current settled decisions and new major decisions.
-[ ] Document B references CMS06.2-or-later, not stale CMS05 authority wording.
+[ ] Document B references CMS06.3-or-later, not stale CMS05 authority wording.
 [ ] Document C is updated to the exact latest state.
 [ ] Document C explicitly overrides stale implementation snapshots in companion specs.
 [ ] Document C includes latest test evidence and hard-gate result.
@@ -1067,8 +1214,9 @@ Before issuing a new handover pack, confirm:
 [ ] Duplicate/recompute waste summary is included when relevant.
 [ ] Known fmParallel-readiness blockers, including old_strict_cache.next_needed, are carried forward.
 [ ] Phases/subphases include commit messages or suggested commit messages unless intentionally omitted.
-[ ] Companion CMS06.2-or-later design spec is identified.
+[ ] Companion CMS06.3-or-later design spec is identified.
 [ ] Required source files/logs for the next task are identified.
+[ ] The generated A/B/C documents have been compared against the previous approved A/B/C documents for accidental loss of important detail.
 [ ] The handover zip contains exactly the matched A/B/C documents.
 
 ```

@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D9-recovery-return-transfer-proof-v1-PASSED";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-H2-bounded-warmup-no-prior-checkpoint-diagnostic-scaffold-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -236,6 +236,22 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RU
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF = false;
+
+/*
+    CMS02-H.2 bounded warm-up no-prior-checkpoint decision scaffold gate.
+
+    This proof-only scaffold detects when no prior checkpoint is available,
+    calculates the bounded warm-up range that a future warm-up recovery path
+    would need, and records scan-friendly diagnostics.
+
+    It must not request extra frames, retrieve source frames, compute warm-up
+    outputs, store warm-up outputs, return warm-up outputs, change output
+    authority, use exact_match as a return condition, mutate old strict-streaming
+    state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD = false;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

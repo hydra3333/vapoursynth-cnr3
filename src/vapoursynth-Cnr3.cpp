@@ -1536,6 +1536,16 @@ static int scale_8bit_parameter_to_bit_depth(
 // lifecycle, parameter parsing, scheduling, cache orchestration, and teardown.
 
 // -----------------------------------------------------------------------------
+static void cnr3_for_debug_only_print_bounded_warmup_decision_summary(
+    const Cnr3Data* d,
+    const char* where
+);
+
+static void cnr3_for_debug_only_erase_bounded_warmup_decision_summary(
+    const Cnr3Data* d
+);
+
+// -----------------------------------------------------------------------------
 // CNR3 cache manager
 // -----------------------------------------------------------------------------
 static void VS_CC cnr3_free(
@@ -1564,6 +1574,11 @@ static void VS_CC cnr3_free(
         );
 
         cnr3_for_debug_only_print_recovery_return_decision_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
+        cnr3_for_debug_only_print_bounded_warmup_decision_summary(
             d,
             "before cnr3_free cleanup"
         );
@@ -1605,6 +1620,7 @@ static void VS_CC cnr3_free(
 
         cnr3_for_debug_only_erase_recovery_difference_summary(d);
         cnr3_for_debug_only_erase_recovery_return_decision_summary(d);
+        cnr3_for_debug_only_erase_bounded_warmup_decision_summary(d);
 
         delete d;
     }
@@ -1674,6 +1690,289 @@ static void cnr3_for_debug_only_force_cache_lookup_probe(
             "output-cache # cnr3_for_debug_only_force_cache_lookup_probe # FOR-DEBUG-ONLY-FORCE-CACHE-LOOKUP-HIT-RELEASED # instance=%d # frame=%d\n",
             d->instance_id,
             frame_number
+        );
+    }
+}
+
+struct Cnr3ForDebugOnlyBoundedWarmupDecisionSummary {
+    int64_t frames_checked = 0;
+    int64_t prior_checkpoint_available = 0;
+    int64_t no_prior_checkpoint_detected = 0;
+    int64_t warmup_plans_created = 0;
+    int64_t warmup_start_at_zero = 0;
+    int64_t warmup_start_bounded_nonzero = 0;
+    int64_t warmup_forward_distance_total = 0;
+    int64_t warmup_forward_distance_max = 0;
+    int64_t warmup_source_range_invalid = 0;
+    int64_t warmup_proof_failures = 0;
+};
+
+static std::mutex g_cnr3_for_debug_only_bounded_warmup_decision_summary_mutex;
+
+static std::unordered_map<
+    int,
+    Cnr3ForDebugOnlyBoundedWarmupDecisionSummary
+> g_cnr3_for_debug_only_bounded_warmup_decision_summaries;
+
+static void cnr3_for_debug_only_record_bounded_warmup_decision_summary(
+    const Cnr3Data* d,
+    bool prior_checkpoint_available,
+    bool warmup_plan_created,
+    bool warmup_start_at_zero,
+    int warmup_forward_distance,
+    bool source_range_valid,
+    bool proof_ok
+) {
+    /*
+        Temporary CMS02-H.2 proof summary.
+
+        This records bounded warm-up decision/range diagnostics only. It must
+        not affect cache ownership, output authority, source requests, or
+        returned frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD) {
+        (void)d;
+        (void)prior_checkpoint_available;
+        (void)warmup_plan_created;
+        (void)warmup_start_at_zero;
+        (void)warmup_forward_distance;
+        (void)source_range_valid;
+        (void)proof_ok;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_warmup_decision_summary_mutex
+        );
+
+        Cnr3ForDebugOnlyBoundedWarmupDecisionSummary& summary =
+            g_cnr3_for_debug_only_bounded_warmup_decision_summaries[
+                d->instance_id
+            ];
+
+        ++summary.frames_checked;
+
+        if (prior_checkpoint_available) {
+            ++summary.prior_checkpoint_available;
+            return;
+        }
+
+        ++summary.no_prior_checkpoint_detected;
+
+        if (warmup_plan_created) {
+            ++summary.warmup_plans_created;
+        }
+
+        if (warmup_start_at_zero) {
+            ++summary.warmup_start_at_zero;
+        }
+        else {
+            ++summary.warmup_start_bounded_nonzero;
+        }
+
+        summary.warmup_forward_distance_total += warmup_forward_distance;
+
+        if (warmup_forward_distance > summary.warmup_forward_distance_max) {
+            summary.warmup_forward_distance_max = warmup_forward_distance;
+        }
+
+        if (!source_range_valid) {
+            ++summary.warmup_source_range_invalid;
+        }
+
+        if (!proof_ok) {
+            ++summary.warmup_proof_failures;
+        }
+    }
+}
+
+static void cnr3_for_debug_only_print_bounded_warmup_decision_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Temporary CMS02-H.2 proof summary print.
+
+        Print one scan-friendly line so the enabled no-prior-checkpoint warm-up
+        decision proof can be audited without counting per-frame lines by hand.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD) {
+        (void)d;
+        (void)where;
+        return;
+    }
+    else {
+        if (d == nullptr || !d->debug) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyBoundedWarmupDecisionSummary summary;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                g_cnr3_for_debug_only_bounded_warmup_decision_summary_mutex
+            );
+
+            const auto found =
+                g_cnr3_for_debug_only_bounded_warmup_decision_summaries.find(
+                    d->instance_id
+                );
+
+            if (
+                found !=
+                g_cnr3_for_debug_only_bounded_warmup_decision_summaries.end()
+                ) {
+                summary = found->second;
+            }
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_decision_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # prior_checkpoint_available=%lld # no_prior_checkpoint_detected=%lld # warmup_plans_created=%lld # warmup_start_at_zero=%lld # warmup_start_bounded_nonzero=%lld # warmup_forward_distance_total=%lld # warmup_forward_distance_max=%lld # warmup_source_range_invalid=%lld # warmup_proof_failures=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            d->instance_id,
+            where != nullptr ? where : "unknown",
+            static_cast<long long>(summary.frames_checked),
+            static_cast<long long>(summary.prior_checkpoint_available),
+            static_cast<long long>(summary.no_prior_checkpoint_detected),
+            static_cast<long long>(summary.warmup_plans_created),
+            static_cast<long long>(summary.warmup_start_at_zero),
+            static_cast<long long>(summary.warmup_start_bounded_nonzero),
+            static_cast<long long>(summary.warmup_forward_distance_total),
+            static_cast<long long>(summary.warmup_forward_distance_max),
+            static_cast<long long>(summary.warmup_source_range_invalid),
+            static_cast<long long>(summary.warmup_proof_failures)
+        );
+    }
+}
+
+static void cnr3_for_debug_only_erase_bounded_warmup_decision_summary(
+    const Cnr3Data* d
+) {
+    /*
+        Remove the per-instance proof summary when the filter instance is freed.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD) {
+        (void)d;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_warmup_decision_summary_mutex
+        );
+
+        g_cnr3_for_debug_only_bounded_warmup_decision_summaries.erase(
+            d->instance_id
+        );
+    }
+}
+
+static void cnr3_for_debug_only_probe_bounded_warmup_decision(
+    Cnr3Data* d,
+    int frame_number
+) {
+    /*
+        Temporary CMS02-H.2 proof helper.
+
+        Detect the no-prior-checkpoint case and log the bounded warm-up range
+        that a later recovery path would need.
+
+        This does not request, retrieve, compute, store, or return frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD) {
+        (void)d;
+        (void)frame_number;
+        return;
+    }
+    else {
+        if (d == nullptr || frame_number < 0) {
+            return;
+        }
+
+        int checkpoint_frame_number = -1;
+
+        const bool prior_checkpoint_available =
+            cnr3_output_cache_find_nearest_checkpoint_at_or_before(
+                d->output_cache,
+                frame_number,
+                checkpoint_frame_number
+            );
+
+        if (prior_checkpoint_available) {
+            cnr3_for_debug_only_record_bounded_warmup_decision_summary(
+                d,
+                true,
+                false,
+                false,
+                0,
+                true,
+                true
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_bounded_warmup_decision # FOR-DEBUG-ONLY-BOUNDED-WARMUP-DECISION # instance=%d # requested=%d # prior_checkpoint_available=1 # checkpoint=%d # warmup_needed=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=1\n",
+                d->instance_id,
+                frame_number,
+                checkpoint_frame_number
+            );
+
+            return;
+        }
+
+        const int warmup_start =
+            std::max(
+                0,
+                frame_number - CNR3_RECOVERY_MAX_FORWARD_FRAMES
+            );
+
+        const int warmup_end = frame_number;
+        const int warmup_forward_distance = warmup_end - warmup_start;
+
+        const bool source_range_valid =
+            (
+                warmup_start >= 0 &&
+                warmup_end >= warmup_start &&
+                warmup_forward_distance >= 0 &&
+                warmup_forward_distance <= CNR3_RECOVERY_MAX_FORWARD_FRAMES
+                );
+
+        const bool proof_ok = source_range_valid;
+
+        cnr3_for_debug_only_record_bounded_warmup_decision_summary(
+            d,
+            false,
+            source_range_valid,
+            warmup_start == 0,
+            warmup_forward_distance,
+            source_range_valid,
+            proof_ok
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_decision # FOR-DEBUG-ONLY-BOUNDED-WARMUP-DECISION # instance=%d # requested=%d # prior_checkpoint_available=0 # warmup_start=%d # warmup_end=%d # warmup_forward_distance=%d # max_forward=%d # bounded_by_limit=%d # would_request_source_first=%d # would_request_source_last=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            frame_number,
+            warmup_start,
+            warmup_end,
+            warmup_forward_distance,
+            CNR3_RECOVERY_MAX_FORWARD_FRAMES,
+            warmup_start > 0 ? 1 : 0,
+            warmup_start,
+            warmup_end,
+            proof_ok ? 1 : 0
         );
     }
 }
@@ -3804,6 +4103,11 @@ static const VSFrame* VS_CC cnr3_get_frame(
         */
 
         vsapi->freeFrame(src);
+
+        cnr3_for_debug_only_probe_bounded_warmup_decision(
+            d,
+            n
+        );
 
         cnr3_for_debug_only_probe_recovery_decision_walk_skeleton(
             d,

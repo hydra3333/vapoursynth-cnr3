@@ -17,7 +17,8 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-H2-bounded-warmup-no-prior-checkpoint-diagnostic-scaffold-v1-PASSED";
+inline constexpr const char* CNR3_EDIT_VERSION = 
+    "CMS02-H2B-bounded-checkpoint-search-helper-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -252,6 +253,31 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF 
     Keep false outside a dedicated proof run.
 */
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD = false;
+
+/*
+    CMS02-H.2B bounded checkpoint-search helper proof gate.
+
+    This proof-only scaffold runs after the normal output-cache store/prune path
+    and proves that bounded recovery planning searches only inside the bounded
+    checkpoint interval before pinning.
+
+    It must not request extra frames, retrieve source frames, compute warm-up
+    outputs, store warm-up outputs beyond the normal path, return warm-up outputs,
+    change output authority, mutate old strict-streaming state, or enable any
+    parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.2B bounded checkpoint-search proof.
+
+    This is intentionally smaller than the normal recovery bound so a short
+    sequential proof run can show both available checkpoint-start plans and
+    bounded warm-up-needed decisions.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_CHECKPOINT_SEARCH_PROOF_BOUND = 2;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

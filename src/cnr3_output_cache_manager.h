@@ -702,6 +702,13 @@ bool cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
     int& checkpoint_frame_number
 );
 
+bool cnr3_output_cache_find_and_pin_checkpoint_in_interval(
+    Cnr3OutputCacheManager& cache,
+    int lower_bound_frame_number,
+    int upper_bound_frame_number,
+    int& checkpoint_frame_number
+);
+
 bool cnr3_output_cache_pin_checkpoint(
     Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
@@ -721,16 +728,17 @@ int64_t cnr3_output_cache_get_total_pin_count(
 );
 
 // -----------------------------------------------------------------------------
-// CNR3 output cache manager recovery-plan helpers - CMS02-G.3
+// CNR3 output cache manager recovery-plan helpers - CMS02-G.3 / CMS02-H.2B
 //
-// These helpers prepare metadata for a future bounded checkpoint recovery walk.
+// These helpers prepare metadata for a bounded checkpoint recovery walk.
 //
 // They do not perform recovery, recomputation, frame generation, or output-frame
 // return. On success, the selected checkpoint remains pinned and the caller must
 // unpin recovery_plan.checkpoint_frame_number exactly once.
 //
-// This phase is intentionally only a skeleton. It is not wired into
-// cnr3_get_frame().
+// CMS02-H.2B requires bounded recovery planning to search only inside the
+// bounded checkpoint interval [max(0, requested - bound), requested]. It must not
+// pin an out-of-interval checkpoint merely to reject it afterward.
 // -----------------------------------------------------------------------------
 
 struct Cnr3OutputCacheRecoveryPlan {

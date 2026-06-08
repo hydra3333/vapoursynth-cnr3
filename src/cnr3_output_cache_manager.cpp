@@ -1872,6 +1872,105 @@ bool cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
     return false;
 }
 
+bool cnr3_output_cache_find_and_pin_checkpoint_in_interval(
+    Cnr3OutputCacheManager& cache,
+    int lower_bound_frame_number,
+    int upper_bound_frame_number,
+    int& checkpoint_frame_number
+) {
+    /*
+        Thread safety:
+            Locks cache.cache_mutex internally. Reads and writes mutable
+            cache-manager state: cache.checkpoint_pool and cache.stats.
+        Caller requirement:
+            Caller must not already hold cache.cache_mutex.
+    */
+
+    /*
+        CMS02-H.2B bounded checkpoint search.
+
+        Select and pin the greatest checkpoint C in:
+            lower_bound_frame_number <= C <= upper_bound_frame_number
+
+        Do not search below lower_bound_frame_number. Do not pin a checkpoint
+        outside the caller's bounded recovery interval merely to reject it later.
+
+        Therefore:
+            return true  means an in-interval checkpoint was found and remains pinned.
+            return false means no new pin remains held by this helper.
+    */
+
+    checkpoint_frame_number = -1;
+
+    if (
+        lower_bound_frame_number < 0 ||
+        upper_bound_frame_number < lower_bound_frame_number
+        ) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(cache.cache_mutex);
+
+    ++cache.stats.checkpoint_find_and_pin_attempts;
+
+    for (
+        auto found = cache.checkpoint_pool.rbegin();
+        found != cache.checkpoint_pool.rend();
+        ++found
+        ) {
+        if (found->first > upper_bound_frame_number) {
+            continue;
+        }
+
+        if (found->first < lower_bound_frame_number) {
+            break;
+        }
+
+        Cnr3CheckpointSlot& slot = found->second;
+
+        if (slot.frame == nullptr) {
+            ++cache.stats.checkpoint_find_and_pin_failures;
+            ++cache.stats.checkpoint_find_and_pin_null_frame_failures;
+            ++cache.stats.cache_integrity_errors;
+            ++cache.stats.checkpoint_null_frame_errors;
+            return false;
+        }
+
+        ++cache.stats.checkpoint_pin_attempts;
+
+        ++slot.pin_count;
+        ++cache.stats.checkpoint_active_pin_total;
+        checkpoint_frame_number = found->first;
+
+        if constexpr (CNR3_OUTPUT_CACHE_VALIDATE_AFTER_MUTATION) {
+            if (!cnr3_output_cache_validate_invariants_externally_locked(cache)) {
+                /*
+                    The pin has not been published to the caller as a success,
+                    so roll it back before returning false.
+                */
+                --slot.pin_count;
+                --cache.stats.checkpoint_active_pin_total;
+                checkpoint_frame_number = -1;
+
+                ++cache.stats.checkpoint_find_and_pin_failures;
+                ++cache.stats.checkpoint_pin_failures;
+
+                return false;
+            }
+        }
+
+        ++cache.stats.checkpoint_find_and_pin_successes;
+        ++cache.stats.checkpoint_pin_successes;
+
+        return true;
+    }
+
+    ++cache.stats.checkpoint_find_and_pin_failures;
+    ++cache.stats.checkpoint_find_and_pin_no_prior_checkpoint_failures;
+
+    return false;
+}
+
 bool cnr3_output_cache_pin_checkpoint(
     Cnr3OutputCacheManager& cache,
     int checkpoint_frame_number
@@ -2077,6 +2176,11 @@ bool cnr3_output_cache_prepare_bounded_recovery_plan(
             This helper only prepares bounded recovery metadata. It does not
             compute frames, read frame pixels, mutate strict-streaming state, or
             return output frames.
+
+        CMS02-H.2B:
+            Bounded recovery planning searches only inside the bounded checkpoint
+            interval. It must not pin a globally nearest but out-of-interval
+            checkpoint merely to reject it afterward.
     */
 
     recovery_plan = Cnr3OutputCacheRecoveryPlan{};
@@ -2085,11 +2189,18 @@ bool cnr3_output_cache_prepare_bounded_recovery_plan(
         return false;
     }
 
+    const int lower_bound_frame_number =
+        std::max(
+            0,
+            requested_frame_number - max_forward_frame_count
+        );
+
     int checkpoint_frame_number = -1;
 
     if (
-        !cnr3_output_cache_find_and_pin_nearest_checkpoint_at_or_before(
+        !cnr3_output_cache_find_and_pin_checkpoint_in_interval(
             cache,
+            lower_bound_frame_number,
             requested_frame_number,
             checkpoint_frame_number
         )
@@ -2101,14 +2212,15 @@ bool cnr3_output_cache_prepare_bounded_recovery_plan(
         requested_frame_number - checkpoint_frame_number;
 
     if (
-        checkpoint_frame_number < 0 ||
+        checkpoint_frame_number < lower_bound_frame_number ||
+        checkpoint_frame_number > requested_frame_number ||
         forward_frame_count < 0 ||
         forward_frame_count > max_forward_frame_count
         ) {
         /*
-            The helper acquired a checkpoint pin, but the candidate is outside
-            the caller's recovery bound. Release the pin before returning false
-            so failure never leaves caller-owned pin cleanup behind.
+            Defensive cleanup only. The interval helper should not return an
+            out-of-interval checkpoint, but a failed postcondition must not leave
+            caller-owned pin cleanup behind.
         */
         (void)cnr3_output_cache_unpin_checkpoint(
             cache,

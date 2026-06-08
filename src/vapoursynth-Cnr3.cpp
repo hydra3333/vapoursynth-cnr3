@@ -1545,6 +1545,15 @@ static void cnr3_for_debug_only_erase_bounded_warmup_decision_summary(
     const Cnr3Data* d
 );
 
+static void cnr3_for_debug_only_print_bounded_checkpoint_search_summary(
+    const Cnr3Data* d,
+    const char* where
+);
+
+static void cnr3_for_debug_only_erase_bounded_checkpoint_search_summary(
+    const Cnr3Data* d
+);
+
 // -----------------------------------------------------------------------------
 // CNR3 cache manager
 // -----------------------------------------------------------------------------
@@ -1579,6 +1588,11 @@ static void VS_CC cnr3_free(
         );
 
         cnr3_for_debug_only_print_bounded_warmup_decision_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
+        cnr3_for_debug_only_print_bounded_checkpoint_search_summary(
             d,
             "before cnr3_free cleanup"
         );
@@ -1621,6 +1635,7 @@ static void VS_CC cnr3_free(
         cnr3_for_debug_only_erase_recovery_difference_summary(d);
         cnr3_for_debug_only_erase_recovery_return_decision_summary(d);
         cnr3_for_debug_only_erase_bounded_warmup_decision_summary(d);
+        cnr3_for_debug_only_erase_bounded_checkpoint_search_summary(d);
 
         delete d;
     }
@@ -1972,6 +1987,341 @@ static void cnr3_for_debug_only_probe_bounded_warmup_decision(
             warmup_start > 0 ? 1 : 0,
             warmup_start,
             warmup_end,
+            proof_ok ? 1 : 0
+        );
+    }
+}
+
+struct Cnr3ForDebugOnlyBoundedCheckpointSearchSummary {
+    int64_t frames_checked = 0;
+    int64_t frames_skipped_store_or_prune_failure = 0;
+    int64_t bounded_plans_available = 0;
+    int64_t bounded_warmup_needed = 0;
+    int64_t unpins_attempted = 0;
+    int64_t unpins_succeeded = 0;
+    int64_t unpins_failed = 0;
+    int64_t pin_cleanup_failures = 0;
+    int64_t proof_failures = 0;
+};
+
+static std::mutex g_cnr3_for_debug_only_bounded_checkpoint_search_summary_mutex;
+
+static std::unordered_map<
+    int,
+    Cnr3ForDebugOnlyBoundedCheckpointSearchSummary
+> g_cnr3_for_debug_only_bounded_checkpoint_search_summaries;
+
+static void cnr3_for_debug_only_record_bounded_checkpoint_search_summary(
+    const Cnr3Data* d,
+    bool skipped_store_or_prune_failure,
+    bool plan_available,
+    bool unpin_attempted,
+    bool unpin_ok,
+    bool pin_cleanup_ok,
+    bool proof_ok
+) {
+    /*
+        Temporary CMS02-H.2B proof summary.
+
+        This records post-store bounded checkpoint-search proof diagnostics only.
+        It must not affect cache ownership, output authority, source requests, or
+        returned frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF) {
+        (void)d;
+        (void)skipped_store_or_prune_failure;
+        (void)plan_available;
+        (void)unpin_attempted;
+        (void)unpin_ok;
+        (void)pin_cleanup_ok;
+        (void)proof_ok;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_checkpoint_search_summary_mutex
+        );
+
+        Cnr3ForDebugOnlyBoundedCheckpointSearchSummary& summary =
+            g_cnr3_for_debug_only_bounded_checkpoint_search_summaries[
+                d->instance_id
+            ];
+
+        ++summary.frames_checked;
+
+        if (skipped_store_or_prune_failure) {
+            ++summary.frames_skipped_store_or_prune_failure;
+        }
+
+        if (plan_available) {
+            ++summary.bounded_plans_available;
+        }
+        else if (!skipped_store_or_prune_failure) {
+            ++summary.bounded_warmup_needed;
+        }
+
+        if (unpin_attempted) {
+            ++summary.unpins_attempted;
+
+            if (unpin_ok) {
+                ++summary.unpins_succeeded;
+            }
+            else {
+                ++summary.unpins_failed;
+            }
+        }
+
+        if (!pin_cleanup_ok) {
+            ++summary.pin_cleanup_failures;
+        }
+
+        if (!proof_ok) {
+            ++summary.proof_failures;
+        }
+    }
+}
+
+static void cnr3_for_debug_only_print_bounded_checkpoint_search_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Temporary CMS02-H.2B proof summary print.
+
+        Print one scan-friendly line so the enabled bounded checkpoint-search
+        proof can be audited without counting per-frame lines by hand.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF) {
+        (void)d;
+        (void)where;
+        return;
+    }
+    else {
+        if (d == nullptr || !d->debug) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyBoundedCheckpointSearchSummary summary;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                g_cnr3_for_debug_only_bounded_checkpoint_search_summary_mutex
+            );
+
+            const auto found =
+                g_cnr3_for_debug_only_bounded_checkpoint_search_summaries.find(
+                    d->instance_id
+                );
+
+            if (
+                found !=
+                g_cnr3_for_debug_only_bounded_checkpoint_search_summaries.end()
+                ) {
+                summary = found->second;
+            }
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_print_bounded_checkpoint_search_summary # FOR-DEBUG-ONLY-BOUNDED-CHECKPOINT-SEARCH-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # frames_skipped_store_or_prune_failure=%lld # bounded_plans_available=%lld # bounded_warmup_needed=%lld # unpins_attempted=%lld # unpins_succeeded=%lld # unpins_failed=%lld # pin_cleanup_failures=%lld # proof_failures=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            d->instance_id,
+            where != nullptr ? where : "unknown",
+            static_cast<long long>(summary.frames_checked),
+            static_cast<long long>(summary.frames_skipped_store_or_prune_failure),
+            static_cast<long long>(summary.bounded_plans_available),
+            static_cast<long long>(summary.bounded_warmup_needed),
+            static_cast<long long>(summary.unpins_attempted),
+            static_cast<long long>(summary.unpins_succeeded),
+            static_cast<long long>(summary.unpins_failed),
+            static_cast<long long>(summary.pin_cleanup_failures),
+            static_cast<long long>(summary.proof_failures)
+        );
+    }
+}
+
+static void cnr3_for_debug_only_erase_bounded_checkpoint_search_summary(
+    const Cnr3Data* d
+) {
+    /*
+        Remove the per-instance proof summary when the filter instance is freed.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF) {
+        (void)d;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_checkpoint_search_summary_mutex
+        );
+
+        g_cnr3_for_debug_only_bounded_checkpoint_search_summaries.erase(
+            d->instance_id
+        );
+    }
+}
+
+static void cnr3_for_debug_only_probe_bounded_checkpoint_search(
+    Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok,
+    bool output_cache_prune_ok
+) {
+    /*
+        Temporary CMS02-H.2B proof helper.
+
+        Run after the normal output-cache store/prune path and prove that the
+        bounded recovery-plan helper searches only inside the bounded checkpoint
+        interval before pinning.
+
+        This does not request, retrieve, compute, store, or return frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF) {
+        (void)d;
+        (void)frame_number;
+        (void)output_cache_store_ok;
+        (void)output_cache_prune_ok;
+        return;
+    }
+    else {
+        if (d == nullptr || frame_number < 0) {
+            return;
+        }
+
+        if (!output_cache_store_ok || !output_cache_prune_ok) {
+            cnr3_for_debug_only_record_bounded_checkpoint_search_summary(
+                d,
+                true,
+                false,
+                false,
+                true,
+                true,
+                false
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_bounded_checkpoint_search # FOR-DEBUG-ONLY-BOUNDED-CHECKPOINT-SEARCH # instance=%d # requested=%d # skipped_store_or_prune_failure=1 # store_ok=%d # prune_ok=%d # proof_ok=0\n",
+                d->instance_id,
+                frame_number,
+                output_cache_store_ok ? 1 : 0,
+                output_cache_prune_ok ? 1 : 0
+            );
+
+            return;
+        }
+
+        const int proof_bound =
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_CHECKPOINT_SEARCH_PROOF_BOUND;
+
+        const int lower_bound =
+            std::max(
+                0,
+                frame_number - proof_bound
+            );
+
+        const int upper_bound = frame_number;
+
+        const int64_t pin_count_before =
+            cnr3_output_cache_get_total_pin_count(d->output_cache);
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool plan_ok =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                proof_bound,
+                recovery_plan
+            );
+
+        const int64_t pin_count_after_prepare =
+            cnr3_output_cache_get_total_pin_count(d->output_cache);
+
+        bool unpin_attempted = false;
+        bool unpin_ok = true;
+
+        if (plan_ok && recovery_plan.checkpoint_pinned) {
+            unpin_attempted = true;
+            unpin_ok =
+                cnr3_output_cache_unpin_checkpoint(
+                    d->output_cache,
+                    recovery_plan.checkpoint_frame_number
+                );
+        }
+
+        const int64_t pin_count_after_cleanup =
+            cnr3_output_cache_get_total_pin_count(d->output_cache);
+
+        const bool plan_postconditions_ok =
+            (
+                !plan_ok ||
+                (
+                    recovery_plan.valid &&
+                    recovery_plan.checkpoint_pinned &&
+                    recovery_plan.checkpoint_frame_number >= lower_bound &&
+                    recovery_plan.checkpoint_frame_number <= upper_bound &&
+                    recovery_plan.forward_frame_count >= 0 &&
+                    recovery_plan.forward_frame_count <= proof_bound &&
+                    pin_count_after_prepare == pin_count_before + 1
+                    )
+                );
+
+        const bool no_plan_postconditions_ok =
+            (
+                plan_ok ||
+                pin_count_after_prepare == pin_count_before
+                );
+
+        const bool cleanup_ok =
+            (pin_count_after_cleanup == pin_count_before);
+
+        const bool proof_ok =
+            (
+                plan_postconditions_ok &&
+                no_plan_postconditions_ok &&
+                cleanup_ok &&
+                (!unpin_attempted || unpin_ok)
+                );
+
+        cnr3_for_debug_only_record_bounded_checkpoint_search_summary(
+            d,
+            false,
+            plan_ok,
+            unpin_attempted,
+            unpin_ok,
+            cleanup_ok,
+            proof_ok
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_bounded_checkpoint_search # FOR-DEBUG-ONLY-BOUNDED-CHECKPOINT-SEARCH # instance=%d # requested=%d # lower_bound=%d # upper_bound=%d # proof_bound=%d # plan_available=%d # checkpoint=%d # forward=%d # bounded_warmup_needed=%d # pin_count_before=%lld # pin_count_after_prepare=%lld # unpin_attempted=%d # unpin_ok=%d # pin_count_after_cleanup=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            frame_number,
+            lower_bound,
+            upper_bound,
+            proof_bound,
+            plan_ok ? 1 : 0,
+            plan_ok ? recovery_plan.checkpoint_frame_number : -1,
+            plan_ok ? recovery_plan.forward_frame_count : -1,
+            plan_ok ? 0 : 1,
+            static_cast<long long>(pin_count_before),
+            static_cast<long long>(pin_count_after_prepare),
+            unpin_attempted ? 1 : 0,
+            unpin_ok ? 1 : 0,
+            static_cast<long long>(pin_count_after_cleanup),
             proof_ok ? 1 : 0
         );
     }
@@ -4267,6 +4617,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 );
             }
         }
+
+        cnr3_for_debug_only_probe_bounded_checkpoint_search(
+            d,
+            n,
+            output_cache_store_ok,
+            output_cache_prune_ok
+        );
 
         cnr3_for_debug_only_force_cache_lookup_probe(
             d,

@@ -778,6 +778,7 @@ struct Cnr3ForDebugOnlyRecoveryReturnDecisionSummary {
     int64_t frames_skipped_no_candidate = 0;
     int64_t would_be_returnable = 0;
     int64_t lookup_refs_released = 0;
+    int64_t lookup_refs_transferred = 0;
     int64_t lookup_failures = 0;
     int64_t actual_recovered_returns = 0;
 };
@@ -792,20 +793,25 @@ static std::unordered_map<
 static void cnr3_for_debug_only_record_recovery_return_decision_summary(
     const Cnr3Data* d,
     bool candidate_found,
-    bool lookup_ref_released
+    bool lookup_ref_released,
+    bool lookup_ref_transferred
 ) {
     /*
-        Temporary CMS02-G.10D.7 proof summary.
+        Temporary CMS02-G.10D.7/G10D.9 proof summary.
 
         This records whether a recovery-stored cached output was available at
-        the future return-decision point. It is diagnostic-only and does not
-        affect cache ownership, output authority, or returned frames.
+        the future return point, and whether the caller-owned lookup reference
+        was released locally or transferred to VapourSynth.
     */
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+    if constexpr (
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF
+        ) {
         (void)d;
         (void)candidate_found;
         (void)lookup_ref_released;
+        (void)lookup_ref_transferred;
         return;
     }
     else {
@@ -832,7 +838,11 @@ static void cnr3_for_debug_only_record_recovery_return_decision_summary(
         ++summary.candidates_found;
         ++summary.would_be_returnable;
 
-        if (lookup_ref_released) {
+        if (lookup_ref_transferred) {
+            ++summary.lookup_refs_transferred;
+            ++summary.actual_recovered_returns;
+        }
+        else if (lookup_ref_released) {
             ++summary.lookup_refs_released;
         }
         else {
@@ -846,13 +856,16 @@ static void cnr3_for_debug_only_print_recovery_return_decision_summary(
     const char* where
 ) {
     /*
-        Temporary CMS02-G.10D.7 proof summary print.
+        Temporary CMS02-G.10D.7/G10D.9 proof summary print.
 
-        Print one final scan-friendly line so the enabled return-decision proof
-        can be audited without counting per-frame decision lines by hand.
+        Print one final scan-friendly line so the enabled return proof can be
+        audited without counting per-frame decision or transfer lines by hand.
     */
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+    if constexpr (
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF
+        ) {
         (void)d;
         (void)where;
         return;
@@ -884,7 +897,7 @@ static void cnr3_for_debug_only_print_recovery_return_decision_summary(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_recovery_return_decision_summary # FOR-DEBUG-ONLY-RECOVERY-RETURN-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # candidates_found=%lld # frames_skipped_no_candidate=%lld # would_be_returnable=%lld # lookup_refs_released=%lld # lookup_failures=%lld # actual_recovered_returns=%lld # output_authoritative=0 # would_transfer_lookup_ref_to_vapoursynth=0\n",
+            "output-cache # cnr3_for_debug_only_print_recovery_return_decision_summary # FOR-DEBUG-ONLY-RECOVERY-RETURN-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # candidates_found=%lld # frames_skipped_no_candidate=%lld # would_be_returnable=%lld # lookup_refs_released=%lld # lookup_refs_transferred=%lld # lookup_failures=%lld # actual_recovered_returns=%lld # output_authoritative=0 # proof_only_recovery_return_transfer=%d\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -892,8 +905,10 @@ static void cnr3_for_debug_only_print_recovery_return_decision_summary(
             static_cast<long long>(summary.frames_skipped_no_candidate),
             static_cast<long long>(summary.would_be_returnable),
             static_cast<long long>(summary.lookup_refs_released),
+            static_cast<long long>(summary.lookup_refs_transferred),
             static_cast<long long>(summary.lookup_failures),
-            static_cast<long long>(summary.actual_recovered_returns)
+            static_cast<long long>(summary.actual_recovered_returns),
+            CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF ? 1 : 0
         );
     }
 }
@@ -905,7 +920,10 @@ static void cnr3_for_debug_only_erase_recovery_return_decision_summary(
         Remove the per-instance proof summary when the filter instance is freed.
     */
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN) {
+    if constexpr (
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF
+        ) {
         (void)d;
         return;
     }
@@ -985,7 +1003,8 @@ static bool cnr3_for_debug_only_probe_recovery_return_decision_dry_run(
         cnr3_for_debug_only_record_recovery_return_decision_summary(
             d,
             candidate_found,
-            lookup_ref_released
+            lookup_ref_released,
+            false
         );
 
         cnr3_debug_printf(
@@ -1000,6 +1019,86 @@ static bool cnr3_for_debug_only_probe_recovery_return_decision_dry_run(
         );
 
         return true;
+    }
+}
+
+static const VSFrame* cnr3_for_debug_only_probe_recovery_return_transfer_proof(
+    Cnr3Data* d,
+    int frame_number,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-G.10D.9 proof helper.
+
+        Look up a recovery-stored cached output and transfer the caller-owned
+        lookup reference to VapourSynth as the returned frame.
+
+        This is proof-only. It does not make recovery output generally
+        authoritative and must remain disabled outside a dedicated proof run.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF) {
+        (void)d;
+        (void)frame_number;
+        (void)vsapi;
+        return nullptr;
+    }
+    else {
+        if (
+            d == nullptr ||
+            vsapi == nullptr ||
+            frame_number < 0
+            ) {
+            return nullptr;
+        }
+
+        const VSFrame* candidate_frame =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                frame_number,
+                vsapi
+            );
+
+        const bool candidate_found =
+            (candidate_frame != nullptr);
+
+        if (candidate_frame == nullptr) {
+            cnr3_for_debug_only_record_recovery_return_decision_summary(
+                d,
+                false,
+                false,
+                false
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_recovery_return_transfer_proof # FOR-DEBUG-ONLY-RECOVERY-RETURN-TRANSFER # instance=%d # frame=%d # candidate_lookup_ok=0 # transferred_lookup_ref=0 # no_cached_recovery_output_is_ok=1 # actual_returned_recovered_output=0 # returned_normal_strict_output=1 # output_authoritative=0 # proof_only_recovery_return_transfer=1 # mutates_old_strict=0 # proof_ok=1\n",
+                d->instance_id,
+                frame_number
+            );
+
+            return nullptr;
+        }
+
+        cnr3_output_cache_note_lookup_ref_transferred(
+            d->output_cache
+        );
+
+        cnr3_for_debug_only_record_recovery_return_decision_summary(
+            d,
+            true,
+            false,
+            true
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_recovery_return_transfer_proof # FOR-DEBUG-ONLY-RECOVERY-RETURN-TRANSFER # instance=%d # frame=%d # candidate_lookup_ok=1 # transferred_lookup_ref=1 # no_cached_recovery_output_is_ok=0 # actual_returned_recovered_output=1 # returned_normal_strict_output=0 # output_authoritative=0 # proof_only_recovery_return_transfer=1 # mutates_old_strict=0 # proof_ok=1\n",
+            d->instance_id,
+            frame_number
+        );
+
+        return candidate_frame;
     }
 }
 
@@ -3785,6 +3884,30 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
 
             return nullptr;
+        }
+
+        const VSFrame* recovered_output_for_debug_return =
+            cnr3_for_debug_only_probe_recovery_return_transfer_proof(
+                d,
+                n,
+                vsapi
+            );
+
+        if (recovered_output_for_debug_return != nullptr) {
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "recovery-return-transfer-proof"
+            );
+
+            vsapi->freeFrame(dst);
+
+            cnr3_debug_print_output_cache_summary(
+                d,
+                "after CMS02-G10D9 recovery return transfer proof"
+            );
+
+            return recovered_output_for_debug_return;
         }
 
         /*

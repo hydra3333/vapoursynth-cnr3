@@ -17,7 +17,7 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D7-recovery-return-decision-dry-run-v1-PASSED";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS02-G10D9-recovery-return-transfer-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -221,6 +221,23 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_STORE_DIFFERENCE_MEASU
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_DECISION_DRY_RUN = false;
 
 /*
+    CMS02-G.10D.9 recovery-return transfer proof gate.
+
+    This proof-only scaffold looks up a recovery-stored cached output frame,
+    marks the caller-owned lookup reference as transferred, and returns that
+    reference to VapourSynth.
+
+    This proves transfer mechanics only. It does not make recovery output
+    generally authoritative, does not enable a production recovery-return
+    policy, does not use exact_match as a return condition, does not mutate old
+    strict-streaming state from the recovery-return path, and does not enable
+    any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF = false;
+
+/*
     Maximum forward distance allowed by the first bounded recovery-plan helper.
     perform recovery, recomputation, or frame generation.
 */
@@ -244,8 +261,8 @@ static constexpr int CNR3_RECOVERY_MAX_FORWARD_FRAMES = 50;
     outputs, store recovered outputs, return recovered outputs, or change output
     authority.
 */
-static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
-// static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = CNR3_RECOVERY_MAX_FORWARD_FRAMES;
+// static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = 2;
+static constexpr int CNR3_FOR_DEBUG_ONLY_RECOVERY_SOURCE_REQUEST_BACK_FRAMES = CNR3_RECOVERY_MAX_FORWARD_FRAMES;
 
 /*
     Master development diagnostics switch.

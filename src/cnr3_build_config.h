@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION = 
-    "CMS02-H2B-bounded-checkpoint-search-helper-proof-v1-PASSED";
+"CMS02-H3-bounded-warmup-source-request-plan-scaffold-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -278,6 +278,32 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF
     bounded warm-up-needed decisions.
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_CHECKPOINT_SEARCH_PROOF_BOUND = 2;
+
+/*
+    CMS02-H.3 bounded warm-up source-request-plan scaffold gate.
+
+    This proof-only scaffold runs after the normal output-cache store/prune path,
+    asks whether an interval-bounded checkpoint-start plan is available, and if
+    not, derives the source-frame range a future bounded warm-up recovery path
+    would need.
+
+    It must not request source frames, retrieve source frames, hold source
+    frames, compute warm-up outputs, store warm-up outputs beyond the normal
+    path, return warm-up outputs, change output authority, mutate old
+    strict-streaming state, or enable any parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_SCAFFOLD = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.3 bounded warm-up source-request-plan
+    scaffold.
+
+    This deliberately matches the H2B diagnostic bound so the 20-frame proof run
+    produces the same checkpoint-plan-available versus warm-up-needed pattern.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_PROOF_BOUND = 2;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

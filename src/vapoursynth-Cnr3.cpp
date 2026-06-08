@@ -1554,6 +1554,15 @@ static void cnr3_for_debug_only_erase_bounded_checkpoint_search_summary(
     const Cnr3Data* d
 );
 
+static void cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary(
+    const Cnr3Data* d,
+    const char* where
+);
+
+static void cnr3_for_debug_only_erase_bounded_warmup_source_request_plan_summary(
+    const Cnr3Data* d
+);
+
 // -----------------------------------------------------------------------------
 // CNR3 cache manager
 // -----------------------------------------------------------------------------
@@ -1597,6 +1606,11 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
+        cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
         cnr3_memory_record_and_print_snapshot(
             d->memory_stats,
             d->debug,
@@ -1636,6 +1650,7 @@ static void VS_CC cnr3_free(
         cnr3_for_debug_only_erase_recovery_return_decision_summary(d);
         cnr3_for_debug_only_erase_bounded_warmup_decision_summary(d);
         cnr3_for_debug_only_erase_bounded_checkpoint_search_summary(d);
+        cnr3_for_debug_only_erase_bounded_warmup_source_request_plan_summary(d);
 
         delete d;
     }
@@ -2322,6 +2337,411 @@ static void cnr3_for_debug_only_probe_bounded_checkpoint_search(
             unpin_attempted ? 1 : 0,
             unpin_ok ? 1 : 0,
             static_cast<long long>(pin_count_after_cleanup),
+            proof_ok ? 1 : 0
+        );
+    }
+}
+
+struct Cnr3ForDebugOnlyBoundedWarmupSourceRequestPlanSummary {
+    int64_t frames_checked = 0;
+    int64_t frames_skipped_store_or_prune_failure = 0;
+    int64_t checkpoint_plans_available = 0;
+    int64_t warmup_source_request_plans_created = 0;
+    int64_t warmup_start_at_zero = 0;
+    int64_t warmup_start_bounded_nonzero = 0;
+    int64_t source_request_frame_count_total = 0;
+    int64_t source_request_frame_count_max = 0;
+    int64_t unpins_attempted = 0;
+    int64_t unpins_succeeded = 0;
+    int64_t unpins_failed = 0;
+    int64_t pin_cleanup_failures = 0;
+    int64_t source_range_invalid = 0;
+    int64_t proof_failures = 0;
+};
+
+static std::mutex g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summary_mutex;
+
+static std::unordered_map<
+    int,
+    Cnr3ForDebugOnlyBoundedWarmupSourceRequestPlanSummary
+> g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summaries;
+
+static void cnr3_for_debug_only_record_bounded_warmup_source_request_plan_summary(
+    const Cnr3Data* d,
+    bool skipped_store_or_prune_failure,
+    bool checkpoint_plan_available,
+    bool source_request_plan_created,
+    bool warmup_start_at_zero,
+    int source_request_frame_count,
+    bool unpin_attempted,
+    bool unpin_ok,
+    bool pin_cleanup_ok,
+    bool source_range_valid,
+    bool proof_ok
+) {
+    /*
+        Temporary CMS02-H.3 proof summary.
+
+        This records bounded warm-up source-request-plan diagnostics only. It
+        must not affect cache ownership, source requests, frame retrieval,
+        computation, output authority, or returned frames.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_SCAFFOLD) {
+        (void)d;
+        (void)skipped_store_or_prune_failure;
+        (void)checkpoint_plan_available;
+        (void)source_request_plan_created;
+        (void)warmup_start_at_zero;
+        (void)source_request_frame_count;
+        (void)unpin_attempted;
+        (void)unpin_ok;
+        (void)pin_cleanup_ok;
+        (void)source_range_valid;
+        (void)proof_ok;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summary_mutex
+        );
+
+        Cnr3ForDebugOnlyBoundedWarmupSourceRequestPlanSummary& summary =
+            g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summaries[
+                d->instance_id
+            ];
+
+        ++summary.frames_checked;
+
+        if (skipped_store_or_prune_failure) {
+            ++summary.frames_skipped_store_or_prune_failure;
+        }
+
+        if (checkpoint_plan_available) {
+            ++summary.checkpoint_plans_available;
+        }
+
+        if (source_request_plan_created) {
+            ++summary.warmup_source_request_plans_created;
+
+            if (warmup_start_at_zero) {
+                ++summary.warmup_start_at_zero;
+            }
+            else {
+                ++summary.warmup_start_bounded_nonzero;
+            }
+
+            summary.source_request_frame_count_total += source_request_frame_count;
+
+            if (source_request_frame_count > summary.source_request_frame_count_max) {
+                summary.source_request_frame_count_max = source_request_frame_count;
+            }
+        }
+
+        if (unpin_attempted) {
+            ++summary.unpins_attempted;
+
+            if (unpin_ok) {
+                ++summary.unpins_succeeded;
+            }
+            else {
+                ++summary.unpins_failed;
+            }
+        }
+
+        if (!pin_cleanup_ok) {
+            ++summary.pin_cleanup_failures;
+        }
+
+        if (!source_range_valid) {
+            ++summary.source_range_invalid;
+        }
+
+        if (!proof_ok) {
+            ++summary.proof_failures;
+        }
+    }
+}
+
+static void cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Temporary CMS02-H.3 proof summary print.
+
+        Print one scan-friendly line so the enabled source-request-plan scaffold
+        can be audited without counting per-frame lines by hand.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_SCAFFOLD) {
+        (void)d;
+        (void)where;
+        return;
+    }
+    else {
+        if (d == nullptr || !d->debug) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyBoundedWarmupSourceRequestPlanSummary summary;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summary_mutex
+            );
+
+            const auto found =
+                g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summaries.find(
+                    d->instance_id
+                );
+
+            if (
+                found !=
+                g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summaries.end()
+                ) {
+                summary = found->second;
+            }
+        }
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # frames_skipped_store_or_prune_failure=%lld # checkpoint_plans_available=%lld # warmup_source_request_plans_created=%lld # warmup_start_at_zero=%lld # warmup_start_bounded_nonzero=%lld # source_request_frame_count_total=%lld # source_request_frame_count_max=%lld # unpins_attempted=%lld # unpins_succeeded=%lld # unpins_failed=%lld # pin_cleanup_failures=%lld # source_range_invalid=%lld # proof_failures=%lld # would_request_source_frames=0 # would_retrieve_source_frames=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            d->instance_id,
+            where != nullptr ? where : "unknown",
+            static_cast<long long>(summary.frames_checked),
+            static_cast<long long>(summary.frames_skipped_store_or_prune_failure),
+            static_cast<long long>(summary.checkpoint_plans_available),
+            static_cast<long long>(summary.warmup_source_request_plans_created),
+            static_cast<long long>(summary.warmup_start_at_zero),
+            static_cast<long long>(summary.warmup_start_bounded_nonzero),
+            static_cast<long long>(summary.source_request_frame_count_total),
+            static_cast<long long>(summary.source_request_frame_count_max),
+            static_cast<long long>(summary.unpins_attempted),
+            static_cast<long long>(summary.unpins_succeeded),
+            static_cast<long long>(summary.unpins_failed),
+            static_cast<long long>(summary.pin_cleanup_failures),
+            static_cast<long long>(summary.source_range_invalid),
+            static_cast<long long>(summary.proof_failures)
+        );
+    }
+}
+
+static void cnr3_for_debug_only_erase_bounded_warmup_source_request_plan_summary(
+    const Cnr3Data* d
+) {
+    /*
+        Remove the per-instance proof summary when the filter instance is freed.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_SCAFFOLD) {
+        (void)d;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summary_mutex
+        );
+
+        g_cnr3_for_debug_only_bounded_warmup_source_request_plan_summaries.erase(
+            d->instance_id
+        );
+    }
+}
+
+static void cnr3_for_debug_only_probe_bounded_warmup_source_request_plan(
+    Cnr3Data* d,
+    int frame_number,
+    bool output_cache_store_ok,
+    bool output_cache_prune_ok
+) {
+    /*
+        Temporary CMS02-H.3 proof helper.
+
+        Run after the normal output-cache store/prune path. If the interval-
+        bounded checkpoint-start plan is unavailable, derive the source-frame
+        range a future bounded warm-up recovery path would need.
+
+        This does not request, retrieve, hold, release, compute, store, or return
+        frames. It only logs and counts the plan range.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_SCAFFOLD) {
+        (void)d;
+        (void)frame_number;
+        (void)output_cache_store_ok;
+        (void)output_cache_prune_ok;
+        return;
+    }
+    else {
+        if (d == nullptr || frame_number < 0) {
+            return;
+        }
+
+        if (!output_cache_store_ok || !output_cache_prune_ok) {
+            cnr3_for_debug_only_record_bounded_warmup_source_request_plan_summary(
+                d,
+                true,
+                false,
+                false,
+                false,
+                0,
+                false,
+                true,
+                true,
+                true,
+                false
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_probe_bounded_warmup_source_request_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN # instance=%d # requested=%d # skipped_store_or_prune_failure=1 # store_ok=%d # prune_ok=%d # proof_ok=0\n",
+                d->instance_id,
+                frame_number,
+                output_cache_store_ok ? 1 : 0,
+                output_cache_prune_ok ? 1 : 0
+            );
+
+            return;
+        }
+
+        const int proof_bound =
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_PROOF_BOUND;
+
+        const int warmup_start =
+            std::max(
+                0,
+                frame_number - proof_bound
+            );
+
+        const int warmup_end = frame_number;
+
+        const int source_request_first = warmup_start;
+        const int source_request_last = warmup_end;
+        const int source_request_frame_count =
+            source_request_last - source_request_first + 1;
+
+        const bool source_range_valid =
+            (
+                proof_bound >= 0 &&
+                warmup_start >= 0 &&
+                warmup_end >= warmup_start &&
+                source_request_first == warmup_start &&
+                source_request_last == warmup_end &&
+                source_request_frame_count >= 1 &&
+                source_request_frame_count <= proof_bound + 1
+                );
+
+        const int64_t pin_count_before =
+            cnr3_output_cache_get_total_pin_count(d->output_cache);
+
+        Cnr3OutputCacheRecoveryPlan recovery_plan;
+
+        const bool checkpoint_plan_available =
+            cnr3_output_cache_prepare_bounded_recovery_plan(
+                d->output_cache,
+                frame_number,
+                proof_bound,
+                recovery_plan
+            );
+
+        const int64_t pin_count_after_prepare =
+            cnr3_output_cache_get_total_pin_count(d->output_cache);
+
+        bool unpin_attempted = false;
+        bool unpin_ok = true;
+
+        if (checkpoint_plan_available && recovery_plan.checkpoint_pinned) {
+            unpin_attempted = true;
+            unpin_ok =
+                cnr3_output_cache_unpin_checkpoint(
+                    d->output_cache,
+                    recovery_plan.checkpoint_frame_number
+                );
+        }
+
+        const int64_t pin_count_after_cleanup =
+            cnr3_output_cache_get_total_pin_count(d->output_cache);
+
+        const bool checkpoint_plan_postconditions_ok =
+            (
+                !checkpoint_plan_available ||
+                (
+                    recovery_plan.valid &&
+                    recovery_plan.checkpoint_pinned &&
+                    recovery_plan.forward_frame_count >= 0 &&
+                    recovery_plan.forward_frame_count <= proof_bound &&
+                    pin_count_after_prepare == pin_count_before + 1
+                    )
+                );
+
+        const bool no_checkpoint_plan_postconditions_ok =
+            (
+                checkpoint_plan_available ||
+                pin_count_after_prepare == pin_count_before
+                );
+
+        const bool pin_cleanup_ok =
+            (pin_count_after_cleanup == pin_count_before);
+
+        const bool source_request_plan_created =
+            (
+                !checkpoint_plan_available &&
+                source_range_valid
+                );
+
+        const bool proof_ok =
+            (
+                checkpoint_plan_postconditions_ok &&
+                no_checkpoint_plan_postconditions_ok &&
+                pin_cleanup_ok &&
+                (!unpin_attempted || unpin_ok) &&
+                source_range_valid
+                );
+
+        cnr3_for_debug_only_record_bounded_warmup_source_request_plan_summary(
+            d,
+            false,
+            checkpoint_plan_available,
+            source_request_plan_created,
+            warmup_start == 0,
+            source_request_frame_count,
+            unpin_attempted,
+            unpin_ok,
+            pin_cleanup_ok,
+            source_range_valid,
+            proof_ok
+        );
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_source_request_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN # instance=%d # requested=%d # proof_bound=%d # checkpoint_plan_available=%d # checkpoint=%d # forward=%d # bounded_warmup_needed=%d # warmup_start=%d # warmup_end=%d # source_request_first=%d # source_request_last=%d # source_request_frame_count=%d # would_request_source_frames=0 # would_retrieve_source_frames=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # pin_count_before=%lld # pin_count_after_prepare=%lld # unpin_attempted=%d # unpin_ok=%d # pin_count_after_cleanup=%lld # source_range_valid=%d # proof_ok=%d\n",
+            d->instance_id,
+            frame_number,
+            proof_bound,
+            checkpoint_plan_available ? 1 : 0,
+            checkpoint_plan_available ? recovery_plan.checkpoint_frame_number : -1,
+            checkpoint_plan_available ? recovery_plan.forward_frame_count : -1,
+            checkpoint_plan_available ? 0 : 1,
+            source_request_plan_created ? warmup_start : -1,
+            source_request_plan_created ? warmup_end : -1,
+            source_request_plan_created ? source_request_first : -1,
+            source_request_plan_created ? source_request_last : -1,
+            source_request_plan_created ? source_request_frame_count : 0,
+            static_cast<long long>(pin_count_before),
+            static_cast<long long>(pin_count_after_prepare),
+            unpin_attempted ? 1 : 0,
+            unpin_ok ? 1 : 0,
+            static_cast<long long>(pin_count_after_cleanup),
+            source_range_valid ? 1 : 0,
             proof_ok ? 1 : 0
         );
     }
@@ -4619,6 +5039,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
         }
 
         cnr3_for_debug_only_probe_bounded_checkpoint_search(
+            d,
+            n,
+            output_cache_store_ok,
+            output_cache_prune_ok
+        );
+
+        cnr3_for_debug_only_probe_bounded_warmup_source_request_plan(
             d,
             n,
             output_cache_store_ok,

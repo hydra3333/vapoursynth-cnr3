@@ -1468,8 +1468,27 @@ Confirm:
 Purpose: implement `cnr3_output_cache_find_and_pin_checkpoint_in_interval()`
 (Section 9.2.G2) and prove its behaviour with a small diagnostic bound.
 
+**Proof placement — post-store, not pre-store:**
+The H2B proof must run after `cnr3_output_cache_store_frame()` and
+`cnr3_output_cache_prune_after_store()` for the current frame, not before.
+This is distinct from the existing H2 pre-store diagnostic probe:
+
+```text
+H2 pre-store probe (existing, do not alter):
+    frame 0: fires before store; checkpoint 0 not yet in cache
+             -> no prior checkpoint; no plan; warm-up needed
+
+H2B post-store proof (new):
+    frame 0: fires after store; checkpoint 0 now in cache
+             -> checkpoint 0 found in [0,0]; plan available
+```
+
+This is a timing distinction, not a contradiction. The two probes coexist.
+Do not alter the existing H2 pre-store diagnostic scaffold to accommodate
+H2B. Add H2B proof placement after store/prune independently.
+
 Proof expectations (20-frame sequential test, bound B = 2,
-checkpoints at every 10th frame: {0, 10}):
+checkpoints at every 10th frame: {0, 10}, proof runs post-store):
 
 ```text
 frame 0:  search [0,0]  -> checkpoint 0 in interval -> plan available

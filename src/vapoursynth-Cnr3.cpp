@@ -1,5 +1,5 @@
 /*
-    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
+    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2
 
     CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive
     temporal chroma-stabilisation model while using VapourSynth API4 only.
@@ -1572,6 +1572,15 @@ static void cnr3_for_debug_only_erase_bounded_warmup_source_frame_set_summary(
     const Cnr3Data* d
 );
 
+static void cnr3_for_debug_only_print_bounded_warmup_local_compute_summary(
+    const Cnr3Data* d,
+    const char* where
+);
+
+static void cnr3_for_debug_only_erase_bounded_warmup_local_compute_summary(
+    const Cnr3Data* d
+);
+
 // -----------------------------------------------------------------------------
 // CNR3 cache manager
 // -----------------------------------------------------------------------------
@@ -1625,6 +1634,11 @@ static void VS_CC cnr3_free(
             "before cnr3_free cleanup"
         );
 
+        cnr3_for_debug_only_print_bounded_warmup_local_compute_summary(
+            d,
+            "before cnr3_free cleanup"
+        );
+
         cnr3_memory_record_and_print_snapshot(
             d->memory_stats,
             d->debug,
@@ -1666,6 +1680,7 @@ static void VS_CC cnr3_free(
         cnr3_for_debug_only_erase_bounded_checkpoint_search_summary(d);
         cnr3_for_debug_only_erase_bounded_warmup_source_request_plan_summary(d);
         cnr3_for_debug_only_erase_bounded_warmup_source_frame_set_summary(d);
+        cnr3_for_debug_only_erase_bounded_warmup_local_compute_summary(d);
 
         delete d;
     }
@@ -4777,22 +4792,29 @@ static void cnr3_for_debug_only_erase_bounded_warmup_source_frame_set_summary(
     }
 }
 
+static constexpr bool cnr3_for_debug_only_bounded_warmup_source_plan_gate_enabled() {
+    return
+        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ||
+        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF;
+}
+
 static Cnr3ForDebugOnlyBoundedWarmupSourcePlan*
 cnr3_for_debug_only_create_bounded_warmup_source_plan(
     Cnr3Data* d,
     int frame_number
 ) {
     /*
-        Temporary CMS02-H.4 arInitial plan helper.
+        Temporary CMS02-H arInitial plan helper.
 
         Create the conservative bounded warm-up source-frame request window:
             [max(0, requested - proof_bound), requested]
 
-        This helper only creates the per-invocation plan. It does not request,
-        retrieve, compute, store, return, or alter output authority.
+        H4 uses this plan to prove request/retrieve/release ownership.
+        H5 uses the same source window to prove local compute. H5 remains
+        proof-only and must not store, return, or become output-authoritative.
     */
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
+    if constexpr (!cnr3_for_debug_only_bounded_warmup_source_plan_gate_enabled()) {
         (void)d;
         (void)frame_number;
         return nullptr;
@@ -4808,7 +4830,9 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
         const int proof_bound =
             std::max(
                 0,
-                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF_BOUND
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF
+                ? CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF_BOUND
+                : CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF_BOUND
             );
 
         plan->requested_frame_number = frame_number;
@@ -4837,12 +4861,13 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_create_bounded_warmup_source_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-PLAN-CREATED # instance=%d # requested=%d # first_source=%d # last_source=%d # count=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            "output-cache # cnr3_for_debug_only_create_bounded_warmup_source_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-PLAN-CREATED # instance=%d # requested=%d # first_source=%d # last_source=%d # count=%d # would_compute_warmup_outputs=%d # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
             d->instance_id,
             plan->requested_frame_number,
             plan->first_source_frame_number,
             plan->last_source_frame_number,
-            plan->source_frame_count
+            plan->source_frame_count,
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ? 1 : 0
         );
 
         return plan;
@@ -4856,14 +4881,14 @@ static void cnr3_for_debug_only_request_bounded_warmup_source_plan_frames(
     const VSAPI* vsapi
 ) {
     /*
-        Temporary CMS02-H.4 arInitial request helper.
+        Temporary CMS02-H arInitial request helper.
 
-        Request every source frame in the H4 conservative bounded warm-up source
-        window. arAllFramesReady must retrieve only frames requested by this
-        same callback activation.
+        Request every source frame in the bounded warm-up source window. Any
+        matching getFrameFilter() call must happen later in arAllFramesReady for
+        the same callback activation.
     */
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
+    if constexpr (!cnr3_for_debug_only_bounded_warmup_source_plan_gate_enabled()) {
         (void)d;
         (void)plan;
         (void)frameCtx;
@@ -4896,7 +4921,7 @@ static void cnr3_for_debug_only_request_bounded_warmup_source_plan_frames(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_request_bounded_warmup_source_plan_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-REQUESTED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
+                "output-cache # cnr3_for_debug_only_request_bounded_warmup_source_plan_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUESTED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
                 d->instance_id,
                 plan->requested_frame_number,
                 source_frame_number,
@@ -4911,10 +4936,6 @@ static void cnr3_for_debug_only_request_bounded_warmup_source_plan_frames(
 static void cnr3_for_debug_only_destroy_bounded_warmup_source_plan(
     Cnr3ForDebugOnlyBoundedWarmupSourcePlan*& plan
 ) {
-    /*
-        Destroy and null the H4 per-invocation frameData plan.
-    */
-
     delete plan;
     plan = nullptr;
 }
@@ -4925,18 +4946,15 @@ static void cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
     const char* reason
 ) {
     /*
-        Temporary CMS02-H.4 proof trace.
-
-        The delete/null action is performed even when the proof gate is false,
-        so cleanup remains safe if an unexpected path receives a stale pointer.
+        Destroy and null the per-invocation bounded warm-up source plan.
     */
 
-    if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
-        if (d != nullptr && plan != nullptr) {
+    if constexpr (cnr3_for_debug_only_bounded_warmup_source_plan_gate_enabled()) {
+        if (plan != nullptr) {
             cnr3_debug_printf(
-                d->debug,
-                "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-PLAN-DESTROYED # instance=%d # reason=%s # requested=%d # first_source=%d # last_source=%d # count=%d\n",
-                d->instance_id,
+                d != nullptr ? d->debug : false,
+                "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-PLAN-DESTROYED # instance=%d # reason=%s # requested=%d # first_source=%d # last_source=%d # count=%d\n",
+                d != nullptr ? d->instance_id : -1,
                 reason != nullptr ? reason : "unknown",
                 plan->requested_frame_number,
                 plan->first_source_frame_number,
@@ -4973,16 +4991,16 @@ static void cnr3_for_debug_only_release_bounded_warmup_source_frame_set(
     int& released_count
 ) {
     /*
-        Temporary CMS02-H.4 proof helper.
+        Temporary CMS02-H proof helper.
 
-        Release all source frames held by the local H4 source-frame set. This
-        helper must be called on both normal and partial failure paths before
+        Release all source frames held by the local bounded warm-up source-frame
+        set. This helper must be called on both normal and failure paths before
         returning from arAllFramesReady.
     */
 
     released_count = 0;
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
+    if constexpr (!cnr3_for_debug_only_bounded_warmup_source_plan_gate_enabled()) {
         (void)d;
         (void)source_frame_set;
         (void)reason;
@@ -5007,7 +5025,7 @@ static void cnr3_for_debug_only_release_bounded_warmup_source_frame_set(
 
             cnr3_debug_printf(
                 d != nullptr ? d->debug : false,
-                "output-cache # cnr3_for_debug_only_release_bounded_warmup_source_frame_set # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-RELEASED # instance=%d # reason=%s # requested=%d # source=%d\n",
+                "output-cache # cnr3_for_debug_only_release_bounded_warmup_source_frame_set # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-RELEASED # instance=%d # reason=%s # requested=%d # source=%d\n",
                 d != nullptr ? d->instance_id : -1,
                 reason != nullptr ? reason : "unknown",
                 source_frame_set.requested_frame_number,
@@ -5018,6 +5036,104 @@ static void cnr3_for_debug_only_release_bounded_warmup_source_frame_set(
         }
 
         source_frame_set.entries.clear();
+    }
+}
+
+static bool cnr3_for_debug_only_retrieve_bounded_warmup_source_frames(
+    const Cnr3Data* d,
+    const Cnr3ForDebugOnlyBoundedWarmupSourcePlan* plan,
+    VSFrameContext* frameCtx,
+    const VSAPI* vsapi,
+    Cnr3ForDebugOnlyBoundedWarmupSourceFrameSet& source_frame_set,
+    int& retrieved_count,
+    bool& partial_acquire_failure
+) {
+    /*
+        Retrieve every source frame that was requested in arInitial and hold the
+        frames in a local per-invocation set. The caller owns cleanup through
+        cnr3_for_debug_only_release_bounded_warmup_source_frame_set().
+    */
+
+    retrieved_count = 0;
+    partial_acquire_failure = false;
+
+    if constexpr (!cnr3_for_debug_only_bounded_warmup_source_plan_gate_enabled()) {
+        (void)d;
+        (void)plan;
+        (void)frameCtx;
+        (void)vsapi;
+        (void)source_frame_set;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            d->node == nullptr ||
+            plan == nullptr ||
+            frameCtx == nullptr ||
+            vsapi == nullptr ||
+            plan->first_source_frame_number < 0 ||
+            plan->last_source_frame_number < plan->first_source_frame_number ||
+            plan->source_frame_count <= 0
+            ) {
+            return true;
+        }
+
+        source_frame_set.requested_frame_number = plan->requested_frame_number;
+        source_frame_set.first_source_frame_number = plan->first_source_frame_number;
+        source_frame_set.last_source_frame_number = plan->last_source_frame_number;
+
+        for (
+            int source_frame_number = plan->first_source_frame_number;
+            source_frame_number <= plan->last_source_frame_number;
+            ++source_frame_number
+            ) {
+            const VSFrame* source_frame =
+                vsapi->getFrameFilter(
+                    source_frame_number,
+                    d->node,
+                    frameCtx
+                );
+
+            if (source_frame == nullptr) {
+                partial_acquire_failure = true;
+
+                cnr3_debug_printf(
+                    d->debug,
+                    "output-cache # cnr3_for_debug_only_retrieve_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-ACQUIRE-FAILED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # retrieved_so_far=%d\n",
+                    d->instance_id,
+                    plan->requested_frame_number,
+                    source_frame_number,
+                    plan->first_source_frame_number,
+                    plan->last_source_frame_number,
+                    retrieved_count
+                );
+
+                return false;
+            }
+
+            source_frame_set.entries.push_back(
+                Cnr3ForDebugOnlyBoundedWarmupSourceFrameSetEntry{
+                    source_frame_number,
+                    source_frame
+                }
+            );
+
+            ++retrieved_count;
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_retrieve_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-ACQUIRED # instance=%d # requested=%d # source=%d # held=%llu # first_source=%d # last_source=%d\n",
+                d->instance_id,
+                plan->requested_frame_number,
+                source_frame_number,
+                static_cast<unsigned long long>(source_frame_set.entries.size()),
+                plan->first_source_frame_number,
+                plan->last_source_frame_number
+            );
+        }
+
+        return true;
     }
 }
 
@@ -5045,79 +5161,20 @@ static bool cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_fram
         return true;
     }
     else {
-        if (
-            d == nullptr ||
-            d->node == nullptr ||
-            plan == nullptr ||
-            frameCtx == nullptr ||
-            vsapi == nullptr ||
-            plan->first_source_frame_number < 0 ||
-            plan->last_source_frame_number < plan->first_source_frame_number ||
-            plan->source_frame_count <= 0
-            ) {
-            return true;
-        }
-
         Cnr3ForDebugOnlyBoundedWarmupSourceFrameSet source_frame_set;
-
-        source_frame_set.requested_frame_number = plan->requested_frame_number;
-        source_frame_set.first_source_frame_number = plan->first_source_frame_number;
-        source_frame_set.last_source_frame_number = plan->last_source_frame_number;
-
-        bool proof_ok = true;
-        bool partial_acquire_failure = false;
         int retrieved_count = 0;
+        bool partial_acquire_failure = false;
 
-        for (
-            int source_frame_number = plan->first_source_frame_number;
-            source_frame_number <= plan->last_source_frame_number;
-            ++source_frame_number
-            ) {
-            const VSFrame* source_frame =
-                vsapi->getFrameFilter(
-                    source_frame_number,
-                    d->node,
-                    frameCtx
-                );
-
-            if (source_frame == nullptr) {
-                partial_acquire_failure = true;
-                proof_ok = false;
-
-                cnr3_debug_printf(
-                    d->debug,
-                    "output-cache # cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-ACQUIRE-FAILED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # retrieved_so_far=%d\n",
-                    d->instance_id,
-                    plan->requested_frame_number,
-                    source_frame_number,
-                    plan->first_source_frame_number,
-                    plan->last_source_frame_number,
-                    retrieved_count
-                );
-
-                break;
-            }
-
-            source_frame_set.entries.push_back(
-                Cnr3ForDebugOnlyBoundedWarmupSourceFrameSetEntry{
-                    source_frame_number,
-                    source_frame
-                }
+        bool proof_ok =
+            cnr3_for_debug_only_retrieve_bounded_warmup_source_frames(
+                d,
+                plan,
+                frameCtx,
+                vsapi,
+                source_frame_set,
+                retrieved_count,
+                partial_acquire_failure
             );
-
-            ++retrieved_count;
-
-            cnr3_debug_printf(
-                d->debug,
-                "output-cache # cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-ACQUIRED # instance=%d # requested=%d # source=%d # held=%llu # first_source=%d # last_source=%d\n",
-                d->instance_id,
-                plan->requested_frame_number,
-                source_frame_number,
-                static_cast<unsigned long long>(source_frame_set.entries.size()),
-                plan->first_source_frame_number,
-                plan->last_source_frame_number
-            );
-        }
 
         int released_count = 0;
 
@@ -5133,7 +5190,10 @@ static bool cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_fram
             (retrieved_count == released_count);
 
         const bool all_requested_retrieved =
-            (retrieved_count == plan->source_frame_count);
+            (
+                plan != nullptr &&
+                retrieved_count == plan->source_frame_count
+                );
 
         proof_ok =
             (
@@ -5146,7 +5206,7 @@ static bool cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_fram
             d,
             false,
             false,
-            plan->source_frame_count,
+            plan != nullptr ? plan->source_frame_count : 0,
             retrieved_count,
             released_count,
             partial_acquire_failure,
@@ -5155,17 +5215,612 @@ static bool cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_fram
         );
 
         cnr3_debug_printf(
-            d->debug,
+            d != nullptr ? d->debug : false,
             "output-cache # cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # released=%d # release_balance=%d # partial_acquire_failure=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d != nullptr ? d->instance_id : -1,
+            plan != nullptr ? plan->requested_frame_number : -1,
+            plan != nullptr ? plan->first_source_frame_number : -1,
+            plan != nullptr ? plan->last_source_frame_number : -1,
+            plan != nullptr ? plan->source_frame_count : 0,
+            retrieved_count,
+            released_count,
+            retrieved_count - released_count,
+            partial_acquire_failure ? 1 : 0,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok;
+    }
+}
+
+struct Cnr3ForDebugOnlyBoundedWarmupLocalOutputEntry {
+    int frame_number = -1;
+    const VSFrame* frame = nullptr;
+};
+
+struct Cnr3ForDebugOnlyBoundedWarmupLocalComputeSummary {
+    int64_t frames_checked = 0;
+    int64_t plans_seen = 0;
+    int64_t source_frames_retrieved_total = 0;
+    int64_t source_frames_released_total = 0;
+    int64_t source_frame_release_balance_errors = 0;
+    int64_t start_frame_zero_count = 0;
+    int64_t start_frame_nonzero_count = 0;
+    int64_t local_start_reset_copies = 0;
+    int64_t local_recursive_computes = 0;
+    int64_t local_outputs_allocated = 0;
+    int64_t local_outputs_released = 0;
+    int64_t local_output_release_balance_errors = 0;
+    int64_t partial_acquire_failures = 0;
+    int64_t compute_failures = 0;
+    int64_t proof_failures = 0;
+};
+
+static std::mutex g_cnr3_for_debug_only_bounded_warmup_local_compute_summary_mutex;
+
+static std::unordered_map<
+    int,
+    Cnr3ForDebugOnlyBoundedWarmupLocalComputeSummary
+> g_cnr3_for_debug_only_bounded_warmup_local_compute_summaries;
+
+static void cnr3_for_debug_only_record_bounded_warmup_local_compute_summary(
+    const Cnr3Data* d,
+    bool plan_seen,
+    int source_frames_retrieved,
+    int source_frames_released,
+    bool source_release_balance_ok,
+    bool start_frame_zero,
+    bool start_frame_nonzero,
+    int local_start_reset_copies,
+    int local_recursive_computes,
+    int local_outputs_allocated,
+    int local_outputs_released,
+    bool local_output_release_balance_ok,
+    bool partial_acquire_failure,
+    bool compute_failure,
+    bool proof_ok
+) {
+    /*
+        Temporary CMS02-H5 proof summary.
+
+        This records local bounded warm-up compute diagnostics only. H5 remains
+        proof-only: it must not store computed frames, return them, or change
+        output authority.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF) {
+        (void)d;
+        (void)plan_seen;
+        (void)source_frames_retrieved;
+        (void)source_frames_released;
+        (void)source_release_balance_ok;
+        (void)start_frame_zero;
+        (void)start_frame_nonzero;
+        (void)local_start_reset_copies;
+        (void)local_recursive_computes;
+        (void)local_outputs_allocated;
+        (void)local_outputs_released;
+        (void)local_output_release_balance_ok;
+        (void)partial_acquire_failure;
+        (void)compute_failure;
+        (void)proof_ok;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_warmup_local_compute_summary_mutex
+        );
+
+        Cnr3ForDebugOnlyBoundedWarmupLocalComputeSummary& summary =
+            g_cnr3_for_debug_only_bounded_warmup_local_compute_summaries[
+                d->instance_id
+            ];
+
+        ++summary.frames_checked;
+
+        if (plan_seen) {
+            ++summary.plans_seen;
+        }
+
+        summary.source_frames_retrieved_total += source_frames_retrieved;
+        summary.source_frames_released_total += source_frames_released;
+
+        if (!source_release_balance_ok) {
+            ++summary.source_frame_release_balance_errors;
+        }
+
+        if (start_frame_zero) {
+            ++summary.start_frame_zero_count;
+        }
+
+        if (start_frame_nonzero) {
+            ++summary.start_frame_nonzero_count;
+        }
+
+        summary.local_start_reset_copies += local_start_reset_copies;
+        summary.local_recursive_computes += local_recursive_computes;
+        summary.local_outputs_allocated += local_outputs_allocated;
+        summary.local_outputs_released += local_outputs_released;
+
+        if (!local_output_release_balance_ok) {
+            ++summary.local_output_release_balance_errors;
+        }
+
+        if (partial_acquire_failure) {
+            ++summary.partial_acquire_failures;
+        }
+
+        if (compute_failure) {
+            ++summary.compute_failures;
+        }
+
+        if (!proof_ok) {
+            ++summary.proof_failures;
+        }
+    }
+}
+
+static void cnr3_for_debug_only_print_bounded_warmup_local_compute_summary(
+    const Cnr3Data* d,
+    const char* where
+) {
+    /*
+        Temporary CMS02-H5 proof summary print.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF) {
+        (void)d;
+        (void)where;
+        return;
+    }
+    else {
+        if (d == nullptr || !d->debug) {
+            return;
+        }
+
+        Cnr3ForDebugOnlyBoundedWarmupLocalComputeSummary summary;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                g_cnr3_for_debug_only_bounded_warmup_local_compute_summary_mutex
+            );
+
+            const auto found =
+                g_cnr3_for_debug_only_bounded_warmup_local_compute_summaries.find(
+                    d->instance_id
+                );
+
+            if (
+                found !=
+                g_cnr3_for_debug_only_bounded_warmup_local_compute_summaries.end()
+                ) {
+                summary = found->second;
+            }
+        }
+
+        const int64_t source_frame_release_balance =
+            summary.source_frames_retrieved_total -
+            summary.source_frames_released_total;
+
+        const int64_t local_output_release_balance =
+            summary.local_outputs_allocated -
+            summary.local_outputs_released;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_local_compute_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-COMPUTE-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # start_frame_zero_count=%lld # start_frame_nonzero_count=%lld # local_start_reset_copies=%lld # local_recursive_computes=%lld # local_outputs_allocated=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
             d->instance_id,
+            where != nullptr ? where : "unknown",
+            static_cast<long long>(summary.frames_checked),
+            static_cast<long long>(summary.plans_seen),
+            static_cast<long long>(summary.source_frames_retrieved_total),
+            static_cast<long long>(summary.source_frames_released_total),
+            static_cast<long long>(source_frame_release_balance),
+            static_cast<long long>(summary.source_frame_release_balance_errors),
+            static_cast<long long>(summary.start_frame_zero_count),
+            static_cast<long long>(summary.start_frame_nonzero_count),
+            static_cast<long long>(summary.local_start_reset_copies),
+            static_cast<long long>(summary.local_recursive_computes),
+            static_cast<long long>(summary.local_outputs_allocated),
+            static_cast<long long>(summary.local_outputs_released),
+            static_cast<long long>(local_output_release_balance),
+            static_cast<long long>(summary.local_output_release_balance_errors),
+            static_cast<long long>(summary.partial_acquire_failures),
+            static_cast<long long>(summary.compute_failures),
+            static_cast<long long>(summary.proof_failures)
+        );
+    }
+}
+
+static void cnr3_for_debug_only_erase_bounded_warmup_local_compute_summary(
+    const Cnr3Data* d
+) {
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF) {
+        (void)d;
+        return;
+    }
+    else {
+        if (d == nullptr) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_cnr3_for_debug_only_bounded_warmup_local_compute_summary_mutex
+        );
+
+        g_cnr3_for_debug_only_bounded_warmup_local_compute_summaries.erase(
+            d->instance_id
+        );
+    }
+}
+
+static const VSFrame* cnr3_for_debug_only_find_bounded_warmup_source_frame(
+    const Cnr3ForDebugOnlyBoundedWarmupSourceFrameSet& source_frame_set,
+    int frame_number
+) {
+    for (const Cnr3ForDebugOnlyBoundedWarmupSourceFrameSetEntry& entry :
+        source_frame_set.entries) {
+        if (entry.frame_number == frame_number) {
+            return entry.frame;
+        }
+    }
+
+    return nullptr;
+}
+
+static void cnr3_for_debug_only_release_bounded_warmup_local_outputs(
+    const Cnr3Data* d,
+    std::vector<Cnr3ForDebugOnlyBoundedWarmupLocalOutputEntry>& local_outputs,
+    const char* reason,
+    const VSAPI* vsapi,
+    int& released_count
+) {
+    released_count = 0;
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF) {
+        (void)d;
+        (void)local_outputs;
+        (void)reason;
+        (void)vsapi;
+        return;
+    }
+    else {
+        if (vsapi == nullptr) {
+            return;
+        }
+
+        for (Cnr3ForDebugOnlyBoundedWarmupLocalOutputEntry& entry :
+            local_outputs) {
+            if (entry.frame == nullptr) {
+                continue;
+            }
+
+            vsapi->freeFrame(entry.frame);
+            ++released_count;
+
+            cnr3_debug_printf(
+                d != nullptr ? d->debug : false,
+                "output-cache # cnr3_for_debug_only_release_bounded_warmup_local_outputs # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-OUTPUT-RELEASED # instance=%d # reason=%s # frame=%d\n",
+                d != nullptr ? d->instance_id : -1,
+                reason != nullptr ? reason : "unknown",
+                entry.frame_number
+            );
+
+            entry.frame = nullptr;
+        }
+
+        local_outputs.clear();
+    }
+}
+
+static bool cnr3_for_debug_only_compute_bounded_warmup_local_outputs(
+    const Cnr3Data* d,
+    const Cnr3ForDebugOnlyBoundedWarmupSourcePlan* plan,
+    const Cnr3ForDebugOnlyBoundedWarmupSourceFrameSet& source_frame_set,
+    VSFrameContext* frameCtx,
+    VSCore* core,
+    const VSAPI* vsapi,
+    int& local_start_reset_copies,
+    int& local_recursive_computes,
+    int& local_outputs_allocated,
+    int& local_outputs_released,
+    bool& compute_failure,
+    bool& local_output_release_balance_ok
+) {
+    /*
+        Temporary CMS02-H5 local compute proof.
+
+        The start frame is an explicit bounded warm-up reset/copy. Recursive
+        steps after the start use process_cnr3_frame_with_explicit_previous_output()
+        with the previous local output. This does not call process_cnr3_frame(),
+        does not touch old strict state, and does not implement any new pixel
+        algorithm.
+    */
+
+    local_start_reset_copies = 0;
+    local_recursive_computes = 0;
+    local_outputs_allocated = 0;
+    local_outputs_released = 0;
+    compute_failure = false;
+    local_output_release_balance_ok = true;
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF) {
+        (void)d;
+        (void)plan;
+        (void)source_frame_set;
+        (void)frameCtx;
+        (void)core;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (
+            d == nullptr ||
+            d->vi == nullptr ||
+            plan == nullptr ||
+            frameCtx == nullptr ||
+            core == nullptr ||
+            vsapi == nullptr
+            ) {
+            return true;
+        }
+
+        std::vector<Cnr3ForDebugOnlyBoundedWarmupLocalOutputEntry> local_outputs;
+        bool proof_ok = true;
+
+        for (
+            int frame_number = plan->first_source_frame_number;
+            frame_number <= plan->last_source_frame_number;
+            ++frame_number
+            ) {
+            const VSFrame* source_frame =
+                cnr3_for_debug_only_find_bounded_warmup_source_frame(
+                    source_frame_set,
+                    frame_number
+                );
+
+            if (source_frame == nullptr) {
+                compute_failure = true;
+                proof_ok = false;
+                break;
+            }
+
+            VSFrame* local_output =
+                vsapi->newVideoFrame(
+                    &d->vi->format,
+                    d->vi->width,
+                    d->vi->height,
+                    source_frame,
+                    core
+                );
+
+            if (local_output == nullptr) {
+                compute_failure = true;
+                proof_ok = false;
+                break;
+            }
+
+            ++local_outputs_allocated;
+
+            const bool is_start_frame =
+                (frame_number == plan->first_source_frame_number);
+
+            const VSFrame* previous_local_output =
+                local_outputs.empty() ? nullptr : local_outputs.back().frame;
+
+            const int processing_frame_number =
+                is_start_frame ? 0 : frame_number;
+
+            const int predecessor_frame_number =
+                is_start_frame ? -1 : frame_number - 1;
+
+            const VSFrame* explicit_previous_output =
+                is_start_frame ? nullptr : previous_local_output;
+
+            if (
+                !process_cnr3_frame_with_explicit_previous_output(
+                    d,
+                    processing_frame_number,
+                    source_frame,
+                    explicit_previous_output,
+                    local_output,
+                    frameCtx,
+                    vsapi
+                )
+                ) {
+                vsapi->freeFrame(local_output);
+                local_output = nullptr;
+                ++local_outputs_released;
+                compute_failure = true;
+                proof_ok = false;
+                break;
+            }
+
+            if (is_start_frame) {
+                ++local_start_reset_copies;
+            }
+            else {
+                ++local_recursive_computes;
+            }
+
+            local_outputs.push_back(
+                Cnr3ForDebugOnlyBoundedWarmupLocalOutputEntry{
+                    frame_number,
+                    local_output
+                }
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_for_debug_only_compute_bounded_warmup_local_outputs # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-COMPUTE-STEP # instance=%d # requested=%d # actual_source_frame=%d # warmup_start_frame=%d # processing_frame_number=%d # predecessor_frame_number=%d # bounded_start_uses_frame0_reset_path=%d # recursive_compute=%d # uses_existing_explicit_previous_output_helper=1 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
+                d->instance_id,
+                plan->requested_frame_number,
+                frame_number,
+                plan->first_source_frame_number,
+                processing_frame_number,
+                predecessor_frame_number,
+                is_start_frame ? 1 : 0,
+                is_start_frame ? 0 : 1
+            );
+        }
+
+        int released_by_helper = 0;
+
+        cnr3_for_debug_only_release_bounded_warmup_local_outputs(
+            d,
+            local_outputs,
+            proof_ok ? "normal-proof-release" : "compute-failure-release",
+            vsapi,
+            released_by_helper
+        );
+
+        local_outputs_released += released_by_helper;
+
+        local_output_release_balance_ok =
+            (local_outputs_allocated == local_outputs_released);
+
+        proof_ok =
+            (
+                proof_ok &&
+                local_output_release_balance_ok
+                );
+
+        return proof_ok;
+    }
+}
+
+static bool cnr3_for_debug_only_probe_bounded_warmup_local_compute(
+    const Cnr3Data* d,
+    const Cnr3ForDebugOnlyBoundedWarmupSourcePlan* plan,
+    VSFrameContext* frameCtx,
+    VSCore* core,
+    const VSAPI* vsapi
+) {
+    /*
+        Temporary CMS02-H5 arAllFramesReady proof.
+
+        Retrieve the bounded warm-up source-frame set requested in arInitial,
+        compute local outputs from S..N, and release all source and local output
+        frames. The computed outputs are never stored or returned.
+    */
+
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF) {
+        (void)d;
+        (void)plan;
+        (void)frameCtx;
+        (void)core;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (plan == nullptr) {
+            return true;
+        }
+
+        Cnr3ForDebugOnlyBoundedWarmupSourceFrameSet source_frame_set;
+        int retrieved_count = 0;
+        bool partial_acquire_failure = false;
+
+        bool proof_ok =
+            cnr3_for_debug_only_retrieve_bounded_warmup_source_frames(
+                d,
+                plan,
+                frameCtx,
+                vsapi,
+                source_frame_set,
+                retrieved_count,
+                partial_acquire_failure
+            );
+
+        int local_start_reset_copies = 0;
+        int local_recursive_computes = 0;
+        int local_outputs_allocated = 0;
+        int local_outputs_released = 0;
+        bool compute_failure = false;
+        bool local_output_release_balance_ok = true;
+
+        if (proof_ok) {
+            proof_ok =
+                cnr3_for_debug_only_compute_bounded_warmup_local_outputs(
+                    d,
+                    plan,
+                    source_frame_set,
+                    frameCtx,
+                    core,
+                    vsapi,
+                    local_start_reset_copies,
+                    local_recursive_computes,
+                    local_outputs_allocated,
+                    local_outputs_released,
+                    compute_failure,
+                    local_output_release_balance_ok
+                );
+        }
+
+        int source_frames_released = 0;
+
+        cnr3_for_debug_only_release_bounded_warmup_source_frame_set(
+            d,
+            source_frame_set,
+            proof_ok ? "normal-proof-release" : "h5-proof-failure-release",
+            vsapi,
+            source_frames_released
+        );
+
+        const bool source_release_balance_ok =
+            (retrieved_count == source_frames_released);
+
+        proof_ok =
+            (
+                proof_ok &&
+                source_release_balance_ok &&
+                !partial_acquire_failure &&
+                !compute_failure &&
+                local_output_release_balance_ok
+                );
+
+        cnr3_for_debug_only_record_bounded_warmup_local_compute_summary(
+            d,
+            true,
+            retrieved_count,
+            source_frames_released,
+            source_release_balance_ok,
+            plan->first_source_frame_number == 0,
+            plan->first_source_frame_number > 0,
+            local_start_reset_copies,
+            local_recursive_computes,
+            local_outputs_allocated,
+            local_outputs_released,
+            local_output_release_balance_ok,
+            partial_acquire_failure,
+            compute_failure,
+            proof_ok
+        );
+
+        cnr3_debug_printf(
+            d != nullptr ? d->debug : false,
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_local_compute # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-COMPUTE-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # start_frame_zero=%d # start_frame_nonzero=%d # local_start_reset_copies=%d # local_recursive_computes=%d # local_outputs_allocated=%d # local_outputs_released=%d # local_output_release_balance=%d # partial_acquire_failure=%d # compute_failure=%d # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            d != nullptr ? d->instance_id : -1,
             plan->requested_frame_number,
             plan->first_source_frame_number,
             plan->last_source_frame_number,
             plan->source_frame_count,
             retrieved_count,
-            released_count,
-            retrieved_count - released_count,
+            source_frames_released,
+            retrieved_count - source_frames_released,
+            plan->first_source_frame_number == 0 ? 1 : 0,
+            plan->first_source_frame_number > 0 ? 1 : 0,
+            local_start_reset_copies,
+            local_recursive_computes,
+            local_outputs_allocated,
+            local_outputs_released,
+            local_outputs_allocated - local_outputs_released,
             partial_acquire_failure ? 1 : 0,
+            compute_failure ? 1 : 0,
             proof_ok ? 1 : 0
         );
 
@@ -5192,6 +5847,7 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
 
     if constexpr (
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON
         ) {
         (void)d;
@@ -5211,7 +5867,10 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
             activationReason
         );
 
-        if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
+        if constexpr (
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ||
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF
+            ) {
             Cnr3ForDebugOnlyBoundedWarmupSourcePlan* h4_source_plan =
                 static_cast<Cnr3ForDebugOnlyBoundedWarmupSourcePlan*>(*frameData);
 
@@ -5281,7 +5940,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
             nullptr;
 
         if (frameData != nullptr) {
-            if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
+            if constexpr (
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ||
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF
+                ) {
                 h4_source_plan =
                     cnr3_for_debug_only_create_bounded_warmup_source_plan(
                         d,
@@ -5346,7 +6008,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
             nullptr;
 
         if (frameData != nullptr) {
-            if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF) {
+            if constexpr (
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ||
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF
+                ) {
                 h4_source_plan =
                     static_cast<Cnr3ForDebugOnlyBoundedWarmupSourcePlan*>(*frameData);
             }
@@ -5374,6 +6039,35 @@ static const VSFrame* VS_CC cnr3_get_frame(
 
             vsapi->setFilterError(
                 "CNR3: debug-only bounded warm-up source-frame-set proof failed.",
+                frameCtx
+            );
+
+            return nullptr;
+        }
+
+        if (
+            !cnr3_for_debug_only_probe_bounded_warmup_local_compute(
+                d,
+                h4_source_plan,
+                frameCtx,
+                core,
+                vsapi
+            )
+            ) {
+            cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
+                d,
+                h4_source_plan,
+                "h5-local-compute-proof-failure"
+            );
+
+            cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
+                d,
+                source_request_plan,
+                "h5-local-compute-proof-failure"
+            );
+
+            vsapi->setFilterError(
+                "CNR3: debug-only bounded warm-up local-compute proof failed.",
                 frameCtx
             );
 

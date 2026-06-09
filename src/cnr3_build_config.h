@@ -17,8 +17,8 @@
 
     Update this string for each coherent source-change set.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = 
-"CMS02-H4-bounded-warmup-source-frame-set-request-acquire-release-v1-PASSED";
+inline constexpr const char* CNR3_EDIT_VERSION =
+"CMS02-H5-bounded-warmup-local-compute-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -340,6 +340,40 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF_BOUND = 2;
 
 /*
+    CMS02-H.5 bounded warm-up local-compute proof gate.
+
+    This proof-only scaffold uses the H4-proven source-frame request/retrieve
+    lifecycle, then locally computes bounded warm-up outputs from S..N. The
+    start frame S is initialised through an explicit bounded-warm-up reset/copy
+    policy. Frames after S use process_cnr3_frame_with_explicit_previous_output()
+    with the previous local output frame.
+
+    It must not call process_cnr3_frame() for warm-up compute, duplicate pixel
+    algorithms, store warm-up outputs, return warm-up outputs, change output
+    authority, mutate old strict-streaming state, or enable any parallel
+    VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.5 bounded warm-up local-compute
+    proof. With a 20-frame sequential proof run and this bound set to 2, the
+    expected source/local-output totals are 57. Frames 0..2 start from frame 0;
+    frames 3..19 use an explicit nonzero bounded reset/copy start.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF_BOUND = 2;
+
+static_assert(
+    !(
+        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF&&
+        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF
+        ),
+    "CNR3 H4 source-frame-set proof and H5 local-compute proof must not be enabled together."
+    );
+
+/*
     Maximum forward distance allowed by the first bounded recovery-plan helper.
     perform recovery, recomputation, or frame generation.
 */
@@ -385,7 +419,7 @@ constexpr bool CNR3_DEV_DIAGNOSTICS = true;
     other CNR3 development diagnostics.
 */
 constexpr bool CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS =
-    CNR3_DEV_DIAGNOSTICS;
+CNR3_DEV_DIAGNOSTICS;
 
 /*
     Memory diagnostics.
@@ -397,7 +431,7 @@ constexpr bool CNR3_OUTPUT_CACHE_DEV_DIAGNOSTICS =
     behaviour with process and system memory use.
 */
 constexpr bool CNR3_MEMORY_DIAGNOSTICS =
-    CNR3_DEV_DIAGNOSTICS;
+CNR3_DEV_DIAGNOSTICS;
 
 /*
     Memory diagnostics periodic frame interval.

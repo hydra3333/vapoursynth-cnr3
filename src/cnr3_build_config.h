@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION = 
-"CMS02-H3-bounded-warmup-source-request-plan-scaffold-v1-PASSED";
+"CMS02-H4-bounded-warmup-source-frame-set-request-acquire-release-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -304,6 +304,40 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_REQUEST_P
     produces the same checkpoint-plan-available versus warm-up-needed pattern.
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_REQUEST_PLAN_PROOF_BOUND = 2;
+
+/*
+    CMS02-H.4 bounded warm-up source-frame-set request/acquire/release gate.
+
+    This proof-only scaffold uses a dedicated H4 plan structure. It requests the
+    conservative bounded warm-up source window in arInitial, then retrieves,
+    holds, and releases those same source frames in arAllFramesReady.
+
+    This follows VapourSynth's arInitial/arAllFramesReady lifecycle rule:
+    any source frame retrieved with getFrameFilter() in arAllFramesReady must
+    have been requested with requestFrameFilter() in arInitial of the same
+    callback activation.
+
+    It must not reuse the G-phase recovery source-request-plan structure, alter
+    H3, compute warm-up outputs, store warm-up outputs, return warm-up outputs,
+    change output authority, mutate old strict-streaming state, or enable any
+    parallel VapourSynth mode.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.4 bounded warm-up source-frame-set
+    request/acquire/release proof.
+
+    With a 20-frame sequential proof run and this bound set to 2, the expected
+    source-frame request/retrieve/release totals are:
+        frame 0:  1
+        frame 1:  2
+        frames 2-19: 18 * 3
+        total: 57
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF_BOUND = 2;
 
 /*
     Maximum forward distance allowed by the first bounded recovery-plan helper.

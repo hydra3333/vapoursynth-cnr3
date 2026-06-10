@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H15.1-output-cache-authority-normal-path-scaffold-v1-ENABLED";
+"CMS02-H15.2-sequential-predecessor-cache-reuse-probe-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -544,6 +544,17 @@ inline constexpr bool CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH =
     Keep aligned with H6-H13 so the proof counts remain directly comparable.
 */
 static constexpr int CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_BOUND = 2;
+
+/*
+    CMS02-H15.2 sequential predecessor-cache reuse probe.
+
+    This gate only proves whether the immediately prior output frame is
+    already available in the output cache for the simple sequential case.
+    It must not change return authority, source retrieval, local-output
+    ownership, lookup-ref transfer, or old strict state. The probe releases
+    any lookup reference it acquires before the normal path continues.
+*/
+inline constexpr bool CNR3_CMS02_H15_ENABLE_SEQUENTIAL_PREDECESSOR_CACHE_REUSE_PROBE = true;
 
 static_assert(
     (

@@ -4828,7 +4828,8 @@ static constexpr bool cnr3_for_debug_only_bounded_warmup_source_plan_gate_enable
         CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ||
         CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
         CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF;
+        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF;
 }
 
 static Cnr3ForDebugOnlyBoundedWarmupSourcePlan*
@@ -4887,6 +4888,11 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
                 CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF_BOUND;
         }
 
+        if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF) {
+            proof_bound =
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF_BOUND;
+        }
+
         proof_bound = std::max(0, proof_bound);
 
         plan->requested_frame_number = frame_number;
@@ -4925,12 +4931,14 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
                 ) ? 1 : 0,
             (
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
                 ) ? 1 : 0
         );
 
@@ -5549,7 +5557,8 @@ static void cnr3_for_debug_only_release_bounded_warmup_local_outputs(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
         ) {
         (void)d;
         (void)local_outputs;
@@ -5955,7 +5964,8 @@ static void cnr3_for_debug_only_record_bounded_warmup_store_summary(
     if constexpr (
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
         ) {
         (void)d;
         (void)plan_seen;
@@ -6171,7 +6181,8 @@ static bool cnr3_for_debug_only_compute_and_store_bounded_warmup_outputs(
     if constexpr (
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
         ) {
         (void)d;
         (void)plan;
@@ -6591,7 +6602,8 @@ static void cnr3_for_debug_only_record_bounded_warmup_return_decision_summary(
     */
 
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF) {
         (void)d;
         (void)plan_seen;
         (void)source_frames_retrieved;
@@ -6714,7 +6726,8 @@ static void cnr3_for_debug_only_print_bounded_warmup_return_decision_summary(
     */
 
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF) {
         (void)d;
         (void)where;
         return;
@@ -6790,7 +6803,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_return_decision_summary(
             static_cast<long long>(summary.partial_acquire_failures),
             static_cast<long long>(summary.compute_failures),
             static_cast<long long>(summary.proof_failures),
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ? 1 : 0
+            (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF || CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF) ? 1 : 0
         );
     }
 }
@@ -6799,7 +6812,8 @@ static void cnr3_for_debug_only_erase_bounded_warmup_return_decision_summary(
     const Cnr3Data* d
 ) {
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF) {
         (void)d;
         return;
     }
@@ -7027,15 +7041,17 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
     const VSFrame** returned_frame
 ) {
     /*
-        Temporary CMS02-H8 arAllFramesReady proof.
+        Temporary CMS02-H8/H9 arAllFramesReady proof.
 
-        H8 reuses the H6 compute-and-store path, then performs the first
-        proof-gated return transfer for output[N]. The caller-owned lookup
-        reference is transferred to VapourSynth by returning it from cnr3_get_frame().
-        It must not also be released locally.
+        H8 proves the first proof-gated return transfer for output[N]. H9 reuses
+        the same transfer mechanics as the candidate output-authoritative path,
+        while still proving that old strict-streaming state is not mutated. The
+        caller-owned lookup reference is transferred to VapourSynth by returning
+        it from cnr3_get_frame(); it must not also be released locally.
     */
 
-    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF) {
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF) {
         (void)d;
         (void)plan;
         (void)frameCtx;
@@ -7141,7 +7157,13 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
         cnr3_for_debug_only_release_bounded_warmup_source_frame_set(
             d,
             source_frame_set,
-            proof_ok ? "h8-normal-return-transfer-proof-release" : "h8-proof-failure-release",
+            proof_ok
+            ? (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "h9-authority-integration-proof-release"
+                : "h8-normal-return-transfer-proof-release")
+            : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "h9-proof-failure-release"
+                : "h8-proof-failure-release"),
             vsapi,
             source_frames_released
         );
@@ -7195,11 +7217,18 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
             proof_ok
         );
 
+        const char* proof_function_name =
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+            ? "cnr3_for_debug_only_probe_bounded_warmup_authority_integration_proof"
+            : "cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof";
+        const char* proof_event_name =
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+            ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-AUTHORITY-INTEGRATION-END"
+            : "FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-TRANSFER-END";
+
         cnr3_debug_printf(
             d != nullptr ? d->debug : false,
-            "output-cache # "
-            "cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof # "
-            "FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-TRANSFER-END # "
+            "output-cache # %s # %s # "
             "instance=%d # requested=%d # first_source=%d # last_source=%d # "
             "source_count=%d # retrieved=%d # source_released=%d # "
             "source_release_balance=%d # local_outputs_available_for_store=%d # "
@@ -7212,6 +7241,8 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
             "would_return_warmup_output=%d # lookup_ref_transferred=%d # "
             "actual_returned_warmup_output=%d # output_authoritative=1 # "
             "mutates_old_strict=0 # proof_ok=%d\n",
+            proof_function_name,
+            proof_event_name,
             d != nullptr ? d->instance_id : -1,
             plan->requested_frame_number,
             plan->first_source_frame_number,
@@ -7266,6 +7297,7 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON
         ) {
         (void)d;
@@ -7290,7 +7322,8 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
             ) {
             Cnr3ForDebugOnlyBoundedWarmupSourcePlan* h4_source_plan =
                 static_cast<Cnr3ForDebugOnlyBoundedWarmupSourcePlan*>(*frameData);
@@ -7366,7 +7399,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
                 ) {
                 h4_source_plan =
                     cnr3_for_debug_only_create_bounded_warmup_source_plan(
@@ -7437,7 +7471,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
                 ) {
                 h4_source_plan =
                     static_cast<Cnr3ForDebugOnlyBoundedWarmupSourcePlan*>(*frameData);
@@ -7559,7 +7594,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
             return nullptr;
         }
 
-        const VSFrame* h8_returned_frame = nullptr;
+        const VSFrame* h8_or_h9_returned_frame = nullptr;
 
         if (
             !cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
@@ -7568,7 +7603,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 frameCtx,
                 core,
                 vsapi,
-                &h8_returned_frame
+                &h8_or_h9_returned_frame
             )
             ) {
             cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
@@ -7584,38 +7619,46 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
 
             vsapi->setFilterError(
-                "CNR3: debug-only bounded warm-up return-transfer proof failed.",
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "CNR3: debug-only bounded warm-up authority-integration proof failed."
+                : "CNR3: debug-only bounded warm-up return-transfer proof failed.",
                 frameCtx
             );
 
             return nullptr;
         }
 
-        if (h8_returned_frame != nullptr) {
+        if (h8_or_h9_returned_frame != nullptr) {
             cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
                 d,
                 source_request_plan,
-                "h8-return-transfer-proof-return"
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "h9-authority-integration-proof-return"
+                : "h8-return-transfer-proof-return"
             );
 
             cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
                 d,
                 h4_source_plan,
-                "h8-return-transfer-proof-return"
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "h9-authority-integration-proof-return"
+                : "h8-return-transfer-proof-return"
             );
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_get_frame # "
-                "FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-TRANSFER # "
+                "output-cache # cnr3_get_frame # %s # "
                 "instance=%d # frame=%d # transferred_lookup_ref=1 # "
                 "returned_bounded_warmup_output=1 # output_authoritative=1 # "
                 "mutates_old_strict=0\n",
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-AUTHORITY-INTEGRATION-RETURN"
+                : "FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-TRANSFER",
                 d->instance_id,
                 n
             );
 
-            return h8_returned_frame;
+            return h8_or_h9_returned_frame;
         }
 
         cnr3_for_debug_only_trace_recovery_source_request_plan_consumed(
@@ -7654,19 +7697,24 @@ static const VSFrame* VS_CC cnr3_get_frame(
         if constexpr (
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ||
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
+            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
             ) {
             cnr3_debug_printf(
                 d->debug,
                 "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-BOUNDED-WARMUP-CACHE-HIT-RETURN-BYPASS # instance=%d # frame=%d # reason=%s # output_authoritative=0\n",
                 d->instance_id,
                 n,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
-                ? "h8-return-transfer-proof-uses-explicit-transfer-path"
+                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
+                ? "h9-authority-integration-proof-uses-explicit-transfer-path"
                 : (
-                    CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN
-                    ? "h7-return-decision-dry-run-must-not-return"
-                    : "h6-stored-proof-frames-must-not-be-returned"
+                    CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF
+                    ? "h8-return-transfer-proof-uses-explicit-transfer-path"
+                    : (
+                        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN
+                        ? "h7-return-decision-dry-run-must-not-return"
+                        : "h6-stored-proof-frames-must-not-be-returned"
+                        )
                     )
             );
         }

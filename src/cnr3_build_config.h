@@ -18,7 +18,8 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H8-bounded-warmup-return-transfer-proof-v1-PASSED";
+"CMS02-H9-bounded-warmup-authority-integration-proof-v1-PASSED";
+
 
 /*
     Temporary CMS02-F proof hook.
@@ -440,13 +441,34 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF_BOUND = 2;
 
+/*
+    Temporary CMS02-H9 bounded warm-up authority-integration proof gate.
+
+    H9 keeps the H8 return-transfer mechanism proof-gated, but treats it as the
+    candidate output-authoritative path for the invocation. It proves that the
+    bounded warm-up/cache candidate can be returned directly while the old
+    strict-streaming state is left untouched.
+
+    This is still a proof gate. It must not be left enabled in committed normal
+    builds. Old strict-cache retirement and final fmParallel readiness remain
+    later phases.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H9 authority-integration proof.
+    Keep aligned with H6/H7/H8 so the proof counts remain directly comparable.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF_BOUND = 2;
+
 static_assert(
     (
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ? 1 : 0) +
-        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ? 1 : 0)
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ? 1 : 0) +
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ? 1 : 0)
         ) <= 1,
     "Only one CMS02-H bounded warm-up proof gate may be enabled at a time."
     );

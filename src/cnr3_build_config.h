@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H15.2-sequential-predecessor-cache-reuse-probe-v1-ENABLED";
+"CMS02-H15.3-sequential-fast-path-dry-run-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -546,15 +546,18 @@ inline constexpr bool CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH =
 static constexpr int CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_BOUND = 2;
 
 /*
-    CMS02-H15.2 sequential predecessor-cache reuse probe.
+    CMS02-H15.3 sequential fast-path dry run.
 
-    This gate only proves whether the immediately prior output frame is
-    already available in the output cache for the simple sequential case.
-    It must not change return authority, source retrieval, local-output
-    ownership, lookup-ref transfer, or old strict state. The probe releases
-    any lookup reference it acquires before the normal path continues.
+    This gate proves the simple sequential fast-path decision shape. When
+    output N-1 is already cached, the dry run logs that a later real fast path
+    could reuse the cached predecessor and request/compute only output N.
+
+    This phase must not change return authority, source retrieval,
+    local-output ownership, lookup-ref transfer for returned frames, or old
+    strict state. Any predecessor lookup reference acquired by the dry run is
+    released before the normal bounded-warmup path continues.
 */
-inline constexpr bool CNR3_CMS02_H15_ENABLE_SEQUENTIAL_PREDECESSOR_CACHE_REUSE_PROBE = true;
+inline constexpr bool CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_DRY_RUN = true;
 
 static_assert(
     (

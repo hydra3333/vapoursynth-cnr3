@@ -77,8 +77,8 @@
 inline constexpr bool CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH_ACTIVE =
 CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH;
 
-inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_PREDECESSOR_CACHE_REUSE_PROBE_ACTIVE =
-CNR3_CMS02_H15_ENABLE_SEQUENTIAL_PREDECESSOR_CACHE_REUSE_PROBE;
+inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_DRY_RUN_ACTIVE =
+CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_DRY_RUN;
 
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE =
 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ||
@@ -194,20 +194,22 @@ static void cnr3_debug_print_cache_state(
     );
 }
 
-static void cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse(
+static void cnr3_output_cache_authority_dry_run_sequential_fast_path(
     Cnr3Data* d,
     int requested_frame_number,
     const VSAPI* vsapi
 ) {
     /*
-        H15.2 probe only: check whether output frame N-1 is already cached.
-        Any lookup ref acquired here is released before normal processing
-        continues, so this probe must not become output authority.
+        H15.3 dry run only: check whether output frame N-1 is already cached.
+        If it is, log that a later sequential fast path could reuse the
+        cached predecessor and request/compute only frame N. Any lookup ref
+        acquired here is released before normal processing continues, so this
+        dry run must not become output authority.
     */
     if (
         d == nullptr ||
         vsapi == nullptr ||
-        !CNR3_CMS02_H15_SEQUENTIAL_PREDECESSOR_CACHE_REUSE_PROBE_ACTIVE
+        !CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_DRY_RUN_ACTIVE
         ) {
         return;
     }
@@ -217,11 +219,11 @@ static void cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse
     if (predecessor_frame_number < 0) {
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-PREDECESSOR-REUSE-PROBE # "
+            "output-cache # cnr3_output_cache_authority_dry_run_sequential_fast_path # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-DRY-RUN # "
             "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=0 # "
-            "predecessor_cache_hit=0 # lookup_ref_released=0 # would_reuse_predecessor=0 # "
-            "probe_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=frame-zero-has-no-predecessor\n",
+            "predecessor_cache_hit=0 # lookup_ref_released=0 # would_reuse_predecessor=0 # would_request_current_source_only=0 # would_compute_current_only=0 # "
+            "dry_run_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=frame-zero-has-no-predecessor\n",
             d->instance_id,
             requested_frame_number,
             predecessor_frame_number
@@ -239,11 +241,11 @@ static void cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse
     if (predecessor_output == nullptr) {
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-PREDECESSOR-REUSE-PROBE # "
+            "output-cache # cnr3_output_cache_authority_dry_run_sequential_fast_path # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-DRY-RUN # "
             "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
-            "predecessor_cache_hit=0 # lookup_ref_released=0 # would_reuse_predecessor=0 # "
-            "probe_only=1 # output_authoritative=0 # mutates_old_strict=0\n",
+            "predecessor_cache_hit=0 # lookup_ref_released=0 # would_reuse_predecessor=0 # would_request_current_source_only=0 # would_compute_current_only=0 # "
+            "dry_run_only=1 # output_authoritative=0 # mutates_old_strict=0\n",
             d->instance_id,
             requested_frame_number,
             predecessor_frame_number
@@ -256,11 +258,11 @@ static void cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse
 
     cnr3_debug_printf(
         d->debug,
-        "output-cache # cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse # "
-        "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-PREDECESSOR-REUSE-PROBE # "
+        "output-cache # cnr3_output_cache_authority_dry_run_sequential_fast_path # "
+        "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-DRY-RUN # "
         "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
-        "predecessor_cache_hit=1 # lookup_ref_released=1 # would_reuse_predecessor=1 # "
-        "probe_only=1 # output_authoritative=0 # mutates_old_strict=0\n",
+        "predecessor_cache_hit=1 # lookup_ref_released=1 # would_reuse_predecessor=1 # would_request_current_source_only=1 # would_compute_current_only=1 # "
+        "dry_run_only=1 # output_authoritative=0 # mutates_old_strict=0\n",
         d->instance_id,
         requested_frame_number,
         predecessor_frame_number
@@ -7700,8 +7702,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             *frameData = nullptr;
         }
 
-        if constexpr (CNR3_CMS02_H15_SEQUENTIAL_PREDECESSOR_CACHE_REUSE_PROBE_ACTIVE) {
-            cnr3_output_cache_authority_probe_sequential_predecessor_cache_reuse(
+        if constexpr (CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_DRY_RUN_ACTIVE) {
+            cnr3_output_cache_authority_dry_run_sequential_fast_path(
                 d,
                 n,
                 vsapi

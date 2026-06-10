@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H14.2-selected-output-cache-authority-cutover-proof-v1-ENABLED";
+"CMS02-H14.3-selected-authority-log-reason-cleanup-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.

@@ -2,10 +2,10 @@
 
 **Document type:** Specification for producing future CNR3 handover packs  
 **Applies to:** Future CNR3 handover packs, not to a single coding session only  
-**Version:** v1.3
-**Date:** 2026-06-07
-**Status:** Current handover-pack production standard
-**Current design authority wording:** CMS06.2 or any later cache design spec that explicitly supersedes CMS06.2
+**Version:** v1.5
+**Date:** 2026-06-10
+**Status:** Enhanced handover-pack production standard with durable-rule, override-discipline, CMS02-J0, and CMS06.6+ recommendation requirements
+**Current design authority wording:** CMS06.3 or any later cache design spec that explicitly supersedes CMS06.3
 
 ---
 
@@ -22,15 +22,27 @@ The handover pack exists so that a new AI chat, with no memory of previous chats
 - suggesting unsafe changes to the cache manager, threading model, reference-count discipline, or VapourSynth scheduling model;
 - failing to understand which state is current and which design notes are historical.
 
-The goal is not to make the handover as short as possible. The goal is to make it:
+The goal is explicitly not to make the handover as short as possible, not to re-summarize it with less detail,
+and not to omit previous valid detail.
+The goal is to preserve excellent context and usefulness for both humans and new AI chats.
 
+The goal is to make it:
 - current;
 - structured;
 - precise;
 - resistant to stale or contradictory interpretation;
 - sufficiently detailed for safe C++ development;
 - compact enough that the most important information remains visible and usable;
-- explicitly grounded in companion design documents, current source code, and current logs.
+- explicitly grounded in companion design documents, current source code, and current logs;
+- explicitly continuity-preserving, so validated context, detail, examples, rationale, and warnings
+  from the previous approved handover pack are not lost or resummarized with less detail
+  merely because a new version is produced;
+- non-regressive in explanatory value, especially in Document A, unless a
+  previous statement is obsolete, misleading, or contradicted by current source,
+  logs, decisions, or CMS06.3-or-later design authority =
+  where a previous statement is obsolete, misleading, or contradicted by current source,
+  logs, decisions, or CMS06.3-or-later design authority, correct it in-place where possible;
+  omit it only as a last resort when accuracy cannot otherwise be preserved;
 
 A single handover document cannot reliably serve every purpose. Stable project context, stable decision rationale, and volatile session state have different lifetimes and must not be mixed into one long diary-style document.
 
@@ -39,7 +51,7 @@ The CNR3 handover pack therefore consists of:
 1. `Document_A_CNR3_Project_Context_and_Rules_<version>.md`
 2. `Document_B_CNR3_Decision_Log_<version>.md`
 3. `Document_C_CNR3_Current_Session_Handover_<version>.md`
-4. Companion reference documents, especially the latest CMS06.2-or-later cache design specification
+4. Companion reference documents, especially the latest CMS06.3-or-later cache design specification
 5. Current source files and logs relevant to the next task
 
 The intended new-chat boot sequence is:
@@ -47,12 +59,12 @@ The intended new-chat boot sequence is:
 1. Read `Document_A_CNR3_Project_Context_and_Rules_<version>.md`.
 2. Read `Document_B_CNR3_Decision_Log_<version>.md`.
 3. Read `Document_C_CNR3_Current_Session_Handover_<version>.md`.
-4. Read the latest CMS06.2-or-later cache design document if the task touches cache management.
+4. Read the latest CMS06.3-or-later cache design document if the task touches cache management.
 5. Inspect the latest relevant source files before proposing code changes.
 6. Inspect latest logs if the task depends on test evidence.
 7. Treat the current session handover as the source of truth for current implementation state.
 8. Treat the decision log as the source of truth for settled decisions.
-9. Treat CMS06.2-or-later as the detailed design reference for cache-manager behaviour.
+9. Treat CMS06.3-or-later as the detailed design reference for cache-manager behaviour.
 10. Do not re-litigate settled decisions unless current code, logs, or tests prove a genuine problem.
 
 This structure is designed to be successful for handover from one chat to the next because it gives a new AI three different kinds of information in the order it needs them:
@@ -94,11 +106,489 @@ CNR3_Handover_Pack_v1.2.zip
 Companion documents are not part of the three-document handover pack, but are required when relevant. These include:
 
 ```text
-latest CMS06.2-or-later cache design spec
+latest CMS06.3-or-later cache design spec
 latest source files relevant to the next task
 latest logs relevant to the next task
 review/simulation plans when applicable
 ```
+
+---
+
+# 2A. Continuity, Detail-Preservation, and Non-Regression Rules
+
+## 2A.1 Previous approved handover pack as the drafting baseline
+
+When producing a new handover pack version, use the previous approved A/B/C
+handover documents as the drafting baseline. Do not create the new pack by
+writing a fresh short summary unless the user explicitly asks for a condensed
+replacement and even in this case maintain excellent context useful for humans.
+
+The normal update process is:
+
+```text
+1. Start from the previous approved Document A, B, and C.
+2. Preserve all still-valid context, examples, warnings, and rationale.
+3. Amend only the parts that are obsolete, misleading, incomplete, or now
+   contradicted by current source, logs, decisions, or CMS06.3-or-later.
+4. Add new material required by the latest development work.
+5. Remove detail only when it is genuinely invalid, duplicative without value,
+   or explicitly superseded.
+```
+
+Although this rule applies to Documents A, B, and C, it is especially important for Document A,
+because Document A is the human and AI orientation document. It must retain/maintain enough
+excellent background and examples for a new reader to understand the project before touching code.
+
+## 2A.2 No abbreviation-by-default rule
+
+A new handover version must not be shorter merely because it is newer.
+
+Do not abbreviate, omit, or compress validated explanatory material for the sake
+of brevity if that material remains useful to a human maintainer or to a new AI
+chat. In particular, do not abbreviate:
+
+```text
+- project background and motivation;
+- VapourSynth scheduling explanations;
+- recursive-filter examples;
+- cache-manager correctness rationale;
+- mutex, ownership, and reference-count safety rules;
+- examples showing why a naive approach fails;
+- known hazards and hard-stop conditions;
+- named deferred items and cleanup obligations.
+```
+
+A shorter replacement is acceptable only when it preserves the same meaning and
+explanatory value, especially to humans, or when the removed material is obsolete
+and the replacement explains the current truth at least as clearly.
+
+## 2A.3 Invalid material must be corrected, not silently removed
+
+If previous handover material is no longer valid, do not simply delete it when
+the deleted text carried important context. Replace it with updated clear wording
+that preserves the useful background while clearly stating what changed.
+
+Example:
+
+```text
+Bad:    Remove an old strict-streaming explanation because output_cache now has
+        a cache-hit return path.
+
+Better: Explain that strict-streaming remains the cache-miss/new-computation
+        path while cache hits may now return from output_cache, and preserve the
+        reason old_strict_cache.next_needed is not final fmParallel authority.
+```
+
+## 2A.4 Document A non-regression rule
+
+Document A must be treated as a stable or expanding knowledge base, not a disposable summary.
+
+Document A is a keystone, setting the scene for AI and humans, so that future actions and
+decisions are grounded in the knowledge of what is attempting to be achieved at a global level.
+
+When updating Document A:
+
+```text
+- preserve the previous approved structure unless there is a clear reason to
+  change it;
+- preserve detailed context in A1, A2, A3, A4 and equivalent early orientation
+  sections unless the content is invalid;
+- preserve examples that teach the scheduling or recursive-dependency hazard;
+- preserve explanatory material useful to humans, even if it seems obvious to
+  the current chat;
+- add new rules or corrections in-place rather than replacing large sections
+  with shorter paraphrases.
+```
+
+If a future handover creator believes Document A should be substantially
+shortened, it must first state what would be removed and why, and obtain explicit
+user agreement before producing the shortened version.
+
+## 2A.5 Document B and Document C continuity rules
+
+Document B must preserve settled decisions and their implementation consequences.
+Do not drop older decisions merely because they have not changed recently. If a
+decision is superseded, keep enough historical context to prevent the same
+rabbit-hole from reopening, and mark the supersession clearly.
+
+Document C is more volatile, but it still must preserve named deferred items,
+current-state caveats, latest meaningful test evidence, and the immediate next
+task. Do not omit a deferred item because it is not the next task.
+
+## 2A.6 Review requirement for generated handover packs
+
+Before a generated handover pack is treated as final, compare it against the
+previous approved handover pack for accidental loss of important information.
+
+At minimum, verify:
+
+```text
+- Document A has not lost valid project-orientation detail or examples.
+- Document B has not lost settled decisions or implementation consequences.
+- Document C has not lost named deferred items, hard gates, latest evidence, or
+  next-task constraints.
+- Any shorter section is shorter because obsolete material was corrected or
+  because equivalent detail was preserved more clearly, not because context was
+  silently dropped.
+```
+
+If such a comparison cannot be performed because the previous approved pack is
+not available, the handover creator must say so before producing replacement
+documents.
+
+
+---
+
+# 2B. Durable Development Rules, Override Discipline, and Mandatory Forward Checkpoints
+
+## 2B.1 Purpose of durable-rule handling
+
+Some CNR3 development rules are durable project rules, not merely notes for the
+current phase or current chat. When a durable rule is adopted, the handover pack
+must preserve it in the correct document rather than allowing it to remain only
+in chat history.
+
+Durable rules include rules that affect:
+
+```text
+- recursive frame calculation correctness;
+- ownership and reference-count safety;
+- output-cache authority;
+- source-frame and temporary-output lifetimes;
+- VapourSynth scheduling safety;
+- diagnostic hard gates;
+- final fmParallelRequests/fmParallel readiness;
+- old strict-streaming state retirement.
+```
+
+The handover creator must decide whether each durable rule belongs in:
+
+```text
+- Document A, as an operating rule or safety rule;
+- Document B, as a settled decision with rejected alternatives and implementation consequences;
+- Document C, as current-state guidance, next-task constraint, or deferred hard gate;
+- CMS06.3-or-later / CMS06.6-or-later update recommendations, if the rule changes or clarifies design authority.
+```
+
+The same rule may need to appear in more than one place, with different purpose:
+
+```text
+Document A:
+    The rule a future maintainer must follow.
+
+Document B:
+    The decision and why alternatives were rejected.
+
+Document C:
+    Whether the rule affects the immediate next task or remains an active hard gate.
+
+CMS06.6-or-later recommendations:
+    Design-spec updates needed so the companion design authority does not lag
+    behind the handover pack.
+```
+
+## 2B.2 Override discipline required for durable rules
+
+Each durable rule or durable rule group must include this override discipline or
+clear equivalent wording:
+
+```text
+Do not depart from this rule silently. Any intentional departure requires
+explicit clarification, discussion, agreement, and documentation of the reason,
+scope, and expected safety impact before implementation proceeds.
+```
+
+For mandatory forward checkpoints, use the stronger form:
+
+```text
+Do not bypass this checkpoint silently. Any intentional deferral requires
+explicit clarification, discussion, agreement, and documentation of the reason,
+scope, and expected safety impact before the dependent phase proceeds.
+```
+
+The purpose of this wording is not to make every rule impossible to change. The
+purpose is to prevent silent drift in a long-running project where a future chat
+may not know why the rule exists.
+
+## 2B.3 Required durable rule group: reuse existing processing boundaries
+
+Future handover packs must preserve this rule unless explicitly superseded by
+later agreement.
+
+```text
+Durable Rule: Reuse existing frame-processing boundaries; do not create parallel
+pixel/frame algorithms.
+
+Recovery, bounded warm-up, checkpoint recovery, cache-fill, and future
+fmUnordered/fmParallelRequests work must not duplicate blend, chroma, luma,
+downsampled-luma, scene-change, frame-copy, or pixel calculation logic unless no
+safe existing boundary exists.
+
+Preferred rule:
+    reuse existing frame-processing helpers;
+    make orchestration, ownership, cache, scheduling, and output-authority
+    transfer the things being proven.
+
+If existing helpers are insufficient, stop and design a small named processing
+boundary explicitly. Do not smuggle ad hoc pixel logic into VapourSynth lifecycle
+or cache proof code.
+
+Override discipline:
+    Do not depart from this rule silently. Any intentional departure requires
+    explicit clarification, discussion, agreement, and documentation of the
+    reason, scope, and expected safety impact before implementation proceeds.
+```
+
+This rule should normally be captured in:
+
+```text
+Document A:
+    durable development rules / safety-critical implementation rules.
+
+Document B:
+    settled decision with implementation consequence.
+
+Document C:
+    next-task constraint whenever recovery, bounded warm-up, checkpoint, or
+    output-authority work is active.
+```
+
+## 2B.4 Required durable rule group: ownership and release balance
+
+Future handover packs must preserve this rule unless explicitly superseded by
+later agreement.
+
+```text
+Durable Rule: Every acquired or allocated frame must have a provable owner and
+a provable release path.
+
+Every retrieved source frame must be released on every success, failure,
+partial-acquire, early-return, and cleanup path.
+
+Every temporary local output frame must be released on every success, failure,
+partial-compute, early-return, and cleanup path unless a later phase explicitly
+proves and documents transfer of ownership.
+
+Any phase involving frame retrieval, local output allocation, cache lookup refs,
+checkpoint pins, or cache-owned refs must include diagnostics proving final
+balance at relevant quiescent points.
+
+Override discipline:
+    Do not depart from this rule silently. Any intentional departure requires
+    explicit clarification, discussion, agreement, and documentation of the
+    reason, scope, and expected safety impact before implementation proceeds.
+```
+
+This rule should normally be captured in:
+
+```text
+Document A:
+    safety-critical rules and diagnostics philosophy.
+
+Document C:
+    latest test evidence and hard-gate safety checks.
+
+Document B:
+    only when a new ownership/transfer policy is settled or superseded.
+```
+
+## 2B.5 Required durable rule group: output-authority discipline
+
+Future handover packs must preserve this rule unless explicitly superseded by
+later agreement.
+
+```text
+Durable Rule: Compute, store, return, transfer, and output-authority transition
+must remain separately provable unless explicit agreement says otherwise.
+
+A proof-only path must clearly state what it does and what it does not do. In
+particular, proof-only diagnostics should make clear whether the path:
+- computes local outputs;
+- stores into output_cache;
+- returns a recovered/cache output;
+- transfers a lookup/local/cache ref to VapourSynth;
+- changes output authority;
+- mutates old strict-streaming state.
+
+Do not combine local compute, cache store, return decision, return transfer, and
+general output-authority transition if a failure would become ambiguous.
+
+Override discipline:
+    Do not depart from this rule silently. Any intentional departure requires
+    explicit clarification, discussion, agreement, and documentation of the
+    reason, scope, and expected safety impact before implementation proceeds.
+```
+
+This rule should normally be captured in:
+
+```text
+Document A:
+    durable development rules / output-authority safety rules.
+
+Document B:
+    decision log entries for phase separation and output-authority policy.
+
+Document C:
+    do-not-implement list and immediate-next-task safety constraints.
+```
+
+## 2B.6 Required durable rule group: bounded-start honesty
+
+Future handover packs must preserve this rule while bounded recovery or bounded
+warm-up remains part of the design.
+
+```text
+Durable Rule: Bounded-start recovery must be honest about approximation.
+
+When a no-prior-checkpoint bounded warm-up starts at S > 0, the start frame is a
+bounded reset/start approximation unless a later phase proves exact predecessor
+history. It must not be described as exact full-history recursion.
+
+Logs or summaries should distinguish:
+- actual source frame;
+- warm-up start frame;
+- processing frame number;
+- predecessor frame number;
+- whether reset/start semantics were deliberately used.
+
+Override discipline:
+    Do not depart from this rule silently. Any intentional departure requires
+    explicit clarification, discussion, agreement, and documentation of the
+    reason, scope, and expected safety impact before implementation proceeds.
+```
+
+This rule should normally be captured in:
+
+```text
+Document B:
+    settled decision and implementation consequence.
+
+Document A:
+    durable development rules if bounded recovery remains active in the design.
+
+Document C:
+    latest test evidence and next-task constraints for bounded recovery phases.
+```
+
+## 2B.7 Mandatory forward checkpoint: CMS02-J0
+
+Future handover packs must preserve this checkpoint until it is completed or
+explicitly deferred with documented user agreement.
+
+```text
+Mandatory Forward Checkpoint: CMS02-J0 / pre-fmParallelRequests cleanup and
+observability review.
+
+CMS02-J0 is a mandatory checkpoint before CMS02-J / fmParallelRequests wiring
+and proving.
+
+CMS02-J must not start until CMS02-J0 has been evaluated and performed, or until
+specific intentional deferrals have been explicitly documented with reasons,
+scope, and expected safety impact.
+```
+
+CMS02-J0 must review at least:
+
+```text
+- obsolete proof-only scaffolds;
+- accumulated proof gates and proof-only data structures;
+- diagnostic verbosity and compile-time gating;
+- safety/health counters that should remain non-gated;
+- high-volume traces and temporary maps that should be gated or removed;
+- source lifecycle observability;
+- hot-zone observability;
+- checkpoint and non-checkpoint recovery observability;
+- fill-holes, duplicate, and first-in-best-dressed observability;
+- cache store/prune/remove/clear/ceiling observability;
+- lookup-ref transfer/release observability;
+- cache addFrameRef/freeFrame balance;
+- missing predecessor/checkpoint/refusal diagnostics;
+- memory diagnostics and summaries;
+- whether mature proof/diagnostic helpers should be moved out of
+  vapoursynth-Cnr3.cpp into dedicated diagnostic/observability translation units.
+```
+
+CMS02-J0 must be represented in:
+
+```text
+Document A:
+    durable forward-safety checkpoint or final-goal readiness rule.
+
+Document B:
+    settled decision that CMS02-J0 is mandatory before CMS02-J.
+
+Document C:
+    active deferred hard gate until completed or explicitly deferred.
+
+CMS06.6-or-later recommendations:
+    design-spec update if the current CMS06.3-or-later design authority does
+    not already include CMS02-J0.
+```
+
+## 2B.8 Required durable rule group: old strict-state final-goal review
+
+Future handover packs must preserve this rule until old strict-streaming
+authority state is retired, redesigned, or proven safe for the final authority
+model.
+
+```text
+Durable Rule: Old strict-streaming authority state must be reviewed before final
+parallel/output-authority transition.
+
+Before final fmParallelRequests/fmParallel readiness and before final
+output-cache authority, review whether the following are obsolete, hazardous, or
+must be redesigned:
+- old_strict_cache.next_needed;
+- old_strict_cache.prev_output;
+- process_cnr3_frame(...) compatibility wrapper;
+- any path assuming serial output order.
+
+These must not silently remain authoritative in a final parallel design.
+
+Override discipline:
+    Do not depart from this rule silently. Any intentional retention or bypass
+    requires explicit clarification, discussion, agreement, and documentation of
+    the reason, scope, and expected safety impact before implementation proceeds.
+```
+
+This rule should normally be captured in:
+
+```text
+Document A:
+    final-goal safety rule.
+
+Document C:
+    known fmParallelRequests/fmParallel readiness blocker until resolved.
+
+CMS06.6-or-later recommendations:
+    design-spec update if the latest design authority does not already carry it.
+```
+
+## 2B.9 Required CMS06.6-or-later update recommendations
+
+When producing a new handover pack, if the latest work establishes durable rules
+or forward checkpoints not yet reflected in the current CMS06.3-or-later design
+authority, the handover pack must include recommended CMS06.6-or-later updates.
+
+These recommendations should be captured in Document C, or in a companion
+recommendation section/file if the user asks for one.
+
+At minimum, recommend CMS06.6-or-later updates for:
+
+```text
+- the no-parallel-pixel/frame-algorithm rule;
+- reuse of existing processing boundaries;
+- bounded-start S > 0 reset/start approximation semantics;
+- output-authority phase separation;
+- CMS02-J0 mandatory checkpoint;
+- compile-time-only diagnostic consolidation direction;
+- non-gated safety/health counter policy;
+- old strict-state final-goal review;
+- any newly completed phase/subphase whose status supersedes an older design snapshot.
+```
+
+A handover pack is incomplete if it records these matters in chat/session status
+only but fails to carry them into A/B/C or recommended CMS06.6-or-later updates.
 
 ---
 
@@ -111,10 +601,12 @@ Document A is the stable preamble and operating-rules document.
 It seeks to provide context and relevant information to facilitate understanding for both humans and AIs.    
 It must not lose context or detail without excellent reason.    
 It should change rarely.    
-It should be based on the previous version of Document A to ensure no loss of context or detail; 
-generally, some prior version were reviewed and approved.    
+It should be based on the previous approved version of Document A to ensure no loss of context or detail;
+generally, prior versions were reviewed and approved.    
 It should not contain very long wordy prose without excellent reason.    
-It should not be re-summarized (generally losing relevant detail) without excellent reason.    
+It must not be re-summarized, abbreviated, or regenerated from scratch if that would lose excellent valid context, examples, rationale, or human-orientation detail.    
+If a previous section is too wordy but still valid, improve it very carefully while still preserving its clear meaning and explanatory value.    
+If a previous section is invalid or stale, correct it in-place and preserve any useful background context rather than silently deleting it.    
 
 It should be uploaded at the start of every new CNR3 development chat.
 
@@ -336,8 +828,10 @@ A10. Diagnostic philosophy
 A11. Coding Rule 1 — Code comments
 A12. Coding Rule 2 — Code update instructions
 A13. Required Phase and SubPhase Naming Rules
-A14. Commit Title and Body Rules
-A15. New-chat boot sequence
+A14. Durable development rules and override discipline
+A15. Commit Title and Body Rules
+A16. New-chat boot sequence
+A17. Continuity and non-regression notes if Document A changed materially
 ```
 
 Additional sections may be added when useful, but the listed material must not be omitted.
@@ -357,7 +851,7 @@ cnr3_response_tables.h/.cpp:
     Response table building and table diagnostics.
 
 cnr3_output_cache_manager.h/.cpp:
-    CMS06.2-or-later output-cache manager.
+    CMS06.3-or-later output-cache manager.
 
 old_cnr3_strict_cache_*:
     Old strict-streaming cache functions retained while output_cache is not yet output-authoritative.
@@ -383,6 +877,38 @@ Document A must include at least:
 - All pruning/removal must preserve ordered frame-number semantics.
 - No dangling frames or dangling slots are acceptable.
 ```
+
+
+## 3.5A Required durable development rules and override discipline
+
+Document A must include a durable development rules section when any durable
+rules are active. This section must not be treated as a temporary phase note.
+
+At minimum, while relevant to current CNR3 development, Document A must include
+or clearly cross-reference durable rules for:
+
+```text
+- no parallel pixel/frame algorithms;
+- reuse existing frame-processing boundaries;
+- ownership and release balance for source frames, temporary outputs,
+  cache-owned refs, lookup-owned refs, and checkpoint pins;
+- output-authority discipline;
+- bounded-start honesty for no-prior-checkpoint recovery/warm-up starts;
+- CMS02-J0 / pre-fmParallelRequests cleanup and observability review;
+- old strict-state final-goal review.
+```
+
+Each durable rule or durable rule group must include override discipline wording:
+
+```text
+Do not depart from this rule silently. Any intentional departure requires
+explicit clarification, discussion, agreement, and documentation of the reason,
+scope, and expected safety impact before implementation proceeds.
+```
+
+If Document A omits an active durable rule because the handover creator believes
+it belongs only in Document B or C, the generated handover pack must explain that
+choice explicitly.
 
 ## 3.6 Required coding rules
 
@@ -435,9 +961,9 @@ Preferred format:
 
 Compact labels such as "CMS02-G.10D.7" may be used in log markers,
 compact tables, and commit titles. However, the expanded form must always
-appear in chat responses and handover documents and in CMS06.2-or-later.
-It must always appear and in the commit body whenever the compact form
-in the title could lead to misinterpretation or phase/subphase confusion with identification.
+appear in chat responses and handover documents and in CMS06.3-or-later.
+It must also appear in the commit body whenever the compact form in the title
+could lead to phase/subphase confusion.
 Preferred commit title style:
 ```
 Complete CMS02-G / SubPhase G10D.7 recovery-return decision dry-run
@@ -498,7 +1024,7 @@ Implementation consequence:
     What the code must or must not do.
 
 Reference:
-    CMS06.2-or-later section, appendix, handover section, source file, or test evidence.
+    CMS06.3-or-later section, appendix, handover section, source file, or test evidence.
 ```
 
 The “Implementation consequence” field is mandatory. It tells the next AI what the decision means in code.
@@ -529,6 +1055,13 @@ Additional decisions must be added as they become settled. Current known additio
 ```text
 Hot-zone update belongs at arInitial.
 Compact/full diagnostic mode is deferred.
+D16 — Recovery/warm-up compute must reuse existing processing boundaries.
+D17 — No parallel pixel/frame algorithms without explicit design agreement.
+D18 — Bounded-start S > 0 uses documented reset/start semantics unless later superseded.
+D19 — Compute, store, return, transfer, and output authority remain separately provable.
+D20 — CMS02-J0 is mandatory before CMS02-J.
+D21 — Future consolidated diagnostics should use compile-time gating, not runtime debug dependency.
+D22 — Old strict-streaming authority state must be reviewed before final parallel/output authority.
 ```
 
 Document B must record a D15 clarification rule:
@@ -569,7 +1102,7 @@ Document C is the volatile current-state/session handover document.
 
 It must be updated at every chat/session boundary.
 
-It must be current, exact, and action-oriented. It must not repeat all design rationale. It should point to Document A, Document B, CMS06.2-or-later, current source files, and logs.
+It must be current, exact, and action-oriented. It must not repeat all design rationale. It should point to Document A, Document B, CMS06.3-or-later, current source files, and logs.
 
 Document C is the current-state authority.
 
@@ -591,6 +1124,7 @@ C8. Remaining cleanup/deferred notes
 C9. Safety checks before any future commit
 C10. Recent commit messages or suggested commit messages
 C11. New-chat starter prompt
+C12. Durable rules and forward hard gates still active for the next phase
 ```
 
 Document C should also include a “Do not lose / named deferred items” subsection when there are named safety, diagnostic, or phase-planning notes that must be carried forward. Examples include hot-zone scheduling prerequisites, deferred diagnostic histograms, and long-run diagnostic verbosity controls.
@@ -602,7 +1136,7 @@ Additional sections may be added when useful.
 Clarification re C3. Current exact implementation status, it must incorporate:
 When a later phase/subphase has overtaken an older phase/subphase label, 
 then Document C must audit the older phase item-by-item.
-For example, if CMS06.2 says CMS02-F was not started, but current source shows
+For example, if CMS06.3 says CMS02-F was not started, but current source shows
 some CMS02-F-labelled primitives or behaviours now exist, Document C must say:
 - completed;
 - superseded/overtaken;
@@ -618,14 +1152,14 @@ Document C must explicitly state:
 ```text
 Treat this current session handover as the source of truth for current status.
 Treat the decision log as the source of truth for settled decisions.
-Treat CMS06.2-or-later as the detailed cache-manager design authority.
+Treat CMS06.3-or-later as the detailed cache-manager design authority.
 If the design spec and current code appear to conflict, stop and ask for clarification.
 ```
 
 It must also state when companion design-spec implementation snapshots are known to predate later work, for example:
 
 ```text
-CMS06.2 Section 14 predates the latest diagnostic work completed in this chat.
+CMS06.3 Section 14 predates the latest diagnostic work completed in this chat.
 Use this Document C as the current implementation-state authority.
 ```
 
@@ -635,11 +1169,11 @@ that snapshot may be stale. Document C must explicitly identify any known stale
 snapshot sections and state which later commits, logs, or handover entries
 supersede them.
 
-When a companion design spec (eg CMS06.2) says a phase or item is "not started"
+When a companion design spec (eg CMS06.3) says a phase or item is "not started"
 or "not yet implemented", the next chat must audit that statement against current
 source and logs before treating it as current truth.
     Example:
-        CMS06.2 says CMS02-F was not started at the time of its implementation
+        CMS06.3 says CMS02-F was not started at the time of its implementation
         snapshot. Later source and logs may have completed or superseded some
         CMS02-F-labelled obligations. Audit CMS02-F item-by-item against current
         source and logs; do not treat the old snapshot as a blanket blocker.
@@ -748,6 +1282,23 @@ Design-compliance review requirement:
     <if applicable>
 ```
 
+
+Document C must also include durable rules relevant to the immediate next task:
+
+```text
+Durable rules relevant to this task:
+    <list applicable durable rules>
+
+Required clarification before departure:
+    Any intentional departure from the listed durable rules requires explicit
+    clarification, discussion, agreement, and documentation of the reason,
+    scope, and expected safety impact before proceeding.
+```
+
+If CMS02-J0 has not yet been completed, Document C must carry it as an active
+future hard gate until it is completed or explicitly deferred with documented
+agreement.
+
 ## 5.7 Required do-not-implement list
 
 Document C must include a hard-stop list:
@@ -850,6 +1401,37 @@ Future option:
     compact/full diagnostic mode is deferred.
 ```
 
+
+## 5.10 Required durable-rules and forward-hard-gates section
+
+Document C must include a section for durable rules and forward hard gates that
+are still active for the next phase or later phases.
+
+This section must include:
+
+```text
+- durable rules relevant to the immediate next task;
+- durable rules that are not immediate-task constraints but must not be lost;
+- mandatory future checkpoints, especially CMS02-J0 until completed;
+- known final fmParallelRequests/fmParallel readiness blockers;
+- any recommended CMS06.6-or-later updates arising from the latest session.
+```
+
+Document C must not bury mandatory forward checkpoints only inside narrative
+session notes. If CMS02-J0 is still active, it must be named explicitly as:
+
+```text
+CMS02-J0 / pre-fmParallelRequests cleanup and observability review
+```
+
+and must state:
+
+```text
+CMS02-J must not start until CMS02-J0 has been evaluated and performed, or until
+specific intentional deferrals have been explicitly documented with reasons,
+scope, and expected safety impact.
+```
+
 ---
 
 # 6. Companion Design Document Rules
@@ -857,33 +1439,33 @@ Future option:
 The current cache design authority must be described as:
 
 ```text
-CMS06.2 or any later cache design spec that explicitly supersedes CMS06.2.
+CMS06.3 or any later cache design spec that explicitly supersedes CMS06.3.
 ```
 
 Do not write new handover specs that say “CMS05 is the authority” unless the project deliberately reverts to CMS05, which is not the current state.
 
-The handover documents do not need to duplicate every CMS06.2 detail. They must identify:
+The handover documents do not need to duplicate every CMS06.3 detail. They must identify:
 
-- which CMS06.2 decisions are already implemented;
+- which CMS06.3 decisions are already implemented;
 - which are pending;
 - which are deferred;
 - which are explicitly out of scope.
 
-When a new chat is asked to modify output-cache code, upload CMS06.2-or-later with the handover pack.
+When a new chat is asked to modify output-cache code, upload CMS06.3-or-later with the handover pack.
 
 The new chat should be instructed:
 
 ```text
-Use CMS06.2-or-later as the detailed design reference.
+Use CMS06.3-or-later as the detailed design reference.
 Use the current session handover as the current implementation-state authority.
 Use the decision log to avoid re-opening settled decisions.
-If CMS06.2-or-later and current code appear to conflict, stop and ask for clarification rather than guessing.
+If CMS06.3-or-later and current code appear to conflict, stop and ask for clarification rather than guessing.
 ```
 
 When a later phase/subphase has overtaken an older phase/subphase label, 
 then Document C must audit the older phase item-by-item.
 
-For example, if CMS06.2 says CMS02-F was not started, but current source shows
+For example, if CMS06.3 says CMS02-F was not started, but current source shows
 some CMS02-F-labelled primitives or behaviours now exist, Document C must say:
 ```
 - completed;
@@ -893,6 +1475,37 @@ some CMS02-F-labelled primitives or behaviours now exist, Document C must say:
 - not applicable.
 ```
 Do not preserve stale "not started" wording without qualification.
+
+
+## 6.1 Required CMS06.6-or-later recommendation handling
+
+When current work establishes or clarifies durable rules that are not already in
+the current CMS06.3-or-later design authority, the handover pack must include
+recommended CMS06.6-or-later updates.
+
+Recommended updates should not be vague. They should state what should be added
+or changed, and why it matters for safety, scheduling, cache correctness, or
+final output-authority readiness.
+
+At minimum, when not already incorporated into the design authority, recommend
+CMS06.6-or-later updates for:
+
+```text
+- no parallel pixel/frame algorithms for recovery/warm-up/cache proof work;
+- reuse of existing processing boundaries;
+- bounded-start S > 0 reset/start approximation semantics;
+- output-authority phase separation;
+- CMS02-J0 mandatory checkpoint;
+- compile-time-only diagnostic consolidation direction;
+- safety/health counters that should remain non-gated;
+- high-volume diagnostics that should be gated or removed;
+- old strict-state final-goal review;
+- any newly completed phase/subphase whose status supersedes an older design snapshot.
+```
+
+A handover creator must not assume the companion design spec has been updated
+merely because a chat or Document C mentions a decision. If CMS06.3-or-later is
+not yet updated, Document C must carry the recommendation forward.
 
 ---
 
@@ -944,20 +1557,22 @@ Please read the uploaded documents in this order:
 1. Document_A_CNR3_Project_Context_and_Rules_<version>.md
 2. Document_B_CNR3_Decision_Log_<version>.md
 3. Document_C_CNR3_Current_Session_Handover_<version>.md
-4. CMS06.2-or-later cache design specification
+4. CMS06.3-or-later cache design specification
 5. Current source files/logs
 
 Important:
 - The new chat has no memory of prior chats.
 - Treat Document_C_CNR3_Current_Session_Handover_<version>.md as the source of truth for current state.
 - Treat Document_B_CNR3_Decision_Log_<version>.md as the source of truth for settled decisions.
-- Treat CMS06.2-or-later as the detailed design reference.
+- Treat CMS06.3-or-later as the detailed design reference.
 - Do not re-litigate settled decisions unless current code or logs prove a real problem.
 - Follow Rule 1 for code comments.
 - Follow Rule 2 for before/after code update instructions.
 - Do not implement anything listed in the current handover's "Do not implement" section.
+- Follow any durable development rules and override-discipline wording in Document A.
+- Treat any active CMS02-J0 / pre-fmParallelRequests checkpoint as mandatory until completed or explicitly deferred with documented agreement.
 
-First, confirm your understanding of the current state and immediate next task.
+First, confirm your understanding of the current state, immediate next task, active durable rules, and active hard gates.
 Then wait for the current code files if they have not already been uploaded.
 ```
 
@@ -970,11 +1585,20 @@ Then wait for the current code files if they have not already been uploaded.
 Update Document A only when:
 
 - project-wide rules change;
+- durable development rules or override discipline change;
 - coding/comment/update rules change;
 - a major environment or architecture rule changes;
+- a mandatory forward checkpoint such as CMS02-J0 is adopted or completed;
+- final-goal readiness blockers change;
 - the required explanatory preamble needs correction or expansion.
 
 Do not update Document A for every phase.
+
+When Document A is updated, it must be updated from the previous approved
+Document A, not from memory and not from a short outline. The update must be
+continuity-preserving. If any major section becomes shorter, the handover creator
+must be able to explain why any valid human-useful context, examples, rationale,
+or warnings were removed.
 
 ## 9.2 Updating Document B
 
@@ -1024,7 +1648,7 @@ What is fmParallelRequests, and why does it increase cache safety risk?
 Why is full fmParallel out of scope?
 Why is recursive output[N] dependent on filtered output[N - 1]?
 What is the current output-authoritative path?
-What CMS06.2-or-later phase are we in?
+What CMS06.3-or-later phase are we in?
 What exactly was tested last?
 What exactly is the next task?
 What must not be implemented yet?
@@ -1048,12 +1672,14 @@ Before issuing a new handover pack, confirm:
 
 ```text
 [ ] A, B, and C use the same version number.
+[ ] Document A was based on the previous approved Document A, not regenerated as a short summary.
 [ ] Document A includes the mandatory extended project-orientation preamble.
 [ ] Document A explains VapourSynth request order and modes in enough detail.
+[ ] Document A preserves valid human-useful context, examples, and rationale from the previous approved version.
 [ ] Document A states cache management is a correctness subsystem.
 [ ] Document A includes Rule 1 and Rule 2.
 [ ] Document B includes current settled decisions and new major decisions.
-[ ] Document B references CMS06.2-or-later, not stale CMS05 authority wording.
+[ ] Document B references CMS06.3-or-later, not stale CMS05 authority wording.
 [ ] Document C is updated to the exact latest state.
 [ ] Document C explicitly overrides stale implementation snapshots in companion specs.
 [ ] Document C includes latest test evidence and hard-gate result.
@@ -1067,8 +1693,19 @@ Before issuing a new handover pack, confirm:
 [ ] Duplicate/recompute waste summary is included when relevant.
 [ ] Known fmParallel-readiness blockers, including old_strict_cache.next_needed, are carried forward.
 [ ] Phases/subphases include commit messages or suggested commit messages unless intentionally omitted.
-[ ] Companion CMS06.2-or-later design spec is identified.
+[ ] Companion CMS06.3-or-later design spec is identified.
 [ ] Required source files/logs for the next task are identified.
+[ ] Document A includes durable development rules and override discipline when active durable rules exist.
+[ ] Document A includes the no-parallel-pixel/frame-algorithm rule when recovery/warm-up/cache proof work remains active.
+[ ] Document A includes ownership/release-balance rules for source frames, temporary outputs, cache refs, lookup refs, and checkpoint pins.
+[ ] Document A includes output-authority discipline.
+[ ] Document A carries the old strict-state final-goal review requirement until resolved.
+[ ] Document B records the latest durable design decisions and their implementation consequences.
+[ ] Document C carries active durable rules relevant to the next phase.
+[ ] Document C identifies CMS02-J0 as a mandatory future checkpoint until completed or explicitly deferred.
+[ ] CMS06.6-or-later update recommendations include CMS02-J0 and durable rules if not already incorporated in the design authority.
+[ ] Any intentional departure from a durable rule is documented with clarification, discussion, agreement, reason, scope, and expected safety impact.
+[ ] The generated A/B/C documents have been compared against the previous approved A/B/C documents for accidental loss of important detail.
 [ ] The handover zip contains exactly the matched A/B/C documents.
 
 ```

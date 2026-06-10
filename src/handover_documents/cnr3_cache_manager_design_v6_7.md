@@ -1,10 +1,10 @@
 # CNR3 Cache Manager — Revised Design Specification CMS06
 ## Sliding Hot-Zone Pruning with Reference-Count Discipline (Non-Checkpoint Pinning Deferred)
 
-**Date:** 2026-06-08
-**Version:** CMS06.4
+**Date:** 2026-06-10
+**Version:** CMS06.7
 **Status:** Design specification — ready for coding
-**Supersedes:** CMS06.4 supersedes CMS06.3, CMS06.2, CMS06.1, CMS06, CMS05.2b, CMS05.2, CMS05.1, CMS05, CMS04, CMS03, CMS02, CMS01
+**Supersedes:** CMS06.7 supersedes CMS06.6, CMS06.5, CMS06.4, CMS06.3, CMS06.2, CMS06.1, CMS06, CMS05.2b, CMS05.2, CMS05.1, CMS05, CMS04, CMS03, CMS02, CMS01
 **Also supersedes:** Bounded-recovery policy in handover snapshot v0.14 section 0.9A
 **Companion documents:**
 - CNR3_Handover_Snapshot_v0.14 (for infrastructure already built)
@@ -13,6 +13,152 @@
 ---
 
 ## Changelog
+
+### CMS06.7 — 2026-06-10
+
+**CMS06.7-1 — Duplicate-store return value and ownership semantics
+clarified (Section 4.9).**
+The duplicate/already-cached store case is a first-in-best-dressed
+success, not a hard failure. A `true` return means the frame number is
+safely represented in the cache (by new insertion or by an existing
+first-in-best-dressed frame); it does NOT mean the cache took ownership
+of the caller's supplied frame in the duplicate case. The caller still
+owns its computed/local frame and must `freeFrame()` it on every exit
+path unless a later phase explicitly proves a different ownership
+transfer. Counter increments clarified (duplicate_computed_but_discarded
+only when the duplicate was actually computed before detection).
+
+**CMS06.7-2 — Decision-log mirror note (Section 4.9).**
+A note records the implementation consequence for any decision-log entry
+that mirrors first-in-best-dressed duplicate-store semantics: the caller
+releases its local frame after a duplicate exactly as it would after a
+new insertion where the cache took its own independent addFrameRef. (The
+decision log itself lives in handover Document B, not this design
+authority.)
+
+**CMS06.7-3 — H6 PASS criteria clarified: non-zero duplicate counters
+not mandatory (Section 8).**
+A clean sequential H6 proof may not naturally produce duplicate store
+attempts. Non-zero duplicate counters are not required for PASS when the
+test pattern produces no duplicate store attempts. Duplicate counters
+remain important evidence when overlap is deliberately tested.
+
+**CMS06.7-4 — H6 proof summary field list specified (Section 8).**
+The H6 store-only proof summary must distinguish local-output
+availability, store result, duplicate/idempotent success, caller/local
+frame release, and proof-only non-authority. Use the source counter names
+where they differ from the names listed.
+
+**CMS06.7-5 — No production-spec change.**
+Handover Pack Production Spec v1.5 does not require a version change for
+this clarification; it already mandates ownership/release balance,
+output-authority discipline, and current-state hard gates.
+
+### CMS06.6 — 2026-06-10
+
+**CMS06.6-1 — CMS02-H / SubPhase H4 complete / PASS with preserved evidence.**
+H4 proved request/acquire/release of the conservative bounded warm-up
+source-frame set (57/57/57/0) without compute, store, return,
+output-authority change, or old strict-state mutation. Full proof evidence
+preserved in Section 14.7. Final edit marker:
+`CMS02-H4-bounded-warmup-source-frame-set-request-acquire-release-v1-PASSED`.
+
+**CMS06.6-2 — CMS02-H / SubPhase H5 complete / PASS with preserved evidence.**
+H5 (bounded-warmup-local-compute-proof) proved local bounded warm-up
+computation using the H4 source lifecycle and the existing
+explicit-predecessor frame-processing boundary. H5.1 proved zero-start
+local rolling compute; H5.2 proved S > 0 bounded-start reset/start
+semantics. Full proof evidence preserved in Section 14.7. Final edit
+marker: `CMS02-H5-bounded-warmup-local-compute-proof-v1-PASSED`.
+
+**CMS06.6-3 — CMS02-H phase structure updated; H6 next.**
+H5+ "Not started" wording replaced. New sequence: H6
+(bounded-warmup-store-proof, strictly store-only) is next; H7
+(bounded-warmup-return-decision-dry-run, dry-run only) pending; H8+
+(return-transfer / output-authority readiness) deferred until after H7
+evidence. See Section 8.
+
+**CMS06.6-4 — Bounded-start S > 0 reset/start semantics formalised.**
+When bounded warm-up begins at S > 0 with no valid predecessor for S−1,
+output[S] uses explicit reset/start semantics — a bounded approximation
+start, never described as exact full-history recursion. Required
+diagnostic fields specified. See Sections 4.5.4 and 13.11.
+
+**CMS06.6-5 — Durable rule: no parallel pixel/frame algorithms.**
+Recovery, bounded warm-up, checkpoint recovery, cache-fill, and future
+scheduling-mode work must reuse existing frame-processing boundaries.
+Orchestration, ownership, cache, scheduling, and output-authority transfer
+are the things being proven — not pixel maths. See Section 13.12.
+
+**CMS06.6-6 — Durable rule: ownership and release balance.**
+Every acquired or allocated frame must have a provable owner and a
+provable release or transfer path, on every exit path, with diagnostics
+proving final balance at quiescent points. See Section 13.13.
+
+**CMS06.6-7 — Durable rule: output-authority discipline.**
+Compute, store, return decision, return transfer, and output-authority
+transition must remain separately provable. Proof-only paths must state
+explicitly what they do and do not do. See Section 13.14.
+
+**CMS06.6-8 — CMS02-J0 mandatory checkpoint inserted before CMS02-J.**
+CMS02-J (fmParallelRequests wiring) must not start until CMS02-J0
+(pre-fmParallelRequests cleanup and observability review) has been
+evaluated and performed, or specific deferrals explicitly documented.
+14-item review scope specified. See Sections 8 and 13.15.
+
+**CMS06.6-9 — Compile-time diagnostics direction added.**
+Strong recommendation now: prefer compile-time gating (constexpr /
+if constexpr) for new diagnostics where practical. Final consolidation to
+the compile-time model is a CMS02-J0 deliverable/requirement — not an
+immediate refactoring task, to avoid mixing cleanup with active proof
+phases. See Section 13.16.
+
+**CMS06.6-10 — Old strict-state final-goal review strengthened to hard gate.**
+Before final fmParallelRequests/fmParallel readiness and final
+output-cache authority: `old_strict_cache.next_needed`,
+`old_strict_cache.prev_output`, the `process_cnr3_frame()` compatibility
+wrapper, and any serial-order assumption must be reviewed. These must not
+silently remain authoritative in a final parallel design. See Section 13.17.
+
+**CMS06.6-11 — Section 14 implementation snapshot updated.**
+H4 and H5 complete/PASS with evidence (Section 14.7); proof paths disabled
+in committed state; no warm-up store/return; output authority unchanged;
+next CMS02-H task is H6.
+
+### CMS06.5 — 2026-06-08
+
+**CMS06.5-1 — VS-LIFECYCLE-01 named rule added (Section 2.3).**
+The VapourSynth arInitial/arAllFramesReady request/retrieve lifecycle
+constraint is now a named hard rule in the spec. Any source frame
+retrieved with `getFrameFilter()` in `arAllFramesReady` must have been
+requested with `requestFrameFilter()` in `arInitial` of the same callback
+activation. Attempting to discover, request, and retrieve source frames
+inside `arAllFramesReady` is invalid. This is a VapourSynth API
+constraint, not a CNR3 design choice.
+
+**CMS06.5-2 — CMS02-H / SubPhase H4 added (Section 8).**
+Formal sub-phase entry for
+`CMS02-H / SubPhase H4 / bounded-warmup-source-frame-set-request-acquire-release`.
+Conservative arInitial request window `[max(0, N-B), N]`. Option B
+implementation choice locked in: dedicated H4 plan structure
+(`Cnr3ForDebugOnlyBoundedWarmupSourcePlan` or similar), modelled on the
+proven G-phase lifecycle shape but with separate H4 names, counters,
+comments, and diagnostics. G-phase structure must remain
+checkpoint-recovery-specific and must not be repurposed for H4.
+20-frame proof expectations (57/57/57/0) specified. Full not-allowed list
+included.
+
+**CMS06.5-3 — First-in-best-dressed layer clarification added
+(Section 2.1).**
+Explicit note added that first-in-best-dressed applies at the output
+storage layer, not at the source frame request layer. Conservative source
+frame requests in arInitial are fully compatible with the
+first-in-best-dressed principle.
+
+**CMS06.5-4 — H3/H4 timing distinction captured in Section 8.**
+Explicit note that H3 (post-store diagnostic) and H4 (arInitial ownership
+proof) observe cache state at different moments and must not be conflated.
+H3 must not be altered to accommodate H4.
 
 ### CMS06.4 — 2026-06-08
 
@@ -286,6 +432,19 @@ Recovery and chain-filling operate as follows:
   returns success without taking ownership of the losing walk's frame.
   The losing walk releases its computed frame normally (Section 4.9).
 
+**Layer clarification — first-in-best-dressed and source frame requests:**
+
+First-in-best-dressed (Section 4.9, RC8) applies at the **output frame
+storage layer**, not at the source frame acquisition layer. Requesting a
+source frame for a position whose output is already cached is safe:
+requesting `source[K]` does not store, modify, or affect the ref-count of
+`output[K]`. Conservative source frame requests in `arInitial` (for
+example, requesting all frames in a bounded warm-up window regardless of
+which outputs are already cached) do not violate first-in-best-dressed.
+First-in-best-dressed is enforced when the recovery walk decides whether
+to *compute* each output frame, which happens in `arAllFramesReady` after
+source frames have already been acquired.
+
 **Reference-ownership rule:**
 
 When output[K] is found in cache and used as the predecessor for
@@ -381,6 +540,49 @@ Three development counters track caller-owned reference lifecycle:
 
 Diagnostic invariant at quiescent points:
 `acquired == released + transferred`
+
+### 2.3 VapourSynth arInitial/arAllFramesReady Lifecycle Rule
+
+**VS-LIFECYCLE-01 — Hard VapourSynth API constraint. Non-negotiable.**
+
+```text
+Any source frame that will be retrieved with getFrameFilter() in
+arAllFramesReady must have been requested with requestFrameFilter()
+in arInitial of the SAME callback activation.
+```
+
+This is not a CNR3 design choice. It is a hard VapourSynth API rule.
+Violating it will produce silent failure or undefined behaviour.
+
+**What this means in practice:**
+
+It is not possible to:
+- discover in `arAllFramesReady` that source frames are needed, then
+- request them there using `requestFrameFilter()`, then
+- retrieve them in the same `arAllFramesReady` block.
+
+That sequence is invalid. The retrieve will not find frames that were
+not requested in `arInitial`.
+
+**Consequence for warm-up recovery (Phase CMS02-H):**
+
+If bounded warm-up recovery needs source frames `[K .. N]`, those frames
+must be requested in `arInitial` before the `arAllFramesReady` block
+begins. The request decision must therefore be made using only information
+available at `arInitial` time — before the current frame has been
+processed, stored, or promoted to a checkpoint.
+
+This is why `CMS02-H / SubPhase H4` uses a conservative request window
+`[max(0, N - B), N]` rather than relying on post-store checkpoint
+decisions to determine what to request. See Section 8 and Section 4.5.3.
+
+**Relationship to H3:**
+
+H3 is a post-store diagnostic that runs in `arAllFramesReady` after store
+and prune. H3 can see checkpoint N if frame N was just stored. H4's
+`arInitial` request decision runs before store, so H4 cannot rely on
+the same cache state H3 sees. H3 and H4 are related but not identical,
+and H3 must not be altered to accommodate H4. See Section 8.
 
 ---
 
@@ -810,6 +1012,43 @@ This is not acceptable because:
 The unbounded `cnr3_output_cache_find_and_pin_nearest_prior_checkpoint()`
 must not be called directly from bounded recovery planning.
 
+#### 4.5.4 Bounded-Start Reset/Start Semantics (S > 0)
+
+**Settled design policy (CMS06.6). See also Section 13.11.**
+
+When a bounded warm-up range begins at start frame S > 0 and no valid
+predecessor or checkpoint is available for S − 1, local output[S] uses
+**explicit reset/start semantics**.
+
+```text
+This is a bounded approximation start.
+It is NOT exact full-history recursion from frame 0.
+It must never be described or logged as exact full-history recursion.
+```
+
+**Implementation consequence:**
+
+The start frame S must be processed using the existing reset/start
+processing semantics (the same path used for frame 0), not by inventing
+new manual copy or pixel logic. The subsequent recursive steps S+1..N
+must use the existing explicit-predecessor processing boundary.
+
+**Required diagnostic clarity:**
+
+Logs and summaries for bounded-start work must distinguish:
+
+```text
+- actual_source_frame
+- warmup_start_frame
+- processing_frame_number
+- predecessor_frame_number
+- bounded_start_uses_frame0_reset_path (or equivalent flag)
+```
+
+This honesty requirement exists so that future review can always tell
+whether a frame was produced by exact recursion or by bounded
+approximation, without re-deriving it from code.
+
 ### 4.6 Hard Ceiling and Abort Policy — Byte-Budget Based
 
 #### 4.6.1 Ceiling Calculation
@@ -962,10 +1201,21 @@ When storing `output[N]`:
    - Do not mutate either pool.
    - Do not disturb the existing checkpoint/non-checkpoint classification.
    - Increment `store_skipped_already_cached`.
-   - Increment `duplicate_store_computed_but_discarded`.
-   - Return success. Cache has not taken ownership of caller's frame.
-   - Caller still owns its computed frame and must release or transfer
-     it according to normal caller-side ownership rules.
+   - Increment `duplicate_store_computed_but_discarded` **only if** the
+     duplicate frame was actually computed before the duplicate was
+     detected (do not increment it for a pure already-cached skip where
+     no duplicate computation occurred).
+   - Return `true`. The cache already contains an authoritative frame for
+     this frame number, but the cache has **not** taken ownership of the
+     caller's supplied frame.
+   - **Hard invariant (CMS06.7):** A `true` return means the requested
+     frame number is safely represented in the cache, whether by new
+     insertion or by an already-existing first-in-best-dressed frame. In
+     the duplicate case the caller still owns its computed/local frame and
+     must call `freeFrame()` on every exit path, unless a later phase
+     explicitly proves and documents a different ownership transfer. A
+     duplicate/already-cached frame number is a first-in-best-dressed
+     success case, not a hard failure.
 4. **If does not exist (normal case):**
    - Check ceiling (Section 4.6.2). If would exceed AND prune cannot
      free: increment `cache_ceiling_hard_aborts`, return false without
@@ -986,6 +1236,17 @@ the first store wins; the second is a no-op from the cache's perspective.
 **Diagnostic interpretation:** High `duplicate_store_computed_but_discarded`
 indicates overlapping recovery walks are common. This is a candidate for
 later duplicate-work suppression. Not implemented in this iteration.
+
+**Decision-log mirror note (CMS06.7):** Any decision-log entry (handover
+Document B) that mirrors first-in-best-dressed duplicate-store semantics
+must carry this implementation consequence:
+`cnr3_output_cache_store_frame()` returns `true` for duplicate/already-cached
+frame numbers; the first stored frame remains the source of truth; in the
+duplicate case the cache does not take ownership of the caller's supplied
+frame, so the caller still owns its local frame and must release it with
+`freeFrame()` on every exit path — exactly as it must after a new insertion
+where the cache took its own independent `addFrameRef`. (The decision log
+itself lives in handover Document B, not in this design authority.)
 
 ---
 
@@ -1514,12 +1775,226 @@ Proof must confirm:
 
 **End-of-sub-phase: Design Compliance Review.**
 
-#### CMS02-H / SubPhase H3+ / bounded-warm-up-source-and-compute
-**Status: Not started. Requires H2B proven.**
+#### CMS02-H / SubPhase H3 / bounded-warmup-plan-diagnostic
+**Status: Complete (post-store diagnostic scaffold, proof disabled in
+committed state).**
 
-- Implement no-prior-checkpoint warm-up per Sections 4.5 and 4.5.3.
-- Use `find_and_pin_checkpoint_in_interval()` for bounded plan decisions.
-- Instrument all warm-up counters.
+H3 is a post-store diagnostic that runs in `arAllFramesReady` after
+store/prune. It can see checkpoint N if frame N was just stored. H3
+diagnostics confirm: `would_request_source_frames=0`,
+`would_retrieve_source_frames=0`, `would_compute_warmup_outputs=0`,
+`output_authoritative=0`. H3 must not be altered.
+
+#### CMS02-H / SubPhase H4 / bounded-warmup-source-frame-set-request-acquire-release
+**Status: Complete / PASS. Proof paths disabled in committed state.**
+Full proof evidence preserved in Section 14.7. Final edit marker:
+`CMS02-H4-bounded-warmup-source-frame-set-request-acquire-release-v1-PASSED`.
+The specification below is retained for design reference.
+
+**Purpose:** Prove that a bounded warm-up source-frame set can be
+requested in `arInitial`, retrieved in `arAllFramesReady`, held locally,
+and released safely — without compute, store, return, or output-authority
+change.
+
+**Implementation choice — Option B (locked):**
+
+Use a dedicated H4 plan structure. Do not repurpose the G-phase
+`Cnr3ForDebugOnlyRecoverySourceRequestPlan`. The G-phase structure is
+semantically checkpoint-recovery-specific and must remain so.
+
+```text
+Reuse the lifecycle pattern.
+Do not reuse the semantic structure.
+```
+
+The H4 plan structure should be named along these lines:
+    `Cnr3ForDebugOnlyBoundedWarmupSourcePlan`
+or similar — clearly H4/warm-up specific, not recovery-plan specific.
+
+It must be modelled on the proven G-phase lifecycle shape:
+```text
+arInitial:
+    create H4 plan covering [max(0, N - proof_bound), N]
+    store plan in frameData
+    call requestFrameFilter() for each frame in the plan range
+
+arAllFramesReady:
+    read H4 plan from frameData
+    call getFrameFilter() for each planned frame
+    hold retrieved frames in a local per-invocation frame set
+    release every retrieved frame before returning (every exit path)
+    destroy H4 plan
+```
+
+**Why Option B over Option A:**
+
+Option A (reuse G-phase structure) risk: dual-meaning structure creates
+latent maintenance confusion not caught by any current proof.
+Option B (dedicated H4 structure) risk: more code; possible copy/paste
+ownership mistake. This risk is front-loaded and immediately caught by
+the 57/57/57/0 proof balance check.
+Option B is the correct engineering choice for this project.
+
+**Conservative request window:**
+
+```text
+source_request_first = max(0, requested_frame - proof_bound)
+source_request_last  = requested_frame
+Request every source frame in [source_request_first, source_request_last].
+```
+
+This is deliberately conservative. It may request source frames for
+frames whose outputs are already cached. This is acceptable in H4 because
+H4 is proving ownership, not optimising request volume. Conservative
+source requests do not violate first-in-best-dressed (Section 2.1).
+
+**H3/H4 timing distinction (must not be conflated):**
+
+```text
+H3 post-store diagnostic (arAllFramesReady, AFTER store/prune):
+    frame 10: checkpoint 10 just stored -> plan available, no source
+              requests needed.
+
+H4 arInitial request decision (BEFORE store/prune):
+    frame 10: checkpoint 10 does not exist yet -> conservatively request
+              source frames [8, 9, 10].
+```
+
+Do not alter H3 to accommodate H4. They coexist independently.
+
+**What H4 must prove:**
+
+```text
+1. arInitial requests [max(0, N-B) .. N] for each frame N.
+2. arAllFramesReady retrieves every H4-requested source frame.
+3. Every retrieved frame held in local per-invocation frame set only.
+4. Every retrieved frame released before return, on every exit path.
+5. source_frames_requested_total == source_frames_retrieved_total
+                                 == source_frames_released_total
+6. source_frame_release_balance == 0 at end of each frame and shutdown.
+7. partial_acquire_failures == 0.
+8. proof_failures == 0.
+9. would_compute_warmup_outputs == 0.
+10. would_store_warmup_outputs == 0.
+11. would_return_warmup_output == 0.
+12. output_authoritative == 0.
+```
+
+**Expected proof summary (20-frame sequential run, B = 2):**
+
+```text
+frame 0:       request/retrieve/release [0]       count = 1
+frame 1:       request/retrieve/release [0..1]    count = 2
+frames 2-19:   request/retrieve/release [N-2..N]  count = 3 each
+
+source_frames_requested_total  = 1 + 2 + (18 * 3) = 57
+source_frames_retrieved_total  = 57
+source_frames_released_total   = 57
+source_frame_release_balance   = 0
+```
+
+**Not allowed in H4:**
+
+```text
+- Discover/request/retrieve source frames inside arAllFramesReady
+  (VS-LIFECYCLE-01 violation).
+- Use H3's post-store checkpoint decision to determine arInitial requests.
+- Alter the H3 post-store diagnostic scaffold.
+- Use or repurpose Cnr3ForDebugOnlyRecoverySourceRequestPlan for H4.
+- Compute any warm-up output frame.
+- Store any warm-up output frame in the output cache.
+- Return any warm-up output frame to VapourSynth.
+- Change output authority (output_authoritative must remain 0).
+- Enable fmParallelRequests or fmParallel.
+- Modify d->old_strict_cache.prev_output or next_needed.
+```
+
+**H4 proof gates must be disabled before normal commit.**
+
+**End-of-sub-phase: Design Compliance Review.**
+
+#### CMS02-H / SubPhase H5 / bounded-warmup-local-compute-proof
+**Status: Complete / PASS. Proof paths disabled in committed state.**
+
+H5 proved local bounded warm-up computation using the H4 source-frame
+request/acquire/release lifecycle and the existing explicit-predecessor
+frame-processing boundary. H5 covered:
+
+```text
+H5.1 / zero-start local rolling compute proof
+    Proved local compute from 0..N.
+
+H5.2 / bounded-start policy review/proof
+    Proved S > 0 bounded-start behaviour using explicit reset/start
+    semantics (Section 4.5.4).
+```
+
+H5 did not store warm-up outputs, did not return warm-up outputs, did not
+change output authority, and did not mutate old strict-streaming state.
+Full proof evidence preserved in Section 14.7. Final edit marker:
+`CMS02-H5-bounded-warmup-local-compute-proof-v1-PASSED`.
+
+#### CMS02-H / SubPhase H6 / bounded-warmup-store-proof
+**Status: Next. Strictly store-only.**
+
+Purpose: prove that locally computed bounded warm-up outputs can be
+stored into output_cache safely under first-in-best-dressed idempotency.
+
+**Strictly store-only:** H6 must not make return decisions, must not
+return warm-up outputs to VapourSynth, and must not change output
+authority. This phase separation follows the proven G10D pattern
+(G10D.5 store-proof preceded G10D.7 return dry-run) and the
+output-authority discipline rule (Section 13.14).
+
+**PASS criteria — duplicate counters (CMS06.7):** H6 must prove
+fill-holes and first-in-best-dressed store behaviour. Duplicate counters
+must be observed and explained if duplicate stores occur, but **non-zero
+duplicate counters are not mandatory for PASS** when the test pattern
+produces no duplicate store attempts. A clean sequential H6 proof may
+not naturally produce duplicate store attempts; requiring non-zero
+duplicate counters would create a false failure condition. Duplicate
+counters remain important evidence when overlap or duplicate-store
+situations are deliberately tested.
+
+**Proof summary fields (CMS06.7):** The H6 proof summary must distinguish
+at least the following. Where exact counter names in source differ, use
+the source names rather than inventing new ones.
+
+```text
+- local_outputs_available_for_store
+- store_attempts
+- store_successes
+- store_failures
+- duplicate_skipped_already_cached
+- duplicate_computed_but_discarded
+- local_outputs_released
+- local_output_release_balance
+- would_return_warmup_output      (must be 0)
+- output_authoritative            (must be 0)
+- mutates_old_strict              (must be 0)
+```
+
+These separate: local compute availability; store result;
+duplicate/idempotent success; caller/local-frame release; cache-owned
+addFrameRef/freeFrame balance; and proof-only non-authority.
+
+**End-of-sub-phase: Design Compliance Review.**
+
+#### CMS02-H / SubPhase H7 / bounded-warmup-return-decision-dry-run
+**Status: Pending. Requires H6 proven. Dry-run only.**
+
+Purpose: prove the return-decision shape for bounded warm-up outputs
+without actually returning them — mirroring G10D.7's
+`actual_returned_recovered_output=0` discipline.
+
+**End-of-sub-phase: Design Compliance Review.**
+
+#### CMS02-H / SubPhase H8+ / bounded-warmup-return-transfer and output-authority readiness
+**Status: Deferred until after H7 evidence.**
+
+Sequencing and combination decisions for return-transfer and
+output-authority readiness must be made on H7 evidence, not pre-committed.
+
 **End-of-phase: Design Compliance Review.**
 
 #### Phase CMS02-I — Empirical review: non-checkpoint pinning decision
@@ -1531,8 +2006,46 @@ After realistic VHS/VHS-C encode tests and synthetic jump tests:
 - If criteria are not met: document findings and proceed to CMS02-J.
 **End-of-phase: Design Compliance Review.**
 
+#### Phase CMS02-J0 — Pre-fmParallelRequests cleanup and observability review
+**Status: Mandatory future checkpoint. Must precede CMS02-J.**
+
+CMS02-J must not start until CMS02-J0 has been evaluated and performed,
+or until specific intentional deferrals have been explicitly documented
+with reasons, scope, and expected safety impact.
+
+CMS02-J0 must review at least:
+
+```text
+- obsolete proof-only scaffolds;
+- accumulated proof gates and proof-only data structures;
+- diagnostic verbosity and compile-time gating;
+- safety/health counters that should remain non-gated;
+- high-volume traces and temporary maps that should be gated or removed;
+- source lifecycle observability;
+- hot-zone observability;
+- checkpoint and non-checkpoint recovery observability;
+- fill-holes, duplicate, and first-in-best-dressed observability;
+- cache store/prune/remove/clear/ceiling observability;
+- lookup-ref transfer/release observability;
+- cache addFrameRef/freeFrame balance;
+- missing predecessor/checkpoint/refusal diagnostics;
+- memory diagnostics and summaries;
+- whether mature proof/diagnostic helpers should be moved out of
+  vapoursynth-Cnr3.cpp into dedicated diagnostic/observability
+  translation units.
+```
+
+See Section 13.15 for the named checkpoint rule and Section 13.16 for the
+compile-time diagnostics consolidation deliverable.
+
 #### Phase CMS02-J — fmParallelRequests wiring and proving
-Only after CMS02-H proven and CMS02-I decision made.
+Only after:
+- CMS02-H is complete through the required output-cache authority
+  readiness point;
+- CMS02-I empirical non-checkpoint pinning decision is complete;
+- CMS02-J0 pre-fmParallelRequests cleanup and observability review has
+  been evaluated and performed, or specific deferrals have been
+  explicitly documented.
 - `cnr3_output_cache_update_hot_zones()` is already called from `arInitial`
   (confirmed in current code — this prerequisite is satisfied).
 - Wire fmParallelRequests path: same sliding update helper (already
@@ -1773,7 +2286,7 @@ After completing each implementation phase (Section 8) or a coherent
 block of phases, perform a design-compliance review of all changed code
 paths and all unchanged helper functions invoked by those changed paths.
 
-The review must verify that the resulting execution paths follow CMS06.4,
+The review must verify that the resulting execution paths follow CMS06.7,
 not older pre-rename or pre-CMS05 assumptions.
 
 ### 12.2 Verification checklist
@@ -2036,6 +2549,178 @@ The unbounded helper remains valid for other purposes.
 **Cross-references:** Section 4.5.3 (design contract), Section 9.2.G2
 (helper specification), Section 8 (CMS02-H / SubPhase H2A and H2B).
 
+### 13.11 Bounded-start honesty — Named durable rule
+
+**Status: Settled design policy (CMS06.6). Durable while bounded recovery
+or bounded warm-up remains part of the design.**
+
+When a no-prior-checkpoint bounded warm-up starts at S > 0, the start
+frame is a bounded reset/start approximation unless a later phase proves
+exact predecessor history. It must not be described as exact full-history
+recursion. See Section 4.5.4 for implementation consequences and required
+diagnostic fields.
+
+**Override discipline:** Do not depart from this rule silently. Any
+intentional departure requires explicit clarification, discussion,
+agreement, and documentation of the reason, scope, and expected safety
+impact before implementation proceeds.
+
+### 13.12 No parallel pixel/frame algorithms — Named durable rule
+
+**Status: Settled durable rule (CMS06.6).**
+
+Do not create parallel pixel/frame algorithms for recovery, bounded
+warm-up, checkpoint recovery, cache-fill, or future
+fmUnordered/fmParallelRequests work. Reuse existing frame-processing
+boundaries wherever possible.
+
+```text
+Make orchestration, ownership, cache, scheduling, and output-authority
+transfer the things being proven — not pixel maths.
+```
+
+**Implementation consequence:** Do not duplicate blend, chroma, luma,
+downsampled-luma, scene-change, frame-copy, or pixel calculation logic
+inside VapourSynth lifecycle or cache proof code unless no safe existing
+boundary exists. If existing helpers are insufficient, stop and design a
+small named processing-layer boundary explicitly. Do not smuggle ad hoc
+pixel logic into lifecycle or cache proof code.
+
+**Override discipline:** Do not depart from this rule silently. Any
+intentional departure requires explicit clarification, discussion,
+agreement, and documentation of the reason, scope, and expected safety
+impact before implementation proceeds.
+
+### 13.13 Ownership and release balance — Named durable rule
+
+**Status: Settled durable rule (CMS06.6).**
+
+Every acquired or allocated frame must have a provable owner and a
+provable release or transfer path.
+
+**Implementation consequence:**
+
+```text
+Every retrieved source frame must be released on every success, failure,
+partial-acquire, early-return, and cleanup path.
+
+Every temporary local output frame must be released on every success,
+failure, partial-compute, early-return, and cleanup path unless a later
+phase explicitly proves and documents transfer of ownership.
+
+Any phase involving frame retrieval, local output allocation, cache
+lookup refs, checkpoint pins, or cache-owned refs must include
+diagnostics proving final balance at relevant quiescent points.
+```
+
+**Override discipline:** Do not depart from this rule silently. Any
+intentional departure requires explicit clarification, discussion,
+agreement, and documentation of the reason, scope, and expected safety
+impact before implementation proceeds.
+
+### 13.14 Output-authority discipline — Named durable rule
+
+**Status: Settled durable rule (CMS06.6).**
+
+Compute, store, return decision, return transfer, and general
+output-authority transition must remain separately provable unless
+explicit agreement says otherwise.
+
+**Implementation consequence:** A proof-only path must clearly state what
+it does and what it does not do. In particular, proof-only diagnostics
+should make clear whether the path:
+
+```text
+- computes local outputs;
+- stores into output_cache;
+- returns a recovered/cache output;
+- transfers a lookup/local/cache ref to VapourSynth;
+- changes output authority;
+- mutates old strict-streaming state.
+```
+
+Do not combine local compute, cache store, return decision, return
+transfer, and general output-authority transition if a failure would
+become ambiguous.
+
+**Override discipline:** Do not combine these steps or depart from this
+rule silently. Any intentional departure requires explicit clarification,
+discussion, agreement, and documentation of the reason, scope, and
+expected safety impact before implementation proceeds.
+
+### 13.15 CMS02-J0 — Mandatory forward checkpoint
+
+**Status: Mandatory checkpoint (CMS06.6). Active until completed or
+explicitly deferred with documented agreement.**
+
+`CMS02-J0 / pre-fmParallelRequests cleanup and observability review` is a
+mandatory checkpoint before `CMS02-J / fmParallelRequests wiring and
+proving`. CMS02-J must not start until CMS02-J0 has been evaluated and
+performed, or until specific intentional deferrals have been explicitly
+documented with reasons, scope, and expected safety impact.
+
+The full 14-item review scope is specified in Section 8 (Phase CMS02-J0).
+
+**Override discipline (checkpoint form):** Do not bypass this checkpoint
+silently. Any intentional deferral requires explicit clarification,
+discussion, agreement, and documentation of the reason, scope, and
+expected safety impact before the dependent phase proceeds.
+
+### 13.16 Compile-time diagnostics direction — Forward design rule
+
+**Status: Strong recommendation now; consolidation is a CMS02-J0
+deliverable/requirement (CMS06.6).**
+
+```text
+Before CMS02-J0:
+    Prefer compile-time gating (constexpr / if constexpr) for new
+    diagnostics where practical.
+
+At CMS02-J0:
+    Review and consolidate diagnostics into the final
+    compile-time/if constexpr model, with safety counters preserved
+    unless deliberately gated.
+```
+
+Do not design the final consolidated diagnostic model to depend on the
+runtime debug flag.
+
+**Counter policy:** Important safety/health counters should remain
+non-gated by default unless there is a clear complexity, performance, or
+maintainability reason to gate them. High-volume trace printing,
+temporary diagnostic maps, verbose per-frame or per-source traces, memory
+snapshots, and proof-only heavy summaries are good candidates for
+compile-time gating.
+
+**Why not a hard requirement now:** Making this a hard requirement
+immediately would invite refactoring churn during active H-phase proof
+work, violating the don't-mix-cleanup-with-proof-phases rule
+(Section 13.7). CMS02-J0 is the designated consolidation point.
+
+### 13.17 Old strict-state final-goal review — Hard gate
+
+**Status: Hard gate (CMS06.6). Active until old strict-streaming
+authority state is retired, redesigned, or proven safe for the final
+authority model.**
+
+Before final fmParallelRequests/fmParallel readiness and before final
+output-cache authority, review whether the following are obsolete,
+hazardous, or must be redesigned:
+
+```text
+- old_strict_cache.next_needed;
+- old_strict_cache.prev_output;
+- process_cnr3_frame(...) compatibility wrapper;
+- any path assuming serial output order.
+```
+
+These must not silently remain authoritative in a final parallel design.
+
+**Override discipline:** Do not depart from this rule silently. Any
+intentional retention or bypass requires explicit clarification,
+discussion, agreement, and documentation of the reason, scope, and
+expected safety impact before implementation proceeds.
+
 ---
 
 ## 14. Current Implementation State
@@ -2076,9 +2761,16 @@ current `cnr3_build_config.h`.)
 | G.10D.7 | recovery-return-decision-dry-run | Complete | `actual_returned_recovered_output=0`; dry-run only |
 | G.10D.8 | output-authority-transition-readiness-review | Complete | Readiness reviewed; not yet transferred |
 | G.10D.9+ | (next sub-phase) | **Next** | First actual recovered-frame return to VapourSynth |
-| CMS02-H | bounded warm-up recovery | Not started | |
+| H2A | bounded-checkpoint-search-contract-review | Not started | Design confirmation only |
+| H2B | bounded-checkpoint-search-helper-proof | Not started | Requires H2A |
+| H4 | bounded-warmup-source-frame-set-request-acquire-release | Complete / PASS | Evidence in Section 14.7 |
+| H5 | bounded-warmup-local-compute-proof | Complete / PASS | Evidence in Section 14.7; H5.1 zero-start, H5.2 bounded-start |
+| H6 | bounded-warmup-store-proof | **Next** | Strictly store-only |
+| H7 | bounded-warmup-return-decision-dry-run | Pending | Requires H6; dry-run only |
+| H8+ | bounded-warmup return-transfer / authority readiness | Deferred | Decide on H7 evidence |
 | CMS02-I | pinning decision | Not started | |
-| CMS02-J | fmParallelRequests | Not started | arInitial hot-zone prerequisite already satisfied |
+| CMS02-J0 | pre-fmParallelRequests cleanup/observability review | Mandatory checkpoint | Must precede CMS02-J; see Section 13.15 |
+| CMS02-J | fmParallelRequests | Not started | Requires CMS02-J0; arInitial hot-zone prerequisite already satisfied |
 
 ### 14.2 Rename and Build Config Completion Status
 
@@ -2158,7 +2850,9 @@ See also G-PAR-PRED-BOUNDARY-01 (Section 13.4) — resolved during G10D work.
 - Recovered-frame return to VapourSynth (Phase CMS02-G / SubPhase G10D.9+).
   Proof scaffolding through G10D.8 is complete but all proof paths disabled;
   `actual_returned_recovered_output=0` in dry-run.
-- Bounded warm-up recovery (Phase CMS02-H).
+- Bounded warm-up store, return, and authority transfer (CMS02-H
+  SubPhases H6+). H4 source lifecycle and H5 local compute are proven;
+  store/return/authority remain staged future work.
 - Non-checkpoint pinning (Phase CMS02-I, deferred).
 - fmParallelRequests wiring (Phase CMS02-J).
 - `Cnr3OwnedFrameRef` RAII wrapper (recommended, not yet implemented;
@@ -2188,6 +2882,122 @@ replaced by fully output-cache-authoritative mechanisms.
 `CMS02-G / SubPhase G10D.9+ / first-actual-recovered-frame-return`
 and its Design Compliance Review will transfer output authority for
 recovered frames from the strict-streaming path to `output_cache`.
+
+### 14.7 Preserved Proof Evidence — CMS02-H / SubPhases H4 and H5
+
+Evidence preserved verbatim per the non-regression principle: status
+words alone are insufficient for future safety review.
+
+#### CMS02-H / SubPhase H4 / bounded-warmup-source-frame-set-request-acquire-release
+**Status: Complete / PASS**
+
+Purpose: proved request/acquire/release of the conservative bounded
+warm-up source frame set without compute, store, return, output-authority
+change, or old strict-state mutation.
+
+```text
+Enabled proof evidence:
+    frames_checked=20
+    plans_created=20
+    plans_destroyed=20
+    source_frames_requested_total=57
+    source_frames_retrieved_total=57
+    source_frames_released_total=57
+    source_frame_release_balance=0
+    source_frame_count_max=3
+    partial_acquire_failures=0
+    source_frame_release_balance_errors=0
+    proof_failures=0
+
+Negative-authority evidence:
+    would_compute_warmup_outputs=0
+    would_store_warmup_outputs=0
+    would_return_warmup_output=0
+    output_authoritative=0
+    mutates_old_strict=0
+
+Disabled committed/smoke state:
+    H4 proof gate disabled.
+    No H4 proof trace lines in disabled smoke.
+    Final cache/ref cleanup clean.
+
+Final edit marker:
+    CMS02-H4-bounded-warmup-source-frame-set-request-acquire-release-v1-PASSED
+
+Disabled-smoke cleanup evidence:
+    non_checkpoint_count=0
+    checkpoint_count=0
+    total_cached_frame_count=0
+    has_pinned_checkpoints=0
+    total_pin_count=0
+    invariants_ok=1
+    integrity_errors=0
+    validation_failures=0
+    ref_balance_errors=0
+    addframeref_total=5
+    freeframe_total=5
+    balance=0
+    lookup_ref_balance=0
+    clear_successes=1
+```
+
+#### CMS02-H / SubPhase H5 / bounded-warmup-local-compute-proof
+**Status: Complete / PASS**
+
+Purpose: proved local bounded warm-up computation using the H4
+source-frame lifecycle and the existing explicit-predecessor
+frame-processing boundary. H5.1 proved zero-start local rolling compute
+(0..N); H5.2 proved S > 0 bounded-start reset/start semantics.
+
+```text
+Enabled proof evidence:
+    frames_checked=20
+    plans_seen=20
+    source_frames_retrieved_total=57
+    source_frames_released_total=57
+    source_frame_release_balance=0
+    source_frame_release_balance_errors=0
+    start_frame_zero_count=3
+    start_frame_nonzero_count=17
+    local_start_reset_copies=20
+    local_recursive_computes=37
+    local_outputs_allocated=57
+    local_outputs_released=57
+    local_output_release_balance=0
+    local_output_release_balance_errors=0
+    partial_acquire_failures=0
+    compute_failures=0
+    proof_failures=0
+    would_store_warmup_outputs=0
+    would_return_warmup_output=0
+    output_authoritative=0
+    mutates_old_strict=0
+
+Final edit marker:
+    CMS02-H5-bounded-warmup-local-compute-proof-v1-PASSED
+
+Disabled-state smoke:
+    H5 proof gate restored to false.
+    Final cache/ref cleanup clean:
+        non_checkpoint_count=0
+        checkpoint_count=0
+        total_cached_frame_count=0
+        invariants_ok=1
+        integrity_errors=0
+        validation_failures=0
+        ref_balance_errors=0
+        addframeref_total=5
+        freeframe_total=5
+        balance=0
+        lookup_ref_balance=0
+        clear_successes=1
+```
+
+**Evidence cross-check (arithmetic consistency):**
+`local_start_reset_copies=20` + `local_recursive_computes=37` = 57 =
+`local_outputs_allocated`, consistent with 20 plans each starting with a
+reset copy and walking forward. Source balance 57/57/0 matches the H4
+conservative window arithmetic: 1 + 2 + (18 × 3) = 57.
 
 ---
 

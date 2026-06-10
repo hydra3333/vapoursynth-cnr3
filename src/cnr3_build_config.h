@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H7-bounded-warmup-return-decision-dry-run-v1-PASSED";
+"CMS02-H8-bounded-warmup-return-transfer-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -415,12 +415,38 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN_BOUND = 2;
 
+/*
+    CMS02-H.8 bounded warm-up return-transfer proof gate.
+
+    This proof-only scaffold reuses the H6 compute-and-store path to make sure
+    bounded warm-up output[N] is present in output_cache, then actually returns
+    the caller-owned lookup reference for output[N] to VapourSynth under this
+    proof gate.
+
+    H8 is the first bounded warm-up phase that transfers a lookup reference to
+    VapourSynth as the returned frame. It must prove that the transferred lookup
+    reference is not also released locally. It must not mutate old strict-streaming
+    state or enable any parallel VapourSynth mode. Full output-authority cleanup
+    remains a later phase.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.8 bounded warm-up return-transfer
+    proof. H8 uses the same bound as H6/H7 so store, decision, and transfer
+    evidence can be compared directly.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF_BOUND = 2;
+
 static_assert(
     (
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ? 1 : 0) +
-        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ? 1 : 0)
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ? 1 : 0) +
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ? 1 : 0)
         ) <= 1,
     "Only one CMS02-H bounded warm-up proof gate may be enabled at a time."
     );

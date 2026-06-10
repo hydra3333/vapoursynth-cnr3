@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H14.4-selected-authority-generic-label-cleanup-v1-ENABLED";
+"CMS02-H14.5-selected-authority-helper-name-cleanup-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.

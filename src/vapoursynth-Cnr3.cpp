@@ -77,8 +77,8 @@
 inline constexpr bool CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH_ACTIVE =
 CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH;
 
-inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_DRY_RUN_ACTIVE =
-CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_DRY_RUN;
+inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF_ACTIVE =
+CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF;
 
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE =
 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ||
@@ -191,81 +191,6 @@ static void cnr3_debug_print_cache_state(
         next_needed,
         gap,
         d->old_strict_cache.prev_output != nullptr ? "yes" : "no"
-    );
-}
-
-static void cnr3_output_cache_authority_dry_run_sequential_fast_path(
-    Cnr3Data* d,
-    int requested_frame_number,
-    const VSAPI* vsapi
-) {
-    /*
-        H15.3 dry run only: check whether output frame N-1 is already cached.
-        If it is, log that a later sequential fast path could reuse the
-        cached predecessor and request/compute only frame N. Any lookup ref
-        acquired here is released before normal processing continues, so this
-        dry run must not become output authority.
-    */
-    if (
-        d == nullptr ||
-        vsapi == nullptr ||
-        !CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_DRY_RUN_ACTIVE
-        ) {
-        return;
-    }
-
-    const int predecessor_frame_number = requested_frame_number - 1;
-
-    if (predecessor_frame_number < 0) {
-        cnr3_debug_printf(
-            d->debug,
-            "output-cache # cnr3_output_cache_authority_dry_run_sequential_fast_path # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-DRY-RUN # "
-            "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=0 # "
-            "predecessor_cache_hit=0 # lookup_ref_released=0 # would_reuse_predecessor=0 # would_request_current_source_only=0 # would_compute_current_only=0 # "
-            "dry_run_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=frame-zero-has-no-predecessor\n",
-            d->instance_id,
-            requested_frame_number,
-            predecessor_frame_number
-        );
-        return;
-    }
-
-    const VSFrame* predecessor_output =
-        cnr3_output_cache_find_frame_and_add_ref(
-            d->output_cache,
-            predecessor_frame_number,
-            vsapi
-        );
-
-    if (predecessor_output == nullptr) {
-        cnr3_debug_printf(
-            d->debug,
-            "output-cache # cnr3_output_cache_authority_dry_run_sequential_fast_path # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-DRY-RUN # "
-            "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
-            "predecessor_cache_hit=0 # lookup_ref_released=0 # would_reuse_predecessor=0 # would_request_current_source_only=0 # would_compute_current_only=0 # "
-            "dry_run_only=1 # output_authoritative=0 # mutates_old_strict=0\n",
-            d->instance_id,
-            requested_frame_number,
-            predecessor_frame_number
-        );
-        return;
-    }
-
-    vsapi->freeFrame(predecessor_output);
-    cnr3_output_cache_note_lookup_ref_released(d->output_cache);
-
-    cnr3_debug_printf(
-        d->debug,
-        "output-cache # cnr3_output_cache_authority_dry_run_sequential_fast_path # "
-        "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-DRY-RUN # "
-        "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
-        "predecessor_cache_hit=1 # lookup_ref_released=1 # would_reuse_predecessor=1 # would_request_current_source_only=1 # would_compute_current_only=1 # "
-        "dry_run_only=1 # output_authoritative=0 # mutates_old_strict=0\n",
-        d->instance_id,
-        requested_frame_number,
-        predecessor_frame_number
     );
 }
 
@@ -3848,6 +3773,186 @@ static bool cnr3_for_debug_only_probe_recovery_compute_dry_run(
 
         return proof_ok;
     }
+}
+
+
+static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof(
+    Cnr3Data* d,
+    int requested_frame_number,
+    VSFrameContext* frameCtx,
+    VSCore* core,
+    const VSAPI* vsapi
+) {
+    /*
+        H15.4 proof only: when output frame N-1 is already cached, compute and
+        store output N using only source frame N and the cached predecessor.
+
+        The stored frame is not returned from this helper. The existing bounded
+        warm-up normal path remains the actual return authority for this phase.
+    */
+    if (
+        d == nullptr ||
+        d->vi == nullptr ||
+        frameCtx == nullptr ||
+        core == nullptr ||
+        vsapi == nullptr ||
+        !CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF_ACTIVE
+        ) {
+        return true;
+    }
+
+    const int predecessor_frame_number = requested_frame_number - 1;
+
+    if (predecessor_frame_number < 0) {
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=0 # "
+            "predecessor_cache_hit=0 # current_source_acquired=0 # local_output_allocated=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "predecessor_lookup_ref_released=0 # current_source_released=0 # local_output_released=0 # "
+            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=frame-zero-has-no-predecessor\n",
+            d->instance_id,
+            requested_frame_number,
+            predecessor_frame_number
+        );
+        return true;
+    }
+
+    const VSFrame* predecessor_output =
+        cnr3_output_cache_find_frame_and_add_ref(
+            d->output_cache,
+            predecessor_frame_number,
+            vsapi
+        );
+
+    if (predecessor_output == nullptr) {
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
+            "predecessor_cache_hit=0 # current_source_acquired=0 # local_output_allocated=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "predecessor_lookup_ref_released=0 # current_source_released=0 # local_output_released=0 # "
+            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=predecessor-not-cached\n",
+            d->instance_id,
+            requested_frame_number,
+            predecessor_frame_number
+        );
+        return true;
+    }
+
+    const VSFrame* current_source_frame =
+        vsapi->getFrameFilter(
+            requested_frame_number,
+            d->node,
+            frameCtx
+        );
+
+    if (current_source_frame == nullptr) {
+        vsapi->freeFrame(predecessor_output);
+        cnr3_output_cache_note_lookup_ref_released(d->output_cache);
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
+            "predecessor_cache_hit=1 # current_source_acquired=0 # local_output_allocated=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "predecessor_lookup_ref_released=1 # current_source_released=0 # local_output_released=0 # "
+            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=0 # reason=current-source-unavailable\n",
+            d->instance_id,
+            requested_frame_number,
+            predecessor_frame_number
+        );
+        return false;
+    }
+
+    VSFrame* local_output =
+        vsapi->newVideoFrame(
+            &d->vi->format,
+            d->vi->width,
+            d->vi->height,
+            current_source_frame,
+            core
+        );
+
+    if (local_output == nullptr) {
+        vsapi->freeFrame(current_source_frame);
+        vsapi->freeFrame(predecessor_output);
+        cnr3_output_cache_note_lookup_ref_released(d->output_cache);
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
+            "predecessor_cache_hit=1 # current_source_acquired=1 # local_output_allocated=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "predecessor_lookup_ref_released=1 # current_source_released=1 # local_output_released=0 # "
+            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=0 # reason=local-output-allocation-failed\n",
+            d->instance_id,
+            requested_frame_number,
+            predecessor_frame_number
+        );
+        return false;
+    }
+
+    const bool process_ok =
+        process_cnr3_frame_with_explicit_previous_output(
+            d,
+            requested_frame_number,
+            current_source_frame,
+            predecessor_output,
+            local_output,
+            frameCtx,
+            vsapi
+        );
+
+    bool store_ok = false;
+
+    if (process_ok) {
+        store_ok =
+            cnr3_output_cache_store_frame(
+                d->output_cache,
+                requested_frame_number,
+                local_output,
+                vsapi
+            );
+    }
+
+    vsapi->freeFrame(local_output);
+    local_output = nullptr;
+
+    vsapi->freeFrame(current_source_frame);
+    current_source_frame = nullptr;
+
+    vsapi->freeFrame(predecessor_output);
+    predecessor_output = nullptr;
+    cnr3_output_cache_note_lookup_ref_released(d->output_cache);
+
+    cnr3_debug_printf(
+        d->debug,
+        "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
+        "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+        "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
+        "predecessor_cache_hit=1 # current_source_acquired=1 # local_output_allocated=1 # "
+        "process_ok=%d # store_attempted=%d # store_ok=%d # duplicate_store_expected_if_normal_path_recomputes=1 # "
+        "predecessor_lookup_ref_released=1 # current_source_released=1 # local_output_released=1 # "
+        "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+        d->instance_id,
+        requested_frame_number,
+        predecessor_frame_number,
+        process_ok ? 1 : 0,
+        process_ok ? 1 : 0,
+        store_ok ? 1 : 0,
+        (process_ok && store_ok) ? 1 : 0
+    );
+
+    return process_ok && store_ok;
 }
 
 static bool cnr3_for_debug_only_probe_recovery_local_single_compute(
@@ -7702,12 +7807,29 @@ static const VSFrame* VS_CC cnr3_get_frame(
             *frameData = nullptr;
         }
 
-        if constexpr (CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_DRY_RUN_ACTIVE) {
-            cnr3_output_cache_authority_dry_run_sequential_fast_path(
-                d,
-                n,
-                vsapi
-            );
+        if constexpr (CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF_ACTIVE) {
+            if (
+                !cnr3_output_cache_authority_compute_store_sequential_fast_path_proof(
+                    d,
+                    n,
+                    frameCtx,
+                    core,
+                    vsapi
+                )
+                ) {
+                cnr3_output_cache_authority_destroy_bounded_warmup_source_plan_with_trace(
+                    d,
+                    h4_source_plan,
+                    "h15-sequential-fast-path-compute-store-proof-failure"
+                );
+
+                vsapi->setFilterError(
+                    "CNR3: H15.4 sequential fast-path compute/store proof failed.",
+                    frameCtx
+                );
+
+                return nullptr;
+            }
         }
 
         if (

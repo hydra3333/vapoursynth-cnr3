@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H15.4-sequential-fast-path-compute-store-proof-v1-ENABLED";
+"CMS02-H15.5-sequential-fast-path-return-transfer-proof-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -546,20 +546,17 @@ inline constexpr bool CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH =
 static constexpr int CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_BOUND = 2;
 
 /*
-    CMS02-H15.4 sequential fast-path compute/store proof.
+    CMS02-H15.5 sequential fast-path return-transfer proof.
 
-    This gate proves the next sequential fast-path behaviour without making it
-    the return authority. When output N-1 is already cached, the proof obtains
-    source frame N, computes output N using the cached predecessor, stores output
-    N into the output cache, then releases every caller-owned reference before
-    the existing bounded-warmup normal path continues.
+    This gate proves the sequential fast-path return-transfer behaviour. When
+    output N-1 is already cached, the proof obtains source frame N, computes
+    output N using the cached predecessor, stores output N into the output cache,
+    then looks up output N and transfers that lookup ref as the returned frame.
 
-    This phase must not change the normal return authority, lookup-ref transfer
-    for returned frames, or old strict state. It is expected to add extra store
-    attempts and duplicate-store diagnostics because the existing normal path
-    still runs after the proof.
+    Frame 0 and non-eligible requests still fall back to the existing bounded-
+    warmup normal path. This phase must not mutate old strict state.
 */
-inline constexpr bool CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF = true;
+inline constexpr bool CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF = true;
 
 static_assert(
     (

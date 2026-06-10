@@ -77,8 +77,8 @@
 inline constexpr bool CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH_ACTIVE =
 CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH;
 
-inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF_ACTIVE =
-CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF;
+inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF_ACTIVE =
+CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF;
 
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE =
 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ||
@@ -3776,27 +3776,34 @@ static bool cnr3_for_debug_only_probe_recovery_compute_dry_run(
 }
 
 
-static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof(
+static bool cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof(
     Cnr3Data* d,
     int requested_frame_number,
     VSFrameContext* frameCtx,
     VSCore* core,
-    const VSAPI* vsapi
+    const VSAPI* vsapi,
+    const VSFrame** returned_frame
 ) {
     /*
-        H15.4 proof only: when output frame N-1 is already cached, compute and
-        store output N using only source frame N and the cached predecessor.
+        H15.5 proof: when output frame N-1 is already cached, compute and store
+        output N using only source frame N and the cached predecessor, then
+        transfer a lookup ref to output N as the returned frame.
 
-        The stored frame is not returned from this helper. The existing bounded
-        warm-up normal path remains the actual return authority for this phase.
+        Frame 0 and non-eligible requests leave returned_frame as nullptr so the
+        existing bounded-warmup normal path remains the fallback authority.
     */
+    if (returned_frame != nullptr) {
+        *returned_frame = nullptr;
+    }
+
     if (
         d == nullptr ||
         d->vi == nullptr ||
         frameCtx == nullptr ||
         core == nullptr ||
         vsapi == nullptr ||
-        !CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF_ACTIVE
+        returned_frame == nullptr ||
+        !CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF_ACTIVE
         ) {
         return true;
     }
@@ -3806,13 +3813,15 @@ static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof
     if (predecessor_frame_number < 0) {
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "output-cache # cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-RETURN-TRANSFER-PROOF # "
             "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=0 # "
             "predecessor_cache_hit=0 # current_source_acquired=0 # local_output_allocated=0 # "
-            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # returned_lookup_attempted=0 # "
+            "returned_lookup_success=0 # returned_lookup_ref_transferred=0 # "
             "predecessor_lookup_ref_released=0 # current_source_released=0 # local_output_released=0 # "
-            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=frame-zero-has-no-predecessor\n",
+            "proof_only=1 # returned_fast_path_output=0 # output_authoritative=0 # mutates_old_strict=0 # "
+            "reason=frame-zero-has-no-predecessor\n",
             d->instance_id,
             requested_frame_number,
             predecessor_frame_number
@@ -3830,13 +3839,15 @@ static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof
     if (predecessor_output == nullptr) {
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "output-cache # cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-RETURN-TRANSFER-PROOF # "
             "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
             "predecessor_cache_hit=0 # current_source_acquired=0 # local_output_allocated=0 # "
-            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # returned_lookup_attempted=0 # "
+            "returned_lookup_success=0 # returned_lookup_ref_transferred=0 # "
             "predecessor_lookup_ref_released=0 # current_source_released=0 # local_output_released=0 # "
-            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # reason=predecessor-not-cached\n",
+            "proof_only=1 # returned_fast_path_output=0 # output_authoritative=0 # mutates_old_strict=0 # "
+            "reason=predecessor-not-cached\n",
             d->instance_id,
             requested_frame_number,
             predecessor_frame_number
@@ -3857,13 +3868,15 @@ static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "output-cache # cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-RETURN-TRANSFER-PROOF # "
             "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
             "predecessor_cache_hit=1 # current_source_acquired=0 # local_output_allocated=0 # "
-            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # returned_lookup_attempted=0 # "
+            "returned_lookup_success=0 # returned_lookup_ref_transferred=0 # "
             "predecessor_lookup_ref_released=1 # current_source_released=0 # local_output_released=0 # "
-            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=0 # reason=current-source-unavailable\n",
+            "proof_only=1 # returned_fast_path_output=0 # output_authoritative=0 # mutates_old_strict=0 # "
+            "proof_ok=0 # reason=current-source-unavailable\n",
             d->instance_id,
             requested_frame_number,
             predecessor_frame_number
@@ -3887,13 +3900,15 @@ static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
-            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+            "output-cache # cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof # "
+            "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-RETURN-TRANSFER-PROOF # "
             "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
             "predecessor_cache_hit=1 # current_source_acquired=1 # local_output_allocated=0 # "
-            "process_ok=0 # store_attempted=0 # store_ok=0 # duplicate_store_expected_if_normal_path_recomputes=0 # "
+            "process_ok=0 # store_attempted=0 # store_ok=0 # returned_lookup_attempted=0 # "
+            "returned_lookup_success=0 # returned_lookup_ref_transferred=0 # "
             "predecessor_lookup_ref_released=1 # current_source_released=1 # local_output_released=0 # "
-            "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=0 # reason=local-output-allocation-failed\n",
+            "proof_only=1 # returned_fast_path_output=0 # output_authoritative=0 # mutates_old_strict=0 # "
+            "proof_ok=0 # reason=local-output-allocation-failed\n",
             d->instance_id,
             requested_frame_number,
             predecessor_frame_number
@@ -3934,25 +3949,63 @@ static bool cnr3_output_cache_authority_compute_store_sequential_fast_path_proof
     predecessor_output = nullptr;
     cnr3_output_cache_note_lookup_ref_released(d->output_cache);
 
+    bool returned_lookup_attempted = false;
+    bool returned_lookup_success = false;
+    bool returned_lookup_ref_transferred = false;
+    bool returned_fast_path_output = false;
+
+    if (process_ok && store_ok) {
+        returned_lookup_attempted = true;
+
+        const VSFrame* fast_path_output =
+            cnr3_output_cache_find_frame_and_add_ref(
+                d->output_cache,
+                requested_frame_number,
+                vsapi
+            );
+
+        if (fast_path_output != nullptr) {
+            returned_lookup_success = true;
+            cnr3_output_cache_note_lookup_ref_transferred(d->output_cache);
+            returned_lookup_ref_transferred = true;
+            returned_fast_path_output = true;
+            *returned_frame = fast_path_output;
+        }
+    }
+
+    const bool proof_ok =
+        process_ok &&
+        store_ok &&
+        returned_lookup_attempted &&
+        returned_lookup_success &&
+        returned_lookup_ref_transferred &&
+        returned_fast_path_output;
+
     cnr3_debug_printf(
         d->debug,
-        "output-cache # cnr3_output_cache_authority_compute_store_sequential_fast_path_proof # "
-        "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-COMPUTE-STORE-PROOF # "
+        "output-cache # cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof # "
+        "OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-RETURN-TRANSFER-PROOF # "
         "instance=%d # requested=%d # predecessor=%d # predecessor_lookup_attempted=1 # "
         "predecessor_cache_hit=1 # current_source_acquired=1 # local_output_allocated=1 # "
-        "process_ok=%d # store_attempted=%d # store_ok=%d # duplicate_store_expected_if_normal_path_recomputes=1 # "
+        "process_ok=%d # store_attempted=%d # store_ok=%d # returned_lookup_attempted=%d # "
+        "returned_lookup_success=%d # returned_lookup_ref_transferred=%d # "
         "predecessor_lookup_ref_released=1 # current_source_released=1 # local_output_released=1 # "
-        "proof_only=1 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+        "proof_only=1 # returned_fast_path_output=%d # output_authoritative=%d # mutates_old_strict=0 # proof_ok=%d\n",
         d->instance_id,
         requested_frame_number,
         predecessor_frame_number,
         process_ok ? 1 : 0,
         process_ok ? 1 : 0,
         store_ok ? 1 : 0,
-        (process_ok && store_ok) ? 1 : 0
+        returned_lookup_attempted ? 1 : 0,
+        returned_lookup_success ? 1 : 0,
+        returned_lookup_ref_transferred ? 1 : 0,
+        returned_fast_path_output ? 1 : 0,
+        returned_fast_path_output ? 1 : 0,
+        proof_ok ? 1 : 0
     );
 
-    return process_ok && store_ok;
+    return proof_ok;
 }
 
 static bool cnr3_for_debug_only_probe_recovery_local_single_compute(
@@ -7807,29 +7860,55 @@ static const VSFrame* VS_CC cnr3_get_frame(
             *frameData = nullptr;
         }
 
-        if constexpr (CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_COMPUTE_STORE_PROOF_ACTIVE) {
+        const VSFrame* h15_5_fast_path_returned_frame = nullptr;
+
+        if constexpr (CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF_ACTIVE) {
             if (
-                !cnr3_output_cache_authority_compute_store_sequential_fast_path_proof(
+                !cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof(
                     d,
                     n,
                     frameCtx,
                     core,
-                    vsapi
+                    vsapi,
+                    &h15_5_fast_path_returned_frame
                 )
                 ) {
                 cnr3_output_cache_authority_destroy_bounded_warmup_source_plan_with_trace(
                     d,
                     h4_source_plan,
-                    "h15-sequential-fast-path-compute-store-proof-failure"
+                    "h15-sequential-fast-path-return-transfer-proof-failure"
                 );
 
                 vsapi->setFilterError(
-                    "CNR3: H15.4 sequential fast-path compute/store proof failed.",
+                    "CNR3: H15.5 sequential fast-path return-transfer proof failed.",
                     frameCtx
                 );
 
                 return nullptr;
             }
+        }
+
+        if (h15_5_fast_path_returned_frame != nullptr) {
+            cnr3_output_cache_authority_destroy_bounded_warmup_source_plan_with_trace(
+                d,
+                h4_source_plan,
+                "h15-sequential-fast-path-return-transfer-proof-return"
+            );
+
+            cnr3_debug_printf(
+                d->debug,
+                "output-cache # cnr3_get_frame # OUTPUT-CACHE-AUTHORITY-SEQUENTIAL-FAST-PATH-RETURN # "
+                "instance=%d # frame=%d # transferred_lookup_ref=1 # returned_fast_path_output=1 # "
+                "output_authoritative=1 # old_strict_bypassed=1 # "
+                "old_strict_streaming_gate_quarantined=1 # old_strict_next_needed=%d # "
+                "old_strict_prev_output_present=%d # mutates_old_strict=0\n",
+                d->instance_id,
+                n,
+                d->old_strict_cache.next_needed,
+                d->old_strict_cache.prev_output != nullptr ? 1 : 0
+            );
+
+            return h15_5_fast_path_returned_frame;
         }
 
         if (

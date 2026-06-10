@@ -498,6 +498,32 @@ any path assuming serial output order
 
 These must not silently remain authoritative in a final parallel design.
 
+### A10A.7 Deferred and hard-gate item preservation
+
+Named deferred items, cleanup obligations, fmParallel / fmParallelRequests
+readiness blockers, diagnostic obligations, and future hard gates must not be
+silently dropped. They must be preserved in Document C until completed,
+superseded, explicitly retired, or deliberately deferred with documented
+agreement.
+
+Document A does not carry the exhaustive current deferred-item list, because
+that list is current-state material and can change from phase to phase. The
+detailed active list belongs in Document C, and any design-authoritative items
+belong in the latest CMS06.x design specification.
+
+Required rule:
+
+```text
+Current named deferred items are not listed exhaustively in Document A.
+They must be carried in Document C and, where design-authoritative, in the
+latest CMS06.x design specification.
+
+If a future chat intends not to carry forward a named deferred item, cleanup
+obligation, readiness blocker, diagnostic obligation, or hard gate, that
+requires explicit clarification, discussion, agreement, and documentation of
+the reason, scope, and expected safety impact before proceeding.
+```
+
 ## A11. Diagnostic philosophy
 
 Instrumentation is proof of safety, not decoration.

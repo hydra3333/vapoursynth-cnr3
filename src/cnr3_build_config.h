@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H6-bounded-warmup-store-proof-v1-PASSED";
+"CMS02-H7-bounded-warmup-return-decision-dry-run-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -390,11 +390,37 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF = fa
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_STORE_PROOF_BOUND = 2;
 
+/*
+    CMS02-H.7 bounded warm-up return-decision dry-run gate.
+
+    This proof-only scaffold reuses the H6 compute-and-store path to make sure
+    bounded warm-up output[N] is present in output_cache, then performs only a
+    dry-run return decision for the requested frame. It may take and release a
+    caller-owned lookup reference to prove candidate availability and ownership
+    accounting.
+
+    H7 must not return warm-up outputs, transfer a frame reference to
+    VapourSynth, change output authority, mutate old strict-streaming state, or
+    enable any parallel VapourSynth mode. While this gate is enabled, cache-hit
+    return is deliberately bypassed so H7 remains decision-only.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.7 bounded warm-up return-decision
+    dry-run proof. H7 uses the same bound as H6 so store and decision evidence
+    can be compared directly with the H6 proof run.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN_BOUND = 2;
+
 static_assert(
     (
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ? 1 : 0) +
-        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ? 1 : 0)
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ? 1 : 0) +
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ? 1 : 0)
         ) <= 1,
     "Only one CMS02-H bounded warm-up proof gate may be enabled at a time."
     );

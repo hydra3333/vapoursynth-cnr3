@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H5-bounded-warmup-local-compute-proof-v1-PASSED";
+"CMS02-H6-bounded-warmup-store-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -365,12 +365,38 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PR
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF_BOUND = 2;
 
+/*
+    CMS02-H.6 bounded warm-up store proof gate.
+
+    This proof-only scaffold uses a new H6 compute-and-store helper rather than
+    changing the proven H5 local-compute helper. It reuses the H4/H5 source
+    lifecycle and existing explicit-predecessor processing boundary, then stores
+    locally computed bounded warm-up outputs into output_cache.
+
+    H6 must not return warm-up outputs, change output authority, mutate old
+    strict-streaming state, or enable any parallel VapourSynth mode. While this
+    gate is enabled, cache-hit return is deliberately bypassed so H6-stored
+    proof frames cannot become returned output in the same proof run.
+
+    Keep false outside a dedicated proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H.6 bounded warm-up store proof.
+
+    The first H6 proof uses the same bound as H5 so the local compute/store
+    total remains comparable to the proven 57-frame H4/H5 ownership run.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_STORE_PROOF_BOUND = 2;
+
 static_assert(
-    !(
-        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF&&
-        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF
-        ),
-    "CNR3 H4 source-frame-set proof and H5 local-compute proof must not be enabled together."
+    (
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ? 1 : 0) +
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_LOCAL_COMPUTE_PROOF ? 1 : 0) +
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ? 1 : 0)
+        ) <= 1,
+    "Only one CMS02-H bounded warm-up proof gate may be enabled at a time."
     );
 
 /*

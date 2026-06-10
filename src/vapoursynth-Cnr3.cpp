@@ -1932,7 +1932,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_decision_summary(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_bounded_warmup_decision_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # prior_checkpoint_available=%lld # no_prior_checkpoint_detected=%lld # warmup_plans_created=%lld # warmup_start_at_zero=%lld # warmup_start_bounded_nonzero=%lld # warmup_forward_distance_total=%lld # warmup_forward_distance_max=%lld # warmup_source_range_invalid=%lld # warmup_proof_failures=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_decision_summary # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # prior_checkpoint_available=%lld # no_prior_checkpoint_detected=%lld # warmup_plans_created=%lld # warmup_start_at_zero=%lld # warmup_start_bounded_nonzero=%lld # warmup_forward_distance_total=%lld # warmup_forward_distance_max=%lld # warmup_source_range_invalid=%lld # warmup_proof_failures=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -2020,7 +2020,7 @@ static void cnr3_for_debug_only_probe_bounded_warmup_decision(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_probe_bounded_warmup_decision # FOR-DEBUG-ONLY-BOUNDED-WARMUP-DECISION # instance=%d # requested=%d # prior_checkpoint_available=1 # checkpoint=%d # warmup_needed=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=1\n",
+                "output-cache # cnr3_for_debug_only_probe_bounded_warmup_decision # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-DECISION # instance=%d # requested=%d # prior_checkpoint_available=1 # checkpoint=%d # warmup_needed=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=1\n",
                 d->instance_id,
                 frame_number,
                 checkpoint_frame_number
@@ -2060,7 +2060,7 @@ static void cnr3_for_debug_only_probe_bounded_warmup_decision(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_decision # FOR-DEBUG-ONLY-BOUNDED-WARMUP-DECISION # instance=%d # requested=%d # prior_checkpoint_available=0 # warmup_start=%d # warmup_end=%d # warmup_forward_distance=%d # max_forward=%d # bounded_by_limit=%d # would_request_source_first=%d # would_request_source_last=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_decision # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-DECISION # instance=%d # requested=%d # prior_checkpoint_available=0 # warmup_start=%d # warmup_end=%d # warmup_forward_distance=%d # max_forward=%d # bounded_by_limit=%d # would_request_source_first=%d # would_request_source_last=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d->instance_id,
             frame_number,
             warmup_start,
@@ -2578,7 +2578,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # frames_skipped_store_or_prune_failure=%lld # checkpoint_plans_available=%lld # warmup_source_request_plans_created=%lld # warmup_start_at_zero=%lld # warmup_start_bounded_nonzero=%lld # source_request_frame_count_total=%lld # source_request_frame_count_max=%lld # unpins_attempted=%lld # unpins_succeeded=%lld # unpins_failed=%lld # pin_cleanup_failures=%lld # source_range_invalid=%lld # proof_failures=%lld # would_request_source_frames=0 # would_retrieve_source_frames=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_source_request_plan_summary # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # frames_skipped_store_or_prune_failure=%lld # checkpoint_plans_available=%lld # warmup_source_request_plans_created=%lld # warmup_start_at_zero=%lld # warmup_start_bounded_nonzero=%lld # source_request_frame_count_total=%lld # source_request_frame_count_max=%lld # unpins_attempted=%lld # unpins_succeeded=%lld # unpins_failed=%lld # pin_cleanup_failures=%lld # source_range_invalid=%lld # proof_failures=%lld # would_request_source_frames=0 # would_retrieve_source_frames=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -2671,7 +2671,7 @@ static void cnr3_for_debug_only_probe_bounded_warmup_source_request_plan(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_probe_bounded_warmup_source_request_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN # instance=%d # requested=%d # skipped_store_or_prune_failure=1 # store_ok=%d # prune_ok=%d # proof_ok=0\n",
+                "output-cache # cnr3_for_debug_only_probe_bounded_warmup_source_request_plan # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN # instance=%d # requested=%d # skipped_store_or_prune_failure=1 # store_ok=%d # prune_ok=%d # proof_ok=0\n",
                 d->instance_id,
                 frame_number,
                 output_cache_store_ok ? 1 : 0,
@@ -2791,7 +2791,7 @@ static void cnr3_for_debug_only_probe_bounded_warmup_source_request_plan(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_source_request_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN # instance=%d # requested=%d # proof_bound=%d # checkpoint_plan_available=%d # checkpoint=%d # forward=%d # bounded_warmup_needed=%d # warmup_start=%d # warmup_end=%d # source_request_first=%d # source_request_last=%d # source_request_frame_count=%d # would_request_source_frames=0 # would_retrieve_source_frames=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # pin_count_before=%lld # pin_count_after_prepare=%lld # unpin_attempted=%d # unpin_ok=%d # pin_count_after_cleanup=%lld # source_range_valid=%d # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_source_request_plan # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-REQUEST-PLAN # instance=%d # requested=%d # proof_bound=%d # checkpoint_plan_available=%d # checkpoint=%d # forward=%d # bounded_warmup_needed=%d # warmup_start=%d # warmup_end=%d # source_request_first=%d # source_request_last=%d # source_request_frame_count=%d # would_request_source_frames=0 # would_retrieve_source_frames=0 # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # pin_count_before=%lld # pin_count_after_prepare=%lld # unpin_attempted=%d # unpin_ok=%d # pin_count_after_cleanup=%lld # source_range_valid=%d # proof_ok=%d\n",
             d->instance_id,
             frame_number,
             proof_bound,
@@ -4786,7 +4786,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_source_frame_set_summary(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_bounded_warmup_source_frame_set_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_created=%lld # plans_destroyed=%lld # source_frames_requested_total=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_count_max=%lld # partial_acquire_failures=%lld # source_frame_release_balance_errors=%lld # proof_failures=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_source_frame_set_summary # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-FRAME-SET-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_created=%lld # plans_destroyed=%lld # source_frames_requested_total=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_count_max=%lld # partial_acquire_failures=%lld # source_frame_release_balance_errors=%lld # proof_failures=%lld # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -4945,7 +4945,7 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_create_bounded_warmup_source_plan # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-PLAN-CREATED # instance=%d # requested=%d # first_source=%d # last_source=%d # count=%d # would_compute_warmup_outputs=%d # would_store_warmup_outputs=%d # would_return_warmup_output=0 # output_authoritative=0\n",
+            "output-cache # cnr3_for_debug_only_create_bounded_warmup_source_plan # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-PLAN-CREATED # instance=%d # requested=%d # first_source=%d # last_source=%d # count=%d # would_compute_warmup_outputs=%d # would_store_warmup_outputs=%d # would_return_warmup_output=0 # output_authoritative=0\n",
             d->instance_id,
             plan->requested_frame_number,
             plan->first_source_frame_number,
@@ -5021,7 +5021,7 @@ static void cnr3_for_debug_only_request_bounded_warmup_source_plan_frames(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_request_bounded_warmup_source_plan_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-REQUESTED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
+                "output-cache # cnr3_for_debug_only_request_bounded_warmup_source_plan_frames # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-REQUESTED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # count=%d\n",
                 d->instance_id,
                 plan->requested_frame_number,
                 source_frame_number,
@@ -5053,7 +5053,7 @@ static void cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
         if (plan != nullptr) {
             cnr3_debug_printf(
                 d != nullptr ? d->debug : false,
-                "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-PLAN-DESTROYED # instance=%d # reason=%s # requested=%d # first_source=%d # last_source=%d # count=%d\n",
+                "output-cache # cnr3_get_frame # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-PLAN-DESTROYED # instance=%d # reason=%s # requested=%d # first_source=%d # last_source=%d # count=%d\n",
                 d != nullptr ? d->instance_id : -1,
                 reason != nullptr ? reason : "unknown",
                 plan->requested_frame_number,
@@ -5125,7 +5125,7 @@ static void cnr3_for_debug_only_release_bounded_warmup_source_frame_set(
 
             cnr3_debug_printf(
                 d != nullptr ? d->debug : false,
-                "output-cache # cnr3_for_debug_only_release_bounded_warmup_source_frame_set # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-RELEASED # instance=%d # reason=%s # requested=%d # source=%d\n",
+                "output-cache # cnr3_for_debug_only_release_bounded_warmup_source_frame_set # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-FRAME-RELEASED # instance=%d # reason=%s # requested=%d # source=%d\n",
                 d != nullptr ? d->instance_id : -1,
                 reason != nullptr ? reason : "unknown",
                 source_frame_set.requested_frame_number,
@@ -5200,7 +5200,7 @@ static bool cnr3_for_debug_only_retrieve_bounded_warmup_source_frames(
 
                 cnr3_debug_printf(
                     d->debug,
-                    "output-cache # cnr3_for_debug_only_retrieve_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-ACQUIRE-FAILED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # retrieved_so_far=%d\n",
+                    "output-cache # cnr3_for_debug_only_retrieve_bounded_warmup_source_frames # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-FRAME-ACQUIRE-FAILED # instance=%d # requested=%d # source=%d # first_source=%d # last_source=%d # retrieved_so_far=%d\n",
                     d->instance_id,
                     plan->requested_frame_number,
                     source_frame_number,
@@ -5223,7 +5223,7 @@ static bool cnr3_for_debug_only_retrieve_bounded_warmup_source_frames(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_retrieve_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-ACQUIRED # instance=%d # requested=%d # source=%d # held=%llu # first_source=%d # last_source=%d\n",
+                "output-cache # cnr3_for_debug_only_retrieve_bounded_warmup_source_frames # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-FRAME-ACQUIRED # instance=%d # requested=%d # source=%d # held=%llu # first_source=%d # last_source=%d\n",
                 d->instance_id,
                 plan->requested_frame_number,
                 source_frame_number,
@@ -5316,7 +5316,7 @@ static bool cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_fram
 
         cnr3_debug_printf(
             d != nullptr ? d->debug : false,
-            "output-cache # cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_frames # FOR-DEBUG-ONLY-BOUNDED-WARMUP-SOURCE-FRAME-SET-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # released=%d # release_balance=%d # partial_acquire_failure=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_retrieve_hold_release_bounded_warmup_source_frames # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-SOURCE-FRAME-SET-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # released=%d # release_balance=%d # partial_acquire_failure=%d # would_compute_warmup_outputs=0 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d != nullptr ? d->instance_id : -1,
             plan != nullptr ? plan->requested_frame_number : -1,
             plan != nullptr ? plan->first_source_frame_number : -1,
@@ -5512,7 +5512,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_local_compute_summary(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_bounded_warmup_local_compute_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-COMPUTE-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # start_frame_zero_count=%lld # start_frame_nonzero_count=%lld # local_start_reset_copies=%lld # local_recursive_computes=%lld # local_outputs_allocated=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_local_compute_summary # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-LOCAL-COMPUTE-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # start_frame_zero_count=%lld # start_frame_nonzero_count=%lld # local_start_reset_copies=%lld # local_recursive_computes=%lld # local_outputs_allocated=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -5612,7 +5612,7 @@ static void cnr3_for_debug_only_release_bounded_warmup_local_outputs(
 
             cnr3_debug_printf(
                 d != nullptr ? d->debug : false,
-                "output-cache # cnr3_for_debug_only_release_bounded_warmup_local_outputs # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-OUTPUT-RELEASED # instance=%d # reason=%s # frame=%d\n",
+                "output-cache # cnr3_for_debug_only_release_bounded_warmup_local_outputs # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-LOCAL-OUTPUT-RELEASED # instance=%d # reason=%s # frame=%d\n",
                 d != nullptr ? d->instance_id : -1,
                 reason != nullptr ? reason : "unknown",
                 entry.frame_number
@@ -5764,7 +5764,7 @@ static bool cnr3_for_debug_only_compute_bounded_warmup_local_outputs(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_compute_bounded_warmup_local_outputs # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-COMPUTE-STEP # instance=%d # requested=%d # actual_source_frame=%d # warmup_start_frame=%d # processing_frame_number=%d # predecessor_frame_number=%d # bounded_start_uses_frame0_reset_path=%d # recursive_compute=%d # uses_existing_explicit_previous_output_helper=1 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
+                "output-cache # cnr3_for_debug_only_compute_bounded_warmup_local_outputs # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-LOCAL-COMPUTE-STEP # instance=%d # requested=%d # actual_source_frame=%d # warmup_start_frame=%d # processing_frame_number=%d # predecessor_frame_number=%d # bounded_start_uses_frame0_reset_path=%d # recursive_compute=%d # uses_existing_explicit_previous_output_helper=1 # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
                 d->instance_id,
                 plan->requested_frame_number,
                 frame_number,
@@ -5916,7 +5916,7 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_local_compute(
 
         cnr3_debug_printf(
             d != nullptr ? d->debug : false,
-            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_local_compute # FOR-DEBUG-ONLY-BOUNDED-WARMUP-LOCAL-COMPUTE-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # start_frame_zero=%d # start_frame_nonzero=%d # local_start_reset_copies=%d # local_recursive_computes=%d # local_outputs_allocated=%d # local_outputs_released=%d # local_output_release_balance=%d # partial_acquire_failure=%d # compute_failure=%d # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_local_compute # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-LOCAL-COMPUTE-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # start_frame_zero=%d # start_frame_nonzero=%d # local_start_reset_copies=%d # local_recursive_computes=%d # local_outputs_allocated=%d # local_outputs_released=%d # local_output_release_balance=%d # partial_acquire_failure=%d # compute_failure=%d # would_store_warmup_outputs=0 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d != nullptr ? d->instance_id : -1,
             plan->requested_frame_number,
             plan->first_source_frame_number,
@@ -6127,7 +6127,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_store_summary(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_bounded_warmup_store_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-STORE-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # local_start_reset_copies=%lld # local_recursive_computes=%lld # local_outputs_available_for_store=%lld # store_attempts=%lld # store_successes=%lld # store_failures=%lld # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_store_summary # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-STORE-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # local_start_reset_copies=%lld # local_recursive_computes=%lld # local_outputs_available_for_store=%lld # store_attempts=%lld # store_successes=%lld # store_failures=%lld # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -6355,7 +6355,7 @@ static bool cnr3_for_debug_only_compute_and_store_bounded_warmup_outputs(
 
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_for_debug_only_compute_and_store_bounded_warmup_outputs # FOR-DEBUG-ONLY-BOUNDED-WARMUP-STORE-STEP # instance=%d # requested=%d # actual_source_frame=%d # warmup_start_frame=%d # processing_frame_number=%d # predecessor_frame_number=%d # bounded_start_uses_frame0_reset_path=%d # recursive_compute=%d # store_attempted=1 # store_ok=%d # caller_still_owns_local_output=1 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
+                "output-cache # cnr3_for_debug_only_compute_and_store_bounded_warmup_outputs # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-STORE-STEP # instance=%d # requested=%d # actual_source_frame=%d # warmup_start_frame=%d # processing_frame_number=%d # predecessor_frame_number=%d # bounded_start_uses_frame0_reset_path=%d # recursive_compute=%d # store_attempted=1 # store_ok=%d # caller_still_owns_local_output=1 # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0\n",
                 d->instance_id,
                 plan->requested_frame_number,
                 frame_number,
@@ -6557,7 +6557,7 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_store(
 
         cnr3_debug_printf(
             d != nullptr ? d->debug : false,
-            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_store # FOR-DEBUG-ONLY-BOUNDED-WARMUP-STORE-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # local_start_reset_copies=%d # local_recursive_computes=%d # local_outputs_available_for_store=%d # store_attempts=%d # store_successes=%d # store_failures=%d # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%d # local_output_release_balance=%d # partial_acquire_failure=%d # compute_failure=%d # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_store # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-STORE-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # local_start_reset_copies=%d # local_recursive_computes=%d # local_outputs_available_for_store=%d # store_attempts=%d # store_successes=%d # store_failures=%d # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%d # local_output_release_balance=%d # partial_acquire_failure=%d # compute_failure=%d # would_return_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d != nullptr ? d->instance_id : -1,
             plan->requested_frame_number,
             plan->first_source_frame_number,
@@ -6828,7 +6828,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_return_decision_summary(
 
         cnr3_debug_printf(
             d->debug,
-            "output-cache # cnr3_for_debug_only_print_bounded_warmup_return_decision_summary # FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # local_outputs_available_for_store=%lld # store_attempts=%lld # store_successes=%lld # store_failures=%lld # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # return_decisions_checked=%lld # candidate_lookup_attempts=%lld # candidate_lookup_successes=%lld # candidate_lookup_failures=%lld # lookup_refs_released=%lld # lookup_refs_transferred=%lld # lookup_ref_ownership_balance=%lld # lookup_ref_release_balance_errors=%lld # would_return_warmup_output_count=%lld # actual_returned_warmup_output_count=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # output_authoritative=%d # mutates_old_strict=0\n",
+            "output-cache # cnr3_for_debug_only_print_bounded_warmup_return_decision_summary # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-RETURN-DECISION-SUMMARY # instance=%d # where=\"%s\" # frames_checked=%lld # plans_seen=%lld # source_frames_retrieved_total=%lld # source_frames_released_total=%lld # source_frame_release_balance=%lld # source_frame_release_balance_errors=%lld # local_outputs_available_for_store=%lld # store_attempts=%lld # store_successes=%lld # store_failures=%lld # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%lld # local_output_release_balance=%lld # local_output_release_balance_errors=%lld # return_decisions_checked=%lld # candidate_lookup_attempts=%lld # candidate_lookup_successes=%lld # candidate_lookup_failures=%lld # lookup_refs_released=%lld # lookup_refs_transferred=%lld # lookup_ref_ownership_balance=%lld # lookup_ref_release_balance_errors=%lld # would_return_warmup_output_count=%lld # actual_returned_warmup_output_count=%lld # partial_acquire_failures=%lld # compute_failures=%lld # proof_failures=%lld # output_authoritative=%d # mutates_old_strict=0\n",
             d->instance_id,
             where != nullptr ? where : "unknown",
             static_cast<long long>(summary.frames_checked),
@@ -7072,7 +7072,7 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_decision_dry_run(
 
         cnr3_debug_printf(
             d != nullptr ? d->debug : false,
-            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_return_decision_dry_run # FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-DECISION-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # local_outputs_available_for_store=%d # store_attempts=%d # store_successes=%d # store_failures=%d # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%d # local_output_release_balance=%d # return_decision_checked=%d # candidate_lookup_attempted=%d # candidate_lookup_success=%d # lookup_ref_released=%d # lookup_ref_release_balance=%d # would_return_warmup_output=%d # actual_returned_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
+            "output-cache # cnr3_for_debug_only_probe_bounded_warmup_return_decision_dry_run # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-RETURN-DECISION-END # instance=%d # requested=%d # first_source=%d # last_source=%d # source_count=%d # retrieved=%d # source_released=%d # source_release_balance=%d # local_outputs_available_for_store=%d # store_attempts=%d # store_successes=%d # store_failures=%d # duplicate_skipped_already_cached=%lld # duplicate_computed_but_discarded=%lld # local_outputs_released=%d # local_output_release_balance=%d # return_decision_checked=%d # candidate_lookup_attempted=%d # candidate_lookup_success=%d # lookup_ref_released=%d # lookup_ref_release_balance=%d # would_return_warmup_output=%d # actual_returned_warmup_output=0 # output_authoritative=0 # mutates_old_strict=0 # proof_ok=%d\n",
             d != nullptr ? d->instance_id : -1,
             plan->requested_frame_number,
             plan->first_source_frame_number,
@@ -7339,12 +7339,12 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
             CNR3_CMS02_H14_OUTPUT_CACHE_AUTHORITY_CUTOVER_PATH_ACTIVE
             ? "OUTPUT-CACHE-AUTHORITY-CUTOVER-END"
             : (CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
-                ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-STREAMING-GATE-QUARANTINE-END"
+                ? "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-OLD-STRICT-STREAMING-GATE-QUARANTINE-END"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
-                    ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-BYPASS-END"
+                    ? "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-OLD-STRICT-BYPASS-END"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
-                        ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-AUTHORITY-INTEGRATION-END"
-                        : "FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-TRANSFER-END")));
+                        ? "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-AUTHORITY-INTEGRATION-END"
+                        : "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-RETURN-TRANSFER-END")));
 
         cnr3_debug_printf(
             d != nullptr ? d->debug : false,
@@ -7828,12 +7828,12 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 CNR3_CMS02_H14_OUTPUT_CACHE_AUTHORITY_CUTOVER_PATH_ACTIVE
                 ? "OUTPUT-CACHE-AUTHORITY-CUTOVER-RETURN"
                 : (CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
-                    ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-STREAMING-GATE-QUARANTINE-RETURN"
+                    ? "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-OLD-STRICT-STREAMING-GATE-QUARANTINE-RETURN"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
-                        ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-BYPASS-RETURN"
+                        ? "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-OLD-STRICT-BYPASS-RETURN"
                         : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
-                            ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-AUTHORITY-INTEGRATION-RETURN"
-                            : "FOR-DEBUG-ONLY-BOUNDED-WARMUP-RETURN-TRANSFER"))),
+                            ? "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-AUTHORITY-INTEGRATION-RETURN"
+                            : "OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-RETURN-TRANSFER"))),
                 d->instance_id,
                 n,
                 (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
@@ -7889,7 +7889,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
             ) {
             cnr3_debug_printf(
                 d->debug,
-                "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-BOUNDED-WARMUP-CACHE-HIT-RETURN-BYPASS # instance=%d # frame=%d # reason=%s # output_authoritative=0\n",
+                "output-cache # cnr3_get_frame # OUTPUT-CACHE-AUTHORITY-BOUNDED-WARMUP-CACHE-HIT-RETURN-BYPASS # instance=%d # frame=%d # reason=%s # output_authoritative=0\n",
                 d->instance_id,
                 n,
                 CNR3_CMS02_H14_OUTPUT_CACHE_AUTHORITY_CUTOVER_PATH_ACTIVE

@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H10-old-strict-state-bypass-proof-v1-ENABLED";
+"CMS02-H10-old-strict-state-bypass-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -473,7 +473,7 @@ static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PR
     This is still a proof gate. It must not be left enabled in committed normal
     builds. Old strict-cache deletion/retirement remains a later phase.
 */
-inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF = true;
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF = false;
 
 /*
     Small diagnostic bound for the CMS02-H10 old strict-state bypass proof.

@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H10-old-strict-state-bypass-proof-v1-PASSED";
+"CMS02-H11-old-strict-quarantine-proof-v1-PASSED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -481,6 +481,27 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPAS
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF_BOUND = 2;
 
+/*
+    Temporary CMS02-H11 old strict-state quarantine proof gate.
+
+    H11 keeps the bounded warm-up/cache authority path proof-gated and proves
+    that old_strict_cache is not part of output authority while the new path is
+    active. It treats old strict state as quarantined: readable for diagnostics,
+    but not a producer, source of predecessor authority, or return authority.
+
+    This is still a proof gate. It must not be left enabled in committed normal
+    builds. Physical deletion/retirement of old strict-cache code remains a
+    later, separate cleanup phase.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF = false;
+
+/*
+    Small diagnostic bound for the CMS02-H11 old strict-state quarantine proof.
+    Keep aligned with H6/H7/H8/H9/H10 so the proof counts remain directly
+    comparable.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF_BOUND = 2;
+
 static_assert(
     (
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_SOURCE_FRAME_SET_PROOF ? 1 : 0) +
@@ -489,7 +510,8 @@ static_assert(
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_DECISION_DRY_RUN ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ? 1 : 0) +
         (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ? 1 : 0) +
-        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ? 1 : 0)
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ? 1 : 0) +
+        (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ? 1 : 0)
         ) <= 1,
     "Only one CMS02-H bounded warm-up proof gate may be enabled at a time."
     );

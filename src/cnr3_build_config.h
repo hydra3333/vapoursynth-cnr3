@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H14.5-selected-authority-helper-name-cleanup-v1-ENABLED";
+"CMS02-H15.1-output-cache-authority-normal-path-scaffold-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -525,7 +525,7 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_OLD_STRICT_STREAMING_GATE_QUARA
 static constexpr int CNR3_FOR_DEBUG_ONLY_OLD_STRICT_STREAMING_GATE_QUARANTINE_PROOF_BOUND = 2;
 
 /*
-    Temporary CMS02-H14 output-cache authority cutover scaffold.
+    CMS02-H15 output-cache authority normal-path scaffold.
 
     This is a migration gate only, not a public mode and not a long-term
     authority selector.  It exists so the H13-proven output-cache authority
@@ -533,17 +533,17 @@ static constexpr int CNR3_FOR_DEBUG_ONLY_OLD_STRICT_STREAMING_GATE_QUARANTINE_PR
     streaming authority is retired.
 
     H14.2 enables this in a proof build to promote the H13-proven bounded
-    warm-up/output-cache authority mechanics into the selected cutover path.
+    warm-up/output-cache authority mechanics into the selected normal path.
     This gate remains temporary and must be returned to false for committed
-    default behaviour until the cutover has passed wider validation.
+    default behaviour after H14 selected-authority validation passed.
 */
-inline constexpr bool CNR3_CMS02_H14_TEMP_ENABLE_OUTPUT_CACHE_AUTHORITY_CUTOVER = true;
+inline constexpr bool CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH = true;
 
 /*
-    Small diagnostic bound for the CMS02-H14 output-cache authority cutover.
+    Small diagnostic bound for the CMS02-H15 output-cache authority normal path.
     Keep aligned with H6-H13 so the proof counts remain directly comparable.
 */
-static constexpr int CNR3_CMS02_H14_OUTPUT_CACHE_AUTHORITY_CUTOVER_BOUND = 2;
+static constexpr int CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_BOUND = 2;
 
 static_assert(
     (

@@ -1,5 +1,5 @@
 /*
-    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
+    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2
 
     CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive
     temporal chroma-stabilisation model while using VapourSynth API4 only.
@@ -73,6 +73,10 @@
 #include "cnr3_common.h"
 #include "cnr3_response_tables.h"
 #include "cnr3_frame_internal_processing.h"
+
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE =
+CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ||
+CNR3_FOR_DEBUG_ONLY_ENABLE_OLD_STRICT_STREAMING_GATE_QUARANTINE_PROOF;
 
 // -----------------------------------------------------------------------------
 //  API policy:
@@ -4831,7 +4835,7 @@ static constexpr bool cnr3_for_debug_only_bounded_warmup_source_plan_gate_enable
         CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
         CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
         CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-        CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF;
+        CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE;
 }
 
 static Cnr3ForDebugOnlyBoundedWarmupSourcePlan*
@@ -4900,9 +4904,11 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
                 CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF_BOUND;
         }
 
-        if constexpr (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) {
+        if constexpr (CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) {
             proof_bound =
-                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF_BOUND;
+                CNR3_FOR_DEBUG_ONLY_ENABLE_OLD_STRICT_STREAMING_GATE_QUARANTINE_PROOF
+                ? CNR3_FOR_DEBUG_ONLY_OLD_STRICT_STREAMING_GATE_QUARANTINE_PROOF_BOUND
+                : CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF_BOUND;
         }
 
         proof_bound = std::max(0, proof_bound);
@@ -4946,7 +4952,7 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
                 ) ? 1 : 0,
             (
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_STORE_PROOF ||
@@ -4954,7 +4960,7 @@ cnr3_for_debug_only_create_bounded_warmup_source_plan(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
                 ) ? 1 : 0
         );
 
@@ -5576,7 +5582,7 @@ static void cnr3_for_debug_only_release_bounded_warmup_local_outputs(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
         ) {
         (void)d;
         (void)local_outputs;
@@ -5990,7 +5996,7 @@ static void cnr3_for_debug_only_record_bounded_warmup_store_summary(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
         ) {
         (void)d;
         (void)plan_seen;
@@ -6209,7 +6215,7 @@ static bool cnr3_for_debug_only_compute_and_store_bounded_warmup_outputs(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
         ) {
         (void)d;
         (void)plan;
@@ -6637,7 +6643,7 @@ static void cnr3_for_debug_only_record_bounded_warmup_return_decision_summary(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) {
         (void)d;
         (void)plan_seen;
         (void)source_frames_retrieved;
@@ -6763,7 +6769,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_return_decision_summary(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) {
         (void)d;
         (void)where;
         return;
@@ -6839,7 +6845,7 @@ static void cnr3_for_debug_only_print_bounded_warmup_return_decision_summary(
             static_cast<long long>(summary.partial_acquire_failures),
             static_cast<long long>(summary.compute_failures),
             static_cast<long long>(summary.proof_failures),
-            (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF || CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF || CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF || CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) ? 1 : 0
+            (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF || CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF || CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF || CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) ? 1 : 0
         );
     }
 }
@@ -6851,7 +6857,7 @@ static void cnr3_for_debug_only_erase_bounded_warmup_return_decision_summary(
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) {
         (void)d;
         return;
     }
@@ -7107,7 +7113,7 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
     if constexpr (!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) {
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) {
         (void)d;
         (void)plan;
         (void)frameCtx;
@@ -7217,15 +7223,15 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
 
         const char* source_release_reason =
             proof_ok
-            ? (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-old-strict-quarantine-proof-release"
+            ? (CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-old-strict-streaming-gate-quarantine-proof-release"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-old-strict-bypass-proof-release"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
                         ? "h9-authority-integration-proof-release"
                         : "h8-normal-return-transfer-proof-release")))
-            : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-proof-failure-release"
+            : (CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-proof-failure-release"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-proof-failure-release"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7271,7 +7277,7 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
                 lookup_ref_transferred &&
                 !lookup_ref_released &&
                 ((!CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-                    !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) ||
+                    !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) ||
                     old_strict_state_unchanged)
                 );
 
@@ -7302,16 +7308,16 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
         );
 
         const char* proof_function_name =
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-            ? "cnr3_for_debug_only_probe_bounded_warmup_old_strict_quarantine_proof"
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+            ? "cnr3_for_debug_only_probe_bounded_warmup_old_strict_streaming_gate_quarantine_proof"
             : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                 ? "cnr3_for_debug_only_probe_bounded_warmup_old_strict_bypass_proof"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
                     ? "cnr3_for_debug_only_probe_bounded_warmup_authority_integration_proof"
                     : "cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof"));
         const char* proof_event_name =
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-            ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-QUARANTINE-END"
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+            ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-STREAMING-GATE-QUARANTINE-END"
             : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                 ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-BYPASS-END"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7332,7 +7338,7 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
             "lookup_ref_released=%d # lookup_ref_release_balance=%d # "
             "would_return_warmup_output=%d # lookup_ref_transferred=%d # "
             "actual_returned_warmup_output=%d # output_authoritative=1 # "
-            "old_strict_bypassed=%d # old_strict_quarantined=%d # old_strict_next_needed_before=%d # "
+            "old_strict_bypassed=%d # old_strict_streaming_gate_quarantined=%d # old_strict_next_needed_before=%d # "
             "old_strict_next_needed_after=%d # old_strict_prev_output_before=%d # "
             "old_strict_prev_output_after=%d # old_strict_state_unchanged=%d # "
             "mutates_old_strict=0 # proof_ok=%d\n",
@@ -7363,8 +7369,8 @@ static bool cnr3_for_debug_only_probe_bounded_warmup_return_transfer_proof(
             lookup_ref_transferred ? 1 : 0,
             actual_returned_warmup_output ? 1 : 0,
             (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) ? 1 : 0,
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ? 1 : 0,
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) ? 1 : 0,
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE ? 1 : 0,
             old_strict_next_needed_before,
             old_strict_next_needed_after,
             old_strict_prev_output_before,
@@ -7402,7 +7408,7 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF &&
-        !CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF &&
+        !CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE &&
         !CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_SOURCE_REQUEST_PLAN_SKELETON
         ) {
         (void)d;
@@ -7430,7 +7436,7 @@ static void cnr3_for_debug_only_destroy_unexpected_frame_data_source_request_pla
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
             ) {
             Cnr3ForDebugOnlyBoundedWarmupSourcePlan* h4_source_plan =
                 static_cast<Cnr3ForDebugOnlyBoundedWarmupSourcePlan*>(*frameData);
@@ -7509,7 +7515,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
                 ) {
                 h4_source_plan =
                     cnr3_for_debug_only_create_bounded_warmup_source_plan(
@@ -7583,7 +7589,7 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
                 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
                 ) {
                 h4_source_plan =
                     static_cast<Cnr3ForDebugOnlyBoundedWarmupSourcePlan*>(*frameData);
@@ -7720,8 +7726,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
                 d,
                 h4_source_plan,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-old-strict-quarantine-proof-failure"
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-old-strict-streaming-gate-quarantine-proof-failure"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-old-strict-bypass-proof-failure"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7732,8 +7738,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
                 d,
                 source_request_plan,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-old-strict-quarantine-proof-failure"
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-old-strict-streaming-gate-quarantine-proof-failure"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-old-strict-bypass-proof-failure"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7742,8 +7748,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             );
 
             vsapi->setFilterError(
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "CNR3: debug-only bounded warm-up old strict-state quarantine proof failed."
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "CNR3: debug-only bounded warm-up old strict streaming-gate quarantine proof failed."
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "CNR3: debug-only bounded warm-up old strict-state bypass proof failed."
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7759,8 +7765,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
                 d,
                 source_request_plan,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-old-strict-quarantine-proof-return"
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-old-strict-streaming-gate-quarantine-proof-return"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-old-strict-bypass-proof-return"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7771,8 +7777,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
             cnr3_for_debug_only_destroy_bounded_warmup_source_plan_with_trace(
                 d,
                 h4_source_plan,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-old-strict-quarantine-proof-return"
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-old-strict-streaming-gate-quarantine-proof-return"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-old-strict-bypass-proof-return"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7785,10 +7791,10 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 "output-cache # cnr3_get_frame # %s # "
                 "instance=%d # frame=%d # transferred_lookup_ref=1 # "
                 "returned_bounded_warmup_output=1 # output_authoritative=1 # "
-                "old_strict_bypassed=%d # old_strict_quarantined=%d # old_strict_next_needed=%d # "
+                "old_strict_bypassed=%d # old_strict_streaming_gate_quarantined=%d # old_strict_next_needed=%d # "
                 "old_strict_prev_output_present=%d # mutates_old_strict=0\n",
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-QUARANTINE-RETURN"
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-STREAMING-GATE-QUARANTINE-RETURN"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "FOR-DEBUG-ONLY-BOUNDED-WARMUP-OLD-STRICT-BYPASS-RETURN"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF
@@ -7797,8 +7803,8 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 d->instance_id,
                 n,
                 (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-                    CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF) ? 1 : 0,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ? 1 : 0,
+                    CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE) ? 1 : 0,
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE ? 1 : 0,
                 d->old_strict_cache.next_needed,
                 d->old_strict_cache.prev_output != nullptr ? 1 : 0
             );
@@ -7845,15 +7851,15 @@ static const VSFrame* VS_CC cnr3_get_frame(
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_RETURN_TRANSFER_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF ||
             CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF ||
-            CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
+            CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
             ) {
             cnr3_debug_printf(
                 d->debug,
                 "output-cache # cnr3_get_frame # FOR-DEBUG-ONLY-BOUNDED-WARMUP-CACHE-HIT-RETURN-BYPASS # instance=%d # frame=%d # reason=%s # output_authoritative=0\n",
                 d->instance_id,
                 n,
-                CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF
-                ? "h11-old-strict-quarantine-proof-uses-explicit-transfer-path"
+                CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE
+                ? "h13-old-strict-streaming-gate-quarantine-proof-uses-explicit-transfer-path"
                 : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_BYPASS_PROOF
                     ? "h10-old-strict-bypass-proof-uses-explicit-transfer-path"
                     : (CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_AUTHORITY_INTEGRATION_PROOF

@@ -83,6 +83,9 @@ CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF;
 inline constexpr bool CNR3_CMS02_H15_ARINITIAL_REQUEST_CLASSIFICATION_PROBE_ACTIVE =
 CNR3_CMS02_H15_ENABLE_ARINITIAL_REQUEST_CLASSIFICATION_PROBE;
 
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF_ACTIVE =
+CNR3_FOR_DEBUG_ONLY_ENABLE_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF;
+
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE =
 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ||
 CNR3_FOR_DEBUG_ONLY_ENABLE_OLD_STRICT_STREAMING_GATE_QUARANTINE_PROOF ||
@@ -3858,6 +3861,149 @@ static void cnr3_output_cache_authority_probe_arinitial_request_classification(
 
     d->h15_6a_has_last_arinitial_request_number = true;
     d->h15_6a_last_arinitial_request_number = requested_frame_number;
+}
+
+static bool cnr3_for_debug_only_prepare_predecessor_missing_fallback_return_transfer_proof(
+    Cnr3Data* d,
+    int requested_frame_number,
+    const VSAPI* vsapi
+) {
+    /*
+        CMS02-H16.3 proof preparation.
+
+        For one selected frame, remove the immediate predecessor from
+        output_cache before the H15 sequential fast path runs. This creates a
+        real predecessor-missing cache state for the selected output-authority
+        fallback proof, without touching old strict state and without reducing
+        the conservative arInitial source requests.
+    */
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF_ACTIVE) {
+        (void)d;
+        (void)requested_frame_number;
+        (void)vsapi;
+        return true;
+    }
+    else {
+        if (d == nullptr || vsapi == nullptr) {
+            return false;
+        }
+
+        if (
+            requested_frame_number !=
+            CNR3_FOR_DEBUG_ONLY_PREDECESSOR_MISSING_FALLBACK_PROOF_REQUEST
+            ) {
+            return true;
+        }
+
+        const int predecessor_frame_number = requested_frame_number - 1;
+
+        const bool predecessor_cache_contains_before =
+            predecessor_frame_number >= 0 &&
+            cnr3_output_cache_contains_frame(
+                d->output_cache,
+                predecessor_frame_number
+            );
+
+        bool remove_attempted = false;
+        bool remove_ok = false;
+
+        if (predecessor_cache_contains_before) {
+            remove_attempted = true;
+            remove_ok = cnr3_output_cache_remove_frame(
+                d->output_cache,
+                predecessor_frame_number,
+                vsapi
+            );
+        }
+
+        const bool predecessor_cache_contains_after =
+            predecessor_frame_number >= 0 &&
+            cnr3_output_cache_contains_frame(
+                d->output_cache,
+                predecessor_frame_number
+            );
+
+        const bool proof_ok =
+            predecessor_frame_number >= 0 &&
+            !predecessor_cache_contains_after;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_prepare_predecessor_missing_fallback_return_transfer_proof # "
+            "OUTPUT-CACHE-AUTHORITY-PREDECESSOR-MISSING-FALLBACK-PROOF-PREPARE # "
+            "instance=%d # requested=%d # predecessor=%d # "
+            "target_frame=1 # predecessor_cache_contains_before=%d # "
+            "remove_attempted=%d # remove_ok=%d # "
+            "predecessor_cache_contains_after=%d # "
+            "source_request_reduction=0 # output_authoritative=0 # "
+            "old_strict_bypassed=1 # old_strict_streaming_gate_quarantined=1 # "
+            "mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            requested_frame_number,
+            predecessor_frame_number,
+            predecessor_cache_contains_before ? 1 : 0,
+            remove_attempted ? 1 : 0,
+            remove_ok ? 1 : 0,
+            predecessor_cache_contains_after ? 1 : 0,
+            proof_ok ? 1 : 0
+        );
+
+        return proof_ok;
+    }
+}
+
+static void cnr3_for_debug_only_log_predecessor_missing_fallback_return_transfer_proof(
+    Cnr3Data* d,
+    int requested_frame_number
+) {
+    if constexpr (!CNR3_FOR_DEBUG_ONLY_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF_ACTIVE) {
+        (void)d;
+        (void)requested_frame_number;
+        return;
+    }
+    else {
+        if (
+            d == nullptr ||
+            requested_frame_number !=
+            CNR3_FOR_DEBUG_ONLY_PREDECESSOR_MISSING_FALLBACK_PROOF_REQUEST
+            ) {
+            return;
+        }
+
+        const int predecessor_frame_number = requested_frame_number - 1;
+        const bool requested_output_cached = cnr3_output_cache_contains_frame(
+            d->output_cache,
+            requested_frame_number
+        );
+        const bool predecessor_cached_after_fallback =
+            predecessor_frame_number >= 0 &&
+            cnr3_output_cache_contains_frame(
+                d->output_cache,
+                predecessor_frame_number
+            );
+        const bool proof_ok =
+            predecessor_frame_number >= 0 &&
+            requested_output_cached;
+
+        cnr3_debug_printf(
+            d->debug,
+            "output-cache # cnr3_for_debug_only_log_predecessor_missing_fallback_return_transfer_proof # "
+            "OUTPUT-CACHE-AUTHORITY-PREDECESSOR-MISSING-FALLBACK-RETURN-TRANSFER-PROOF # "
+            "instance=%d # requested=%d # predecessor=%d # "
+            "target_frame=1 # fast_path_declined=1 # "
+            "fallback_returned_bounded_warmup_output=1 # "
+            "requested_output_cached=%d # predecessor_cached_after_fallback=%d # "
+            "source_request_reduction=0 # output_authoritative=1 # "
+            "old_strict_bypassed=1 # old_strict_streaming_gate_quarantined=1 # "
+            "mutates_old_strict=0 # proof_ok=%d\n",
+            d->instance_id,
+            requested_frame_number,
+            predecessor_frame_number,
+            requested_output_cached ? 1 : 0,
+            predecessor_cached_after_fallback ? 1 : 0,
+            proof_ok ? 1 : 0
+        );
+    }
 }
 
 static bool cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof(
@@ -7969,6 +8115,27 @@ static const VSFrame* VS_CC cnr3_get_frame(
             *frameData = nullptr;
         }
 
+        if (
+            !cnr3_for_debug_only_prepare_predecessor_missing_fallback_return_transfer_proof(
+                d,
+                n,
+                vsapi
+            )
+            ) {
+            cnr3_output_cache_authority_destroy_bounded_warmup_source_plan_with_trace(
+                d,
+                h4_source_plan,
+                "h16-predecessor-missing-fallback-prepare-failure"
+            );
+
+            vsapi->setFilterError(
+                "CNR3: H16.3 predecessor-missing fallback proof preparation failed.",
+                frameCtx
+            );
+
+            return nullptr;
+        }
+
         const VSFrame* h15_5_fast_path_returned_frame = nullptr;
 
         if constexpr (CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF_ACTIVE) {
@@ -8191,6 +8358,11 @@ static const VSFrame* VS_CC cnr3_get_frame(
                 n,
                 true,
                 true
+            );
+
+            cnr3_for_debug_only_log_predecessor_missing_fallback_return_transfer_proof(
+                d,
+                n
             );
 
             cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(

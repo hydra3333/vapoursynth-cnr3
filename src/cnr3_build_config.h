@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H16.2-bounded-checkpoint-search-helper-proof-v2-FRAME0-COMPLETION-ENABLED";
+"CMS02-H16.3-predecessor-missing-fallback-return-transfer-proof-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -271,7 +271,7 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOL
 
     Keep false outside a dedicated proof run.
 */
-inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF = true;
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF = false;
 
 /*
     Small diagnostic bound for the CMS02-H16.2 bounded checkpoint-search proof.
@@ -281,6 +281,30 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF
     bounded warm-up-needed decisions.
 */
 static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_CHECKPOINT_SEARCH_PROOF_BOUND = 2;
+
+/*
+    CMS02-H16.3 predecessor-missing fallback return-transfer proof gate.
+
+    This proof deliberately removes one non-checkpoint predecessor output from
+    output_cache before the H15 sequential fast path runs, so the fast path must
+    decline with predecessor-not-cached and the selected bounded-warmup fallback
+    path must compute/store/look up/transfer the requested output.
+
+    It must not reduce arInitial source requests, enable H15.6B, restore old
+    strict state as output authority, or enable any parallel VapourSynth mode.
+
+    Keep false outside the dedicated H16.3 proof run.
+*/
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF = true;
+
+/*
+    Frame selected for the H16.3 predecessor-missing fallback proof.
+
+    The default 6 keeps the predecessor 5 as a non-checkpoint frame, avoiding
+    pinned-checkpoint removal concerns while still exercising a normal
+    sequential request after earlier frames have populated output_cache.
+*/
+static constexpr int CNR3_FOR_DEBUG_ONLY_PREDECESSOR_MISSING_FALLBACK_PROOF_REQUEST = 6;
 
 /*
     CMS02-H.3 bounded warm-up source-request-plan scaffold gate.

@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H16.3-predecessor-missing-fallback-return-transfer-proof-v1-ENABLED";
+"CMS02-H16.4-out-of-order-fallback-validation-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -295,7 +295,7 @@ static constexpr int CNR3_FOR_DEBUG_ONLY_BOUNDED_CHECKPOINT_SEARCH_PROOF_BOUND =
 
     Keep false outside the dedicated H16.3 proof run.
 */
-inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF = true;
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_PREDECESSOR_MISSING_FALLBACK_RETURN_TRANSFER_PROOF = false;
 
 /*
     Frame selected for the H16.3 predecessor-missing fallback proof.

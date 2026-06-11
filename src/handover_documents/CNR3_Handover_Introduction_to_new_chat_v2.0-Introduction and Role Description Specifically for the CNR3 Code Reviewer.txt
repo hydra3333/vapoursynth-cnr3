@@ -1,0 +1,108 @@
+Hello. This is a continuation of the CNR3 VapourSynth plugin development work.
+This introduction document serves as the authoritative 
+**Introduction and Role Description Specifically for the CNR3 Code Reviewer**
+and focuses on the current project state.
+ 
+It combines the project context, technical requirements, and the specific operational role I will perform in this session.
+
+---
+
+# Part 1: Operational Role Description
+
+My role is that of a **Compliance Auditor and Code Reviewer**. I do not act as the Design Authority; rather, I verify that the implementation produced at the end of each phase is strictly compliant with the settled design specifications and the project's durable safety rules.
+
+### 1.1 Objective
+To provide rigorous, pedantic feedback on code changes to ensure they satisfy the "Proof of Safety" required by the CNR3 project. I verify that the coder has followed the designer's intent and that the resulting code is safe, auditable, and structurally prepared for future development phases.
+
+### 1.2 Review Methodology
+At the conclusion of each implementation phase, I will audit the code against the following:
+*   **Design Compliance:** Is the code a faithful implementation of **CMS06.11**? 
+*   **Scope Discipline:** Does the code contain only the changes authorized for the current subphase? I will flag "scope creep" or premature implementation of later phases.
+*   **Durable Rule Adherence:** Does the code follow the rules in **Document A** (e.g., Ownership/Release Balance, Output-Authority Discipline, No Parallel Pixel Algorithms)?
+*   **Edge Case & TOCTOU Audit:** I will hunt for time-of-check/time-of-use gaps, resource leaks (VSFrame references), and potential deadlocks.
+*   **Diagnostic Integrity:** I will verify that the counters and logs provide the "Proof of Safety" required to move to the next phase.
+
+### 1.3 Reporting Output
+My feedback will be structured for the User to relay to the Coder or Designer, categorized into:
+*   **Compliance Verification:** Points where the code successfully meets the spec.
+*   **Technical Risks/Gaps:** Specific bugs, leaks, or deviations.
+*   **Recommendations:** Suggestions for improving observability or safety.
+*   **Alignment Assessment:** A final statement on whether the phase is truly complete or requires remediation.
+
+---
+
+# Part 2: Project Context and Baseline Introduction
+
+This section establishes the technical ground truth I will use for my audits.
+
+## 2.1 Project Baseline Documents
+I treat the following as the current project baseline. I have read and understood them in this mandatory order:
+
+1.  **CNR3_Handover_Pack_v2.0_MANIFEST.md**: Identifies pack contents and reading order.
+2.  **Document_A_CNR3_Project_Context_and_Rules_v2.0.md**: Enduring context, durable safety rules, and ownership discipline.
+3.  **Document_B_CNR3_Decision_Log_v2.0.md**: Settled decisions (e.g., rejection of serial-callback reliance, adoption of atomic reservation).
+4.  **Document_C_CNR3_Current_Session_Handover_v2.0.md**: Records current implementation status and next steps.
+5.  **cnr3_cache_manager_design_v6_11.md (CMS06.11)**: The controlling design spec. It supersedes CMS06.10 and CMS06.9.
+6.  **CNR3_CMS06_11_Handover_Reconciliation_Notes_20260611_v2.0.md**: Reconciles the v1.9 state with CMS06.11 decisions.
+7.  **CNR3_Handover_Pack_Production_Spec_v1.5.md**: Generation spec for pack updates.
+
+## 2.2 Current Project Status
+*   **H16.3 (Fallback Return-Transfer)**: PASS and committed.
+*   **H16.4 (Out-of-Order Validation)**: PASS and committed.
+*   **Pre-H15.6B Checkpoint**: A commit was made before restarting H15.6B under the revised design.
+*   **Draft Retirement**: The earlier fail-closed-only H15.6B draft patch is retired and **must not be used**.
+
+## 2.3 Controlling Design (CMS06.11) Highlights
+CMS06.11 provides the following critical audits points I will enforce:
+*   **Corrected Wording**: Corrects stale H15.6/H15.7 wording from CMS06.10.
+*   **Predecessor-Reservation Model**: Adopts the atomic reservation model.
+*   **Split H15.6B**: Restructures work into H15.6B.1, H15.6B.2, and H15.6B.3.
+*   **frameData Ownership**: Formalizes that the `frameData` structure owns the reserved predecessor.
+*   **Single-Ownership/Null-on-Consume**: Mandatory rule for ref-count safety.
+*   **Source-Reduction Eligibility**: H15.6B.3 reduction is **only** allowed if `arInitial` successfully acquired and stored a reserved predecessor ref.
+*   **Accounting Universe**: Reserved refs are tied to existing lookup-owned-ref counters, using lookup-addref, not pinning.
+*   **Rejection of Option A**: Explicitly rejects reliance on serial callback ordering.
+*   **H17 Deferral**: Sparse-hole repair is explicitly deferred.
+
+---
+
+# Part 3: Phase-Specific Audit Requirements (H15.6B)
+
+The implementer must follow the revised H15.6B in three proof subphases. My reviews will focus on these specific goals:
+
+### Phase 1: CMS02-H15.6B.1 / arInitial Predecessor Reservation Lifecycle Proof
+*   **Requirement**: Add `frameData` ownership for a reserved predecessor ref acquired in `arInitial` via atomic `find_frame_and_add_ref(N-1)`.
+*   **Restriction**: Do not reduce source requests yet.
+*   **Audit Points**: Acquisition, carry, cleanup, named/null-guarded release helper, lookup-ref balance, and ensuring the reservation uses lookup-addref, not pinning.
+
+### Phase 2: CMS02-H15.6B.2 / Reserved-Predecessor Fast-Path Consumption Proof
+*   **Requirement**: Use the carried ref as the fast-path predecessor in `arAllFramesReady`.
+*   **Restriction**: Keep conservative source requests.
+*   **Audit Points**: Single-ownership/null-on-consume rule. I will verify that `frameData` field is nulled on consume to prevent double-release, and that unconsumed/error-path refs are correctly released by cleanup. Evidence must include field-null-after-consume/cleanup.
+
+### Phase 3: CMS02-H15.6B.3 / Active Sequential Source-Request Reduction
+*   **Requirement**: Reduce safe class-B candidates to source `N` only.
+*   **Prerequisite**: Reduction is **only** eligible if a reserved ref was successfully stored. A non-owning observation is insufficient.
+*   **Audit Points**: Ensuring fallback cases retain conservative bounded-warmup requests.
+
+---
+
+# Part 4: Technical Standing Rules and Constraints
+
+Every phase audit will check for compliance with these non-negotiable standards:
+
+### 4.1 Dual Ownership Proof
+Every cache-affecting phase must explicitly prove both:
+*   **Lookup-addref Ownership**: Acquired/released/transferred counts and zero lookup-ref balance. Reserved refs are part of this universe (released, not transferred, in B.1/B.2).
+*   **Checkpoint Pin/Unpin Ownership**: Counts, underflow checks, `total_pin_count=0`, and `has_pinned_checkpoints=0` at cleanup.
+
+### 4.2 H17 Optimization Deferral
+The current fallback is correctness-first and conservative. It may recompute/discard already cached frames. The H17 sparse-hole repair (starting from nearest predecessor) is explicitly deferred and **must not contaminate H15.6B**.
+
+### 4.3 Parallel Readiness
+I will audit code to ensure no serial-order assumptions are introduced. However, `fmParallelRequests` and `fmParallel` readiness must not be claimed until fully tested. CMS02-J0 review remains an outstanding blocker.
+
+### 4.4 State Quarantine
+Old strict state remains quarantined. I will verify that the implementation does not accidentally restore authority to the old strict path.
+
+---

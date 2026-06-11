@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H15.6A-arInitial-request-classification-probe-v1-ENABLED";
+"CMS02-H16.2-bounded-checkpoint-search-helper-proof-v2-FRAME0-COMPLETION-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -255,7 +255,10 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_RECOVERY_RETURN_TRANSFER_PROOF 
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOLD = false;
 
 /*
-    CMS02-H.2B bounded checkpoint-search helper proof gate.
+    CMS02-H16.2 bounded checkpoint-search helper proof gate.
+
+    This carries the former CMS02-H.2B bounded checkpoint-search helper proof
+    obligation under the CMS06.9 phase plan.
 
     This proof-only scaffold runs after the normal output-cache store/prune path
     and proves that bounded recovery planning searches only inside the bounded
@@ -268,10 +271,10 @@ inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_DECISION_SCAFFOL
 
     Keep false outside a dedicated proof run.
 */
-inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF = false;
+inline constexpr bool CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_CHECKPOINT_SEARCH_PROOF = true;
 
 /*
-    Small diagnostic bound for the CMS02-H.2B bounded checkpoint-search proof.
+    Small diagnostic bound for the CMS02-H16.2 bounded checkpoint-search proof.
 
     This is intentionally smaller than the normal recovery bound so a short
     sequential proof run can show both available checkpoint-start plans and

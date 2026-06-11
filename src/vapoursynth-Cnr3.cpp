@@ -1,5 +1,5 @@
 /*
-    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2.
+    CNR3 - VapourSynth API4 chroma stabiliser, based on the venerable CNR2/VSCNR2
 
     CNR3 is a redevelopment intended to closely follow the Cnr2/vscnr2 recursive
     temporal chroma-stabilisation model while using VapourSynth API4 only.
@@ -4032,6 +4032,24 @@ static bool cnr3_output_cache_authority_return_transfer_sequential_fast_path_pro
     vsapi->freeFrame(predecessor_output);
     predecessor_output = nullptr;
     cnr3_output_cache_note_lookup_ref_released(d->output_cache);
+
+    /*
+        CMS02-H16.2 proof hook.
+
+        H15.5 can return before the normal post-store proof location. Run the
+        bounded checkpoint-search proof here as well, after the fast path has
+        stored output N and released its temporary frame references, but before
+        the returned output-cache lookup transfers authority to VapourSynth.
+
+        The helper is gated, proof-only, and does not request, retrieve,
+        compute, store, return, or change output authority.
+    */
+    cnr3_for_debug_only_probe_bounded_checkpoint_search(
+        d,
+        requested_frame_number,
+        store_ok,
+        true
+    );
 
     bool returned_lookup_attempted = false;
     bool returned_lookup_success = false;
@@ -8168,6 +8186,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
         }
 
         if (h8_h9_or_h10_returned_frame != nullptr) {
+            cnr3_for_debug_only_probe_bounded_checkpoint_search(
+                d,
+                n,
+                true,
+                true
+            );
+
             cnr3_for_debug_only_destroy_recovery_source_request_plan_with_trace(
                 d,
                 source_request_plan,

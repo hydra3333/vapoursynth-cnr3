@@ -18,7 +18,7 @@
     Update this string for each coherent source-change set.
 */
 inline constexpr const char* CNR3_EDIT_VERSION =
-"CMS02-H15.5-sequential-fast-path-return-transfer-proof-v1-ENABLED";
+"CMS02-H15.6A-arInitial-request-classification-probe-v1-ENABLED";
 
 /*
     Temporary CMS02-F proof hook.
@@ -557,6 +557,16 @@ static constexpr int CNR3_CMS02_H15_OUTPUT_CACHE_AUTHORITY_BOUND = 2;
     warmup normal path. This phase must not mutate old strict state.
 */
 inline constexpr bool CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF = true;
+
+/*
+    CMS02-H15.6A arInitial request classification probe.
+
+    This diagnostic gate classifies each arInitial request before any future
+    source-request reduction work. It must not change requested source frames,
+    output authority, or old strict state. H15.6B active request reduction
+    remains blocked until the predecessor-missing fallback proof is complete.
+*/
+inline constexpr bool CNR3_CMS02_H15_ENABLE_ARINITIAL_REQUEST_CLASSIFICATION_PROBE = true;
 
 static_assert(
     (

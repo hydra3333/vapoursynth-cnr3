@@ -41,8 +41,8 @@ inline int cnr3_clamp_int(
 // -----------------------------------------------------------------------------
 
 struct Cnr3Data {
-    VSNode *node = nullptr;
-    const VSVideoInfo *vi = nullptr;
+    VSNode* node = nullptr;
+    const VSVideoInfo* vi = nullptr;
 
     // Human-readable ID used to distinguish simultaneous CNR3 filter instances.
     int instance_id = 0;
@@ -50,7 +50,7 @@ struct Cnr3Data {
     std::string mode = "oxx";
 
     /*
-        Public threshold parameters are always interpreted in 8-bit Cnr2/vscnr2-compatible units. 
+        Public threshold parameters are always interpreted in 8-bit Cnr2/vscnr2-compatible units.
         For clips above 8-bit depth, CNR3 scales these values internally to the actual sample depth.
     */
     int ln = 35;
@@ -172,6 +172,14 @@ struct Cnr3Data {
         global or shared between CNR3 instances.
     */
     Cnr3OutputCacheManager output_cache;
+
+    /*
+        CMS02-H15.6A diagnostic-only arInitial request-order observation.
+        This does not participate in output authority and does not replace any
+        old strict-state quarantine rule.
+    */
+    bool h15_6a_has_last_arinitial_request_number = false;
+    int h15_6a_last_arinitial_request_number = -1;
 
     /*
         Per-instance memory diagnostics accumulator.

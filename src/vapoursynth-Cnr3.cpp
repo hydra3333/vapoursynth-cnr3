@@ -80,6 +80,9 @@ CNR3_CMS02_H15_ENABLE_OUTPUT_CACHE_AUTHORITY_NORMAL_PATH;
 inline constexpr bool CNR3_CMS02_H15_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF_ACTIVE =
 CNR3_CMS02_H15_ENABLE_SEQUENTIAL_FAST_PATH_RETURN_TRANSFER_PROOF;
 
+inline constexpr bool CNR3_CMS02_H15_ARINITIAL_REQUEST_CLASSIFICATION_PROBE_ACTIVE =
+CNR3_CMS02_H15_ENABLE_ARINITIAL_REQUEST_CLASSIFICATION_PROBE;
+
 inline constexpr bool CNR3_FOR_DEBUG_ONLY_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PATH_ACTIVE =
 CNR3_FOR_DEBUG_ONLY_ENABLE_BOUNDED_WARMUP_OLD_STRICT_QUARANTINE_PROOF ||
 CNR3_FOR_DEBUG_ONLY_ENABLE_OLD_STRICT_STREAMING_GATE_QUARANTINE_PROOF ||
@@ -3775,6 +3778,87 @@ static bool cnr3_for_debug_only_probe_recovery_compute_dry_run(
     }
 }
 
+
+static void cnr3_output_cache_authority_probe_arinitial_request_classification(
+    Cnr3Data* d,
+    int requested_frame_number
+) {
+    if (d == nullptr) {
+        return;
+    }
+
+    const bool has_previous_request = d->h15_6a_has_last_arinitial_request_number;
+    const int previous_request = has_previous_request
+        ? d->h15_6a_last_arinitial_request_number
+        : -1;
+    const bool is_frame_zero = (requested_frame_number == 0);
+    const bool is_sequential_after_previous =
+        has_previous_request && (requested_frame_number == previous_request + 1);
+    const int predecessor_frame_number = requested_frame_number > 0
+        ? requested_frame_number - 1
+        : -1;
+    const bool predecessor_cache_contains =
+        requested_frame_number > 0 &&
+        cnr3_output_cache_contains_frame(
+            d->output_cache,
+            predecessor_frame_number
+        );
+
+    const char* classification = "unknown";
+    bool frame_zero_normal_fallback = false;
+    bool sequential_fast_path_candidate = false;
+    bool predecessor_missing_fallback_needed = false;
+    bool non_sequential_uncertain_fallback_needed = false;
+
+    if (is_frame_zero) {
+        classification = "A-frame-zero-normal-fallback";
+        frame_zero_normal_fallback = true;
+    }
+    else if (has_previous_request && !is_sequential_after_previous) {
+        classification = "D-non-sequential-uncertain-fallback-needed";
+        non_sequential_uncertain_fallback_needed = true;
+    }
+    else if (predecessor_cache_contains) {
+        classification = "B-sequential-fast-path-candidate";
+        sequential_fast_path_candidate = true;
+    }
+    else {
+        classification = "C-predecessor-missing-fallback-needed";
+        predecessor_missing_fallback_needed = true;
+    }
+
+    cnr3_debug_printf(
+        d->debug,
+        "output-cache # cnr3_output_cache_authority_probe_arinitial_request_classification # "
+        "OUTPUT-CACHE-AUTHORITY-ARINITIAL-REQUEST-CLASSIFICATION-PROBE # "
+        "instance=%d # requested=%d # has_previous_arInitial_request=%d # "
+        "previous_arInitial_request=%d # sequential_after_previous=%d # "
+        "predecessor=%d # predecessor_cache_contains=%d # classification=%s # "
+        "frame_zero_normal_fallback=%d # sequential_fast_path_candidate=%d # "
+        "predecessor_missing_fallback_needed=%d # "
+        "non_sequential_uncertain_fallback_needed=%d # "
+        "would_keep_conservative_bounded_warmup_request=1 # "
+        "would_request_current_source_only_later=%d # "
+        "behaviour_changed=0 # source_request_reduction=0 # "
+        "output_authoritative=0 # mutates_old_strict=0\n",
+        d->instance_id,
+        requested_frame_number,
+        has_previous_request ? 1 : 0,
+        previous_request,
+        is_sequential_after_previous ? 1 : 0,
+        predecessor_frame_number,
+        predecessor_cache_contains ? 1 : 0,
+        classification,
+        frame_zero_normal_fallback ? 1 : 0,
+        sequential_fast_path_candidate ? 1 : 0,
+        predecessor_missing_fallback_needed ? 1 : 0,
+        non_sequential_uncertain_fallback_needed ? 1 : 0,
+        sequential_fast_path_candidate ? 1 : 0
+    );
+
+    d->h15_6a_has_last_arinitial_request_number = true;
+    d->h15_6a_last_arinitial_request_number = requested_frame_number;
+}
 
 static bool cnr3_output_cache_authority_return_transfer_sequential_fast_path_proof(
     Cnr3Data* d,
@@ -7757,6 +7841,13 @@ static const VSFrame* VS_CC cnr3_get_frame(
             d,
             n
         );
+
+        if constexpr (CNR3_CMS02_H15_ARINITIAL_REQUEST_CLASSIFICATION_PROBE_ACTIVE) {
+            cnr3_output_cache_authority_probe_arinitial_request_classification(
+                d,
+                n
+            );
+        }
 
         Cnr3ForDebugOnlyBoundedWarmupSourcePlan* h4_source_plan =
             nullptr;

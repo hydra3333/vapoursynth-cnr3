@@ -1,0 +1,104 @@
+Hello. This is a continuation of the CNR3 VapourSynth plugin development work.
+
+Please treat the attached handover pack and CMS design spec as the current project baseline.
+Read the documents in this order:
+
+1. `CNR3_Handover_Pack_v1.9_MANIFEST.md`
+   Start here. 
+   This identifies the handover pack contents, generation basis, version, and intended reading order.
+
+2. `Document_A_CNR3_Project_Context_and_Rules_v1.9.md`
+   Read this next. 
+   It contains the enduring project context, development rules, coding/session rules,
+   durable safety rules, ownership discipline, output-authority discipline, and long-term constraints. 
+   Treat these as standing rules for the session.
+
+3. `Document_B_CNR3_Decision_Log_v1.9.md`
+   Read this after Document A.
+   It records settled decisions and rejected alternatives. 
+   Pay particular attention to the CMS06.10 H15.6B predecessor-reservation decision,
+   the rejection of serial-callback-order reliance, the ownership-proof standing rule,
+   and the future H17 sparse-hole repair optimization.
+
+4. `Document_C_CNR3_Current_Session_Handover_v1.9.md`
+   Read this after Documents A and B.
+   It is the main current-state handover.
+   It records where development is up to, 
+   what has passed,
+   what is blocked or superseded,
+   and what the next implementation phases should be.
+
+5. `cnr3_cache_manager_design_v6_10.md` is CMS06.10.
+   This is the controlling current cache-manager design spec, CMS06.10.
+   It supersedes CMS06.9 and earlier. 
+   Treat CMS06.10 as design authority for the next coding work.
+   In particular, CMS06.10 adopts the revised H15.6B predecessor-reservation model,
+   restructures H15.6B into H15.6B.1 / H15.6B.2 / H15.6B.3,
+   formalises the `frameData` reserved-predecessor ownership rule,
+   formalises the single-ownership/null-on-consume rule,
+   records Option A as rejected,
+   and retires as superseded the previous fail-closed-only H15.6B draft patch.
+
+6. `CNR3_CMS06_10_Handover_Reconciliation_Notes_20260611.md`
+   Read this after CMS06.10.
+   It explains how the v1.9 handover pack reconciles the previous v1.8 handover
+   state with the new CMS06.10 design decisions.
+
+7. `CNR3_Handover_Pack_Production_Spec_v1.5.md`
+   This is the production/generation specification used to create the handover pack. 
+   Use it when updating or regenerating new handover packs.
+
+Some of the concepts used in material below depends on you having read and understood
+the documents referenced above. If, after having read all of the material and
+documents referenced above and all of this introduction, you are unsure or have questions
+then you must seek clarification before proceeding.
+
+The key current status is:
+* H16.3 predecessor-missing fallback return-transfer proof: PASS and committed.
+* H16.4 out-of-order fallback validation: PASS and committed.
+* A checkpoint commit was made before restarting H15.6B under the revised CMS06.10 predecessor-reservation design.
+* The earlier H15.6B fail-closed-only patch is retired as a superseded draft and
+  must not be used as the implementation direction.
+* CMS06.10 is now the controlling design spec.
+
+The next coding direction is now not the old one-step H15.6B source-request reduction.
+Instead, follow CMS06.10 and implement the revised H15.6B in three proof subphases:
+
+1. `CMS02-H15.6B.1 / arInitial predecessor reservation lifecycle proof`
+   Add `frameData` ownership for a reserved predecessor ref acquired in `arInitial` via atomic `find_frame_and_add_ref(N-1)`. 
+   Carry it across `arInitial -> arAllFramesReady`. 
+   Do not reduce source requests yet. 
+   Prove acquisition, carry, cleanup, lookup-ref balance, and no checkpoint pin misuse.
+
+2. `CMS02-H15.6B.2 / reserved-predecessor fast-path consumption proof`
+   Use the carried reserved predecessor ref as the fast-path predecessor instead of re-looking up `N-1` in `arAllFramesReady`.
+   Keep conservative source requests. 
+   Prove the single-ownership/null-on-consume rule: the fast path releases or consumes the ref and sets the frameData field to null, while frameData cleanup releases it only if still non-null.
+
+3. `CMS02-H15.6B.3 / active sequential source-request reduction`
+   Only after B.1 and B.2 pass, reduce safe class-B sequential fast-path candidates to request source `N` only. 
+   Keep frame-zero, predecessor-missing, non-sequential, uncertain, and fallback cases on
+   conservative bounded-warmup source requests.
+
+Important standing rule from this point onward:
+
+Every cache-affecting proof or validation phase must explicitly prove both ownership systems where relevant:
+* Lookup-addref ownership for ordinary cached-frame use, including acquired/released/transferred counts and zero lookup-ref balance.
+* Checkpoint pin/unpin ownership for checkpoint/recovery anchors, including pin/unpin counts,
+  underflow/failure checks, `total_pin_count=0`, and `has_pinned_checkpoints=0` at cleanup.
+
+Also preserve the future H17 optimization note:
+The current fallback is correctness-first and conservative.
+It may retrieve/recompute a bounded lower frame even when that output is already cached,
+relying on first-in-best-dressed duplicate handling to discard duplicate output safely.
+A later H17-style sparse-hole/minimal recovery path should start from the nearest suitable
+cached predecessor/checkpoint inside the bounded recovery window, retrieve only the missing
+source frames needed to walk forward, compute/store only missing outputs plus the requested
+output, and return through output-cache authority.
+
+Please do not claim fmParallelRequests or fmParallel readiness until each fully tested as ready.
+The design is still moving toward fmParallelRequests then fmParallel, 
+but CMS02-J0 cleanup/observability review and later fmParallelRequests/fmParallel 
+work remain outstanding. 
+
+Old strict state remains quarantined but not yet retired.

@@ -84,9 +84,9 @@ design rules, for example:
 - the fmParallel final-goal invariant.
 
 **Please list every prevailing rule you can identify from CMS07.0 and the handover
-documents, each stated briefly, so I can confirm, modify, supersede, or retire each
-one explicitly before coding begins.** Do not assume any rule carries over silently —
-surface them all for my sign-off.
+documents and as we may have agreed separately, each stated briefly, so I can confirm,
+modify, supersede, or retire each one explicitly before coding begins.
+** Do not assume any rule carries over silently — surface them all for my sign-off.
 
 ## Please respond with
 

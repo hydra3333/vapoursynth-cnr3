@@ -3,25 +3,39 @@
 *(Coder introductory brief — paste ahead of the CMS07.0 design document.)*
 
 We are at a natural pause point in CNR3 development. A reassessment found the
-current caching mechanism, while workable, is not genuinely fit for purpose. A new
-mechanism has been designed — reusing some concepts but **completely superseding the
-previous cache design.** The attached **CMS07.0** (`cnr3_cache_manager_design_v7_0.md`)
-is the new controlling design authority. Please study it carefully before responding.
+current caching mechanism, while workable, is not genuinely fit for purpose.
 
-**All existing cache-related code is explicitly superseded.** Some code remains
-useful — the pixel-computation layer, response-table creation, and memory diagnostics
-are largely cache-independent and are expected to be reused (D27/D28 *require* reusing
+A new mechanism has been designed — reusing some concepts but 
+**completely superseding the previous cache design.** 
+
+The attached **CMS07.0** (`cnr3_cache_manager_design_v7_0.md`) is the new
+controlling design authority. Please study it carefully before responding.
+
+**All existing cache-related code and design is explicitly superseded.** 
+
+Some code remains useful — the pixel-computation layer, response-table creation,
+and memory diagnostics may be largely cache-independent and it is anticipated that
+these may possibly be reused in part or in whole (D27/D28 *require* reusing
 the existing frame-processing boundary rather than writing new pixel logic).
+
 
 ## Build / transition (decided)
 
 Rename all existing `.h`/`.cpp` files **except `VapourSynth4.h` and `VSHelper4.h`**
 to `.txt`, so old code stays available as reference for verifiable salvage but leaves
-the active build. The old binary need not build; GitHub CI may break for now; builds
-will be done in **Visual Studio 2026**. Phase-numbering for the new work is your
-choice.
+the active build. 
 
-## Do not conflate old and new concepts
+The old binary need not build; GitHub CI may break for now; builds
+will be done in **Visual Studio 2026**.
+
+Being a new design/development, Phase/SubPhase numbering will restart
+and be your choice, based on the latest agreed rules for
+Phase/SubPhase numbering.
+
+Existing rules requiring high levels of instrumentation and excellent
+code commenting, also apply to this development.
+
+## Do NOT conflate old and new concepts or designs
 
 Three highest-risk traps:
 
@@ -29,11 +43,13 @@ Three highest-risk traps:
    baseline (this supersedes old decision D13).
 2. Reintroducing held-ref-only predecessor reservation — superseded by
    **consumer-held pins** on a per-invocation pin-list.
-3. Thinking of a checkpoint as a pin — a checkpoint is now a **separate
-   eviction-protection flag** with its own retention rule.
+3. Thinking of a checkpoint as a pin — a checkpoint is now
+   a **separate eviction-protection flag** with its own retention rule.
 
-There is exactly one pin concept (consumer-claim). Where old code and CMS07.0
-disagree, the spec wins; old `.txt` code is salvage reference only.
+There is exactly one pin concept (consumer-claim). 
+
+Where old code and CMS07.0 disagree, the spec wins; old `.txt` code
+is salvage reference only.
 
 ## First milestone — prove ownership before behaviour (CMS07.0 §11, per D30)
 
@@ -56,19 +72,21 @@ that eviction never selects a pinned / checkpoint / in-zone slot — **before** 
 `.h` files, the structures, and the function names/signatures (with purpose/parameter
 comments) needed to do all of the above — aligned with separation of responsibilities
 (pixel processing must not own cache/scheduling policy; the cache manager must not
-contain pixel logic). Propose them back to me for review.
+contain pixel logic). Propose them back to me for review and subsequent creation
+into new .h and .cpp files.
 
 ## Second step — salvage
 
 Once the core is proven, identify old code verifiably safe to reuse (response tables,
 memory diagnostics, the pixel/frame-processing layer including the explicit-predecessor
-boundary) and copy/modify it from the `.txt` files into the right new locations,
+boundary) for copy/modify from the `.txt` files into the right new locations,
 preserving separation of responsibilities.
 
 ## Prevailing rules — please enumerate ALL of them back to me
 
-CMS07.0 and the prior handover Document A carry a set of standing coding / process /
-design rules, for example:
+CMS07.0 and the last handover Document A as well as by agreement with you during
+during development of the now-superseded cnr3 carry a set of
+standing coding / process / design / safety rules, for example:
 
 - code-comment Rule 1;
 - before/after-patch Rule 2;
@@ -84,8 +102,11 @@ design rules, for example:
 - the fmParallel final-goal invariant.
 
 **Please list every prevailing rule you can identify from CMS07.0 and the handover
-documents and as we may have agreed separately, each stated briefly, so I can confirm,
-modify, supersede, or retire each one explicitly before coding begins.
+documents and as we may have agreed separately, each stated briefly but with enough detail
+so that it is clear to a human, so that I can confirm, modify, supersede, or retire each
+one explicitly before coding begins. A new list of rules will thus be created applying
+to this new design and development.
+
 ** Do not assume any rule carries over silently — surface them all for my sign-off.
 
 ## Please respond with

@@ -261,32 +261,33 @@ regenerated to reproduce the owned rules. The owned standing rules are:
 existing per-frame processing boundary; no parallel/duplicate pixel or frame algorithms
 without explicit agreement (override discipline).
 
-**9.2 Output-authority discipline.** Compute, store, return-decision, return-transfer,
-and output-authority are each separately provable (D30).
+**9.2 Output-authority proof discipline (process).** Compute, store, return-decision,
+return-transfer, and output-authority must each be *separately provable* (D30). This is
+a process/proof obligation — how the code is proven, not a design mechanism; the
+underlying mechanisms it proves live in CMS07.0.
 
-**9.3 Diagnostics are proof of safety.** Unexpected reference-count, prune, validation,
-or recovery-search values stop the next phase until understood. An unexpected non-zero
-error counter is a hard gate.
+**9.3 Diagnostics are proof of safety (process gate).** Unexpected reference-count,
+prune, validation, or recovery-search values stop the next phase until understood. An
+unexpected non-zero error counter is a hard gate.
 
-**9.4 Design Compliance Review.** After each phase or coherent block, run the review
-(CMS07.0 §9A.8 defines the 17-item checklist, including item 17: every critical section
-matches its AS-register entry).
+**9.4 Design Compliance Review (process).** Run the Design Compliance Review at each
+phase or coherent block. The checklist itself is defined in CMS07.0 §9A.8 (including
+item 17: every critical section matches its AS-register entry) and is NOT reproduced
+here — this owned rule is the *obligation to run it*.
 
-**9.5 fmParallel final-goal invariant.** fmParallel is the final target; no choice may
-block eventual safe fmParallel without explicit justification.
-
-**9.6 Architecture separation.** Pixel/frame processing must not own cache or
+**9.5 Architecture separation.** Pixel/frame processing must not own cache or
 scheduling policy; the cache manager must not contain pixel logic.
 
-**9.7 Salvage discipline.** Salvage is the second step only, after the cache core is
+**9.6 Salvage discipline.** Salvage is the second step only, after the cache core is
 proven; salvage CNR2 pixel maths but never its recovery/predecessor logic (§11).
 
 **Hand-off note (design rules live in CMS07.0).** The reference-count discipline
 (RC1–RC8) and RAII baseline, the atomic-scope register (AS1–AS7) and V5 firewall,
 VS-LIFECYCLE-01, the pinning / checkpoint / hot-zone / locking / pruning rules, the
 recovery and source-request rules, bounded-start honesty, the parameter-coherence
-constants (CR1–CR5, decay_margin), and the instrumentation/recovery-search rules are
-**defined and numbered in CMS07.0**. CMS07.0 is the authoritative register for them;
+constants (CR1–CR5, decay_margin), the instrumentation/recovery-search rules, the
+**fmParallel final-goal invariant** (CMS07.0 §2), and the first-milestone proof gates
+are **defined and numbered in CMS07.0**. CMS07.0 is the authoritative register for them;
 they are deliberately NOT restated here, to keep one source per rule. Consult CMS07.0
 directly.
 

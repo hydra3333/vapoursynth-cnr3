@@ -70,16 +70,21 @@ purpose/parameter comments), aligned with separation of responsibilities, for re
 ## 4. Prevailing-rules enumeration (required before coding)
 
 The coder enumerates **all** standing rules — from CMS07.0, Document A, and prior
-agreements — each numbered and stated clearly, for explicit confirmation, modification,
-supersession, or retirement before process coding begins.
-- **The signed-off result is recorded into the Production Spec's Prevailing Rules
-  Register (§3A), which is the authoritative durable home of the rule list.** Document A
-  then reproduces it. This document (B) only tracks the *status* of that task (see §8).
-- **No rule carries over silently.**
+agreements — each numbered and stated clearly, **marking each as either
+REGISTER-OWNED or CMS07.0-DEFINED / HANDED-OFF**, for explicit confirmation,
+modification, supersession, or retirement before process coding begins.
+- **Only the signed-off REGISTER-OWNED set is recorded into the Production Spec's
+  Prevailing Rules Register (§3A)**, which is the durable home for owned rules.
+  CMS07.0-defined rules are NOT copied into §3A — CMS07.0 remains their authoritative
+  register, and they are confirmed by confirming CMS07.0 itself. Document A reproduces
+  the owned §3A rules and carries the hand-off clause. This document (B) only tracks the
+  *status* of that task (see §8).
+- **No rule carries over silently** — both kinds are enumerated for visibility; the
+  owned/handed-off mark determines only where each is recorded.
 - A rule remembered from prior context but not present in CMS07.0, Document A, or the
   restart introduction is surfaced as a **candidate** rule, marked as
-  remembered/prior-context-derived, and is **not controlling until confirmed** into the
-  register.
+  remembered/prior-context-derived, and is **not controlling until confirmed** (into
+  §3A if owned, or into CMS07.0 if it is a design rule).
 
 ---
 
@@ -137,6 +142,7 @@ Handover pack bump:    This pack (v3.0) is the CMS07.0-aligned replacement for t
                        CMS06-era v2.0 pack.
 Prevailing Rules
 Register (Spec §3A):   PENDING FIRST POPULATION — to be filled by the coder's restart
-                       enumeration + user sign-off. Until then, CMS07.0 hard rules +
-                       the §3.5/§3.6 summary are operative.
+                       enumeration + user sign-off (owned rules only). Until then,
+                       CMS07.0 hard rules (its own register) + the owned process/
+                       architecture/salvage rules in Document A §9/§10 are operative.
 ```

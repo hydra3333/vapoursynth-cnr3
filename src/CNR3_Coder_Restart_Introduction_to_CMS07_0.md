@@ -14,8 +14,25 @@ controlling design authority. It is **final and complete**: all verify items
 source code; the local R76 `VapourSynth4.h` header) — and a section-level
 bring-across audit of the old CMS06.11 body has been completed (§9A), so
 still-valid hard rules are stated inside CMS07.0 itself. You do not need the old
-spec to implement; the old spec is reference history only. Please study CMS07.0
+CMS06 spec to implement; it is reference history only. Please study CMS07.0
 carefully before responding.
+
+**Precedence (read this first).** Two distinct situations, opposite responses:
+1. If CMS07.0 conflicts with — OR is merely unclear in its alignment with — any
+   prior handover document (including Document A), decision log, memory, or earlier
+   coding discussion, **CMS07.0 wins** unless I explicitly say otherwise. This
+   prevents CMS06-era assumptions leaking back in.
+2. If CMS07.0 **itself** is ambiguous, silent, or incomplete on an implementation
+   point, that is NOT a "CMS wins" case — **stop and ask. Do not guess.** "Final and
+   complete" means controlling unless explicitly revised; it does not mean every
+   implementation detail is pre-specified, and it never licenses improvising.
+
+**Document set for this work:** this introduction, CMS07.0, Document A (project
+context / standing rules — reference only, subordinate to CMS07.0 per the precedence
+rule above), and any current code snapshot after the `.h`/`.cpp` → `.txt` transition.
+Documents B and C (decision log, volatile state snapshot) are deliberately NOT in
+scope — CMS07.0 §9A already carries forward the still-valid rules, and excluding B/C
+removes the main route for stale CMS06-era rules to re-enter.
 
 **All existing cache-related code and design is explicitly superseded.**
 
@@ -40,6 +57,11 @@ Phase/SubPhase numbering.
 Existing rules requiring high levels of instrumentation and excellent
 code commenting also apply to this development.
 
+**Do not act on this section yet.** Do NOT perform the `.h`/`.cpp` → `.txt`
+rename, nor create any files, merely from reading this introduction. First confirm
+your understanding and the planned transition steps, and wait for my explicit
+instruction to apply them. This brief is read-understand-and-propose, not act.
+
 ## Do NOT conflate old and new concepts or designs
 
 Three highest-risk traps:
@@ -53,8 +75,8 @@ Three highest-risk traps:
 
 There is exactly one pin concept (consumer-claim).
 
-Where old code and CMS07.0 disagree, the spec wins; old `.txt` code
-is salvage reference only.
+**Where old code and CMS07.0 disagree or are ambiguous in alignment,
+the spec wins; old `.txt` code is salvage reference only.**
 
 ## Two further traps — engineered guards you must respect
 
@@ -120,14 +142,15 @@ transferred), no leaks, no double-free, that eviction never selects a pinned /
 checkpoint / in-zone slot, and that shutdown clear() releases everything with a
 warning on any non-zero pin — **before** any `getFrame` integration.
 
-**Please estimate and create the file/header/structure layout yourself**
-based on CMS07.0 and your experience. It will be a draft a program structure
-design aligned with separation of responsibilities (eg pixel processing must not
-own cache/scheduling policy; the cache manager must not contain pixel logic, etc).
-To include likely `.h` files, the `.cpp` files, internal structures within each,
-the includes, the function names/signatures (with function purpose/parameter comments)
-needed to comply with CMS07.0 (some of which is mentioned above). Propose it
-back to me for review and subsequent creation into new .h and .cpp files.
+**Please PROPOSE the file/header/structure layout (as text, for review) — do not
+create any files yet.** Base it on CMS07.0 and your experience: a draft program
+structure design aligned with separation of responsibilities (e.g. pixel processing
+must not own cache/scheduling policy; the cache manager must not contain pixel logic,
+etc). Include the likely `.h` files, the `.cpp` files, internal structures within
+each, the includes, and the function names/signatures (with function purpose/parameter
+comments) needed to comply with CMS07.0 (some of which is noted above). Propose it
+back to me; actual file creation follows only after my review and explicit sign-off
+(per "do not act on this section yet" above).
 
 ## Second step — salvage
 
@@ -149,9 +172,9 @@ pixel maths; never the `GetFrame` recovery shortcut.
 
 ## Prevailing rules — please enumerate ALL of them back to me
 
-CMS07.0 and the last Handover Documents A/B/C and here as well as
-by agreement with you during development of the now-superseded cnr3,
-carry a set of standing coding / process / design / safety rules, for example:
+CMS07.0, Document A, and rules agreed with me during development of the
+now-superseded cnr3 carry a set of standing coding / process / design / safety
+rules, for example:
 
 - code-comment Rule 1;
 - before/after-patch Rule 2;
@@ -175,11 +198,11 @@ carry a set of standing coding / process / design / safety rules, for example:
   (CMS07.0 §10.4/§10.5);
 - the fmParallel final-goal invariant.
 
-**Please list every prevailing rule you can identify by the aforementioned sources,
-each numbered and stated briefly but with enough detail so that it is clear to
-a human, so that I can confirm, modify, supersede, or retire each one explicitly
-before this process coding begins. A new list of rules will thus be created
-applying to this new design and development.**
+**Please list every prevailing rule you can identify from the aforementioned sources
+(CMS07.0, Document A, and our prior agreements), each numbered and stated briefly but
+with enough detail so that it is clear to a human, so that I can confirm, modify,
+supersede, or retire each one explicitly before this process coding begins. A new
+list of rules will thus be created applying to this new design and development.**
 
 **Do not assume any rule carries over silently — surface them all for my sign-off.**
 
@@ -187,7 +210,7 @@ applying to this new design and development.**
 
 a) confirmation of your understanding of the restart and the old/new separation;
 b) any questions on CMS07.0;
-c) the enumerated prevailing-rules list.
-d) your proposed header/structure layout;
+c) the enumerated prevailing-rules list;
+d) your proposed file/header/structure layout (as a text proposal — no files yet).
 
 **Do you have any comments or questions?**

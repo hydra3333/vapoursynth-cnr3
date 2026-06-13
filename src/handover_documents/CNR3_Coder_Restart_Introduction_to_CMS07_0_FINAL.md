@@ -28,6 +28,12 @@ carefully before responding.
    complete" means controlling unless explicitly revised; it does not mean every
    implementation detail is pre-specified, and it never licenses improvising.
 
+*CMS07.0-or-later:* references to CMS07.0 as the controlling design mean CMS07.0 or its
+later approved successor. Specific CMS07.0 section pointers (e.g. §9A.2) are
+version-specific and should be re-checked against any successor; historical statements
+about what CMS07.0 superseded stay pinned to CMS07.0; the filename
+`cnr3_cache_manager_design_v7_0.md` denotes that specific file.
+
 **Expected attachments for this restart (do not proceed from this introduction
 alone).** Items 1–5 are the CORE handover pack; items 6–7 are COMPANION coding-start
 material (working/environment material, not pack documents):
@@ -38,7 +44,7 @@ material (working/environment material, not pack documents):
    precedence rule above).
 4. `CNR3_Handover_Pack_Document_B_CNR3_Restart_Work_Plan_and_First_Milestone_v3_0.md`
    (current work plan / first milestone / do-not-implement list).
-5. `CNR3_Handover_Pack_Production_Spec_v2_0.md` (holds the §3A Prevailing Rules
+5. `CNR3_Handover_Pack_Production_Spec_v2_1.md` (holds the §3A Prevailing Rules
    Register that your enumeration will populate).
 6. *(companion)* Current code snapshot after the `.h`/`.cpp` → `.txt` transition, if
    available.
@@ -199,7 +205,14 @@ pixel maths; never the `GetFrame` recovery shortcut.
 
 CMS07.0, Document A, and rules agreed with me during development of the
 now-superseded cnr3 carry a set of standing coding / process / design / safety
-rules, for example:
+rules. **When you enumerate, distinguish two kinds:** (i) *register-owned* rules —
+authority/precedence, pack governance, coding process, architecture/salvage,
+candidates — which, once signed off, are recorded in the Production Spec's §3A
+register; and (ii) *design rules already defined in CMS07.0* — RC1–RC8, AS1–AS7,
+CR1–CR5, VS-LIFECYCLE-01, recovery, instrumentation, the V5 firewall, the
+first-milestone gates — which are **handed off to CMS07.0 and NOT recorded in §3A**
+(CMS07.0 is their register; do not duplicate them). List both kinds so I can see the
+whole picture, but mark which are register-owned vs CMS07.0-defined. For example:
 
 - code-comment Rule 1;
 - before/after-patch Rule 2;

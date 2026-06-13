@@ -11,6 +11,12 @@ first**, then **CMS07.0**, then this Document A and Document B. "Front door" mea
 this is the human-facing orientation document within the pack — not that it overrides
 the restart introduction's start-here sequencing.
 
+*CMS07.0 reading note:* references to **CMS07.0** as the controlling design mean
+**CMS07.0 or its later approved successor**. Specific section pointers (e.g. §9A.2) are
+version-specific to CMS07.0 and should be re-checked against any successor; historical
+statements about what CMS07.0 superseded stay pinned to CMS07.0; the filename
+`cnr3_cache_manager_design_v7_0.md` denotes that specific file.
+
 ---
 
 ## 1. What CNR3 is, and why this project exists
@@ -237,54 +243,52 @@ the coder's proposal under CMS07.0 §11, not fixed here):
 
 ---
 
-## 9. Standing rules (reproduced from the Production Spec's Prevailing Rules Register)
+## 9. Standing rules
 
-These govern all CNR3 work. **The authoritative master list is the Prevailing Rules
-Register in the Production Spec (§3A); this section reproduces it for the reader.** If
-this section and the spec's register ever disagree, the spec's register wins (this
-section was mis-transcribed). Once the coder's restart enumeration is signed off into
-the register, this section is regenerated to match it. Each rule is elaborated in
-CMS07.0 where noted.
+The authoritative source for rules is split to avoid duplication that drifts:
+- **Register-owned rules** (authority, pack governance, coding process, architecture /
+  salvage) live in the Production Spec's Prevailing Rules Register (§3A); this section
+  reproduces them for the reader. If this section and §3A disagree, §3A wins.
+- **Design / cache-core rules** (pinning, checkpoints, hot zones, locking, pruning,
+  RC1–RC8, RAII, VS-LIFECYCLE-01, recovery, CR1–CR5, instrumentation, AS1–AS7, the V5
+  firewall, the first-milestone gates) are **defined in CMS07.0** and are NOT restated
+  here — consult CMS07.0 directly (see the hand-off note at the end of this section).
+
+Once the coder's restart enumeration is signed off into §3A, this section is
+regenerated to reproduce the owned rules. The owned standing rules are:
 
 **9.1 Reuse existing processing boundaries.** Recovery/warm-up compute reuses the
 existing per-frame processing boundary; no parallel/duplicate pixel or frame algorithms
 without explicit agreement (override discipline).
 
-**9.2 Ownership and release-balance discipline (RC1–RC8; CMS07.0 §9A.2).** Single store
-helper / single remove helper; error paths rebalance; every caller-owned ref freed or
-transferred exactly once on every exit; shutdown clears with a warning on any non-zero
-pin; balance validation; first-in-best-dressed store idempotency. RAII owned-ref
-wrapper is baseline (CMS07.0 §9A.3).
-
-**9.3 Output-authority discipline.** Compute, store, return-decision, return-transfer,
+**9.2 Output-authority discipline.** Compute, store, return-decision, return-transfer,
 and output-authority are each separately provable (D30).
 
-**9.4 Bounded-start honesty (CMS07.0 §9A.7).** An approximate fresh-start (floor
-fallback) is never described — in docs, comments, or diagnostics — as exact
-full-history recursion. Diagnostics disclose floor-approximation use.
-
-**9.5 Atomic-scope register and lock discipline (CMS07.0 §8.6/§8.7).** The atomic-scope
-register AS1–AS7 defines every cache critical section; boundaries are designer-owned and
-inviolable — implement exactly, do not shrink/split/merge. Core refcount atomicity (the
-V5 firewall) confers no licence to shrink any lock scope.
-
-**9.6 VS-LIFECYCLE-01 (CMS07.0 §9A.1).** Any source retrieved in arAllFramesReady must
-have been requested in arInitial of the same activation. All request planning happens at
-arInitial.
-
-**9.7 Parameter coherence (CR1–CR5; CMS07.0 §10.2).** The coherence rules are codified
-as comments directly above their constants, including the decay_margin bounds.
-
-**9.8 Diagnostics are proof of safety.** Unexpected reference-count, prune, validation,
+**9.3 Diagnostics are proof of safety.** Unexpected reference-count, prune, validation,
 or recovery-search values stop the next phase until understood. An unexpected non-zero
 error counter is a hard gate.
 
-**9.9 fmParallel final-goal invariant.** fmParallel is the final target; no choice may
+**9.4 Design Compliance Review.** After each phase or coherent block, run the review
+(CMS07.0 §9A.8 defines the 17-item checklist, including item 17: every critical section
+matches its AS-register entry).
+
+**9.5 fmParallel final-goal invariant.** fmParallel is the final target; no choice may
 block eventual safe fmParallel without explicit justification.
 
-**9.10 Design Compliance Review (CMS07.0 §9A.8).** After each phase or coherent block,
-run the 17-item review, including item 17: every critical section matches its AS-register
-entry.
+**9.6 Architecture separation.** Pixel/frame processing must not own cache or
+scheduling policy; the cache manager must not contain pixel logic.
+
+**9.7 Salvage discipline.** Salvage is the second step only, after the cache core is
+proven; salvage CNR2 pixel maths but never its recovery/predecessor logic (§11).
+
+**Hand-off note (design rules live in CMS07.0).** The reference-count discipline
+(RC1–RC8) and RAII baseline, the atomic-scope register (AS1–AS7) and V5 firewall,
+VS-LIFECYCLE-01, the pinning / checkpoint / hot-zone / locking / pruning rules, the
+recovery and source-request rules, bounded-start honesty, the parameter-coherence
+constants (CR1–CR5, decay_margin), and the instrumentation/recovery-search rules are
+**defined and numbered in CMS07.0**. CMS07.0 is the authoritative register for them;
+they are deliberately NOT restated here, to keep one source per rule. Consult CMS07.0
+directly.
 
 ---
 

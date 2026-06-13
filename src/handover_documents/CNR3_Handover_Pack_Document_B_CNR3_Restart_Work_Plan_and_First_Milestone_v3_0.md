@@ -13,6 +13,10 @@ wins**. CMS07.0 is the stable design authority; this document is the changing pl
 
 - **CMS07.0** (`cnr3_cache_manager_design_v7_0.md`) is the controlling design authority.
   It is **final and complete for this restart unless explicitly revised**.
+- *CMS07.0-or-later:* references to CMS07.0 as the controlling design mean CMS07.0 or its
+  later approved successor; specific section pointers are version-specific to CMS07.0 and
+  re-checked against a successor; historical supersession statements stay pinned to
+  CMS07.0; the filename denotes that specific file.
 - **Precedence rules:**
   1. If CMS07.0 conflicts with — or is unclear in alignment with — any prior material
      (Document A, prior agreements, memory, earlier discussion), **CMS07.0 wins** unless

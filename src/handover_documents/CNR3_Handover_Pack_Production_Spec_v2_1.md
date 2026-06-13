@@ -13,6 +13,16 @@ read as “this version or later.”
 For example, a reference to `v2.1` means `v2.1-or-later` once a later approved
 version exists.
 
+**CMS07.0 Reading Rule:** References to **CMS07.0** as the controlling design mean
+**CMS07.0 or its later approved successor** (e.g. a future CMS07.1 / CMS08). EXCEPT:
+(a) specific CMS07.0 section pointers (e.g. “§9A.2”, “§8.7”) are version-specific to
+CMS07.0 and must be re-checked against any successor — “or-later” does NOT promise a
+section number is stable across versions; (b) historical statements about what CMS07.0
+superseded remain pinned to CMS07.0; (c) the literal filename
+`cnr3_cache_manager_design_v7_0.md` denotes that specific file. This convention is
+stated once here and governs the whole document; body references are written as plain
+“CMS07.0”.
+
 ---
 
 ## 1. Purpose of this specification
@@ -42,7 +52,7 @@ No superseded cache assumption carries forward silently.
 
 ## 2. Required handover pack files (LEAN — v2.1)
 
-The v2.1 pack is deliberately smaller than the v1.5-era pack. Concerns that were
+The v2.1 pack is deliberately smaller than the v1.5/v2.1-era pack. Concerns that were
 separate documents are folded into sections where they will actually be read.
 
 ```text
@@ -98,7 +108,7 @@ materials; the manifest/starter prompt notes which companion attachments are exp
 
 **Numbering note:** the pack and its documents take a fresh version line appropriate to
 the restart (this spec is v2.1; the pack manifest version is the producer's choice,
-e.g. v3.0, to signal the clean break from the CMS06-era v1.5 pack). Do not reuse the
+e.g. v3.0, to signal the clean break from the CMS06-era v2.1 pack). Do not reuse the
 old CMS06-era pack version number unqualified.
 
 ---
@@ -261,30 +271,27 @@ cache manager must not contain pixel logic; response-table and memory-diagnostic
 utilities are cache-independent. The actual new file layout is the coder's proposal
 under CMS07.0 §11 and is not fixed by this document.
 
-### 3.5 Required safety-critical and durable rules (REPRODUCED from the §3A register)
+### 3.5 Required rules content (OWNED rules reproduced + hand-off clause)
 
-Document A's standing-rules section is GENERATED to reproduce the Prevailing Rules
-Register (§3A) — it is a faithful copy for the reader's convenience, not an independent
-source. The §3A register is authoritative; if Document A and §3A disagree, §3A wins.
-**A Document A whose rules section does not faithfully reproduce the populated §3A
-register FAILS production review.** (Until §3A is populated, this requirement is held in
-abeyance and Document A reproduces the CMS07.0-aligned summary below — but a RELEASED
-pack, by §3A.1, requires the populated register and a Document A that matches it.) Each
-rule is cross-referenced to CMS07.0 where it elaborates:
-- Reuse existing processing boundaries; no parallel pixel/frame algorithms without
-  explicit agreement (override discipline).
-- Ownership and release-balance discipline (RC1–RC8; CMS07.0 §9A.2).
-- Output-authority discipline (compute / store / return-decision / return-transfer /
-  output-authority each separately provable).
-- Bounded-start honesty (an approximate fresh-start is never described as exact
-  full-history recursion; CMS07.0 §9A.7).
-- Diagnostics-as-hard-gate.
-- The atomic-scope register AS1–AS7 as inviolable boundaries (CMS07.0 §8.7) and the V5
-  firewall (CMS07.0 §8.6).
-- VS-LIFECYCLE-01 (CMS07.0 §9A.1).
-- The parameter-coherence rules CR1–CR5 codified as comments above their constants
-  (CMS07.0 §10.2).
-- The fmParallel final-goal invariant.
+Document A's standing-rules section is GENERATED from §3A: it reproduces the
+REGISTER-OWNED rules in full (authority, pack, process, architecture/salvage,
+retired-facts, candidates) AND carries the §3A hand-off clause for the rules that live
+in CMS07.0. It does **NOT** restate, index, or summarise the handed-off CMS07.0 rules
+(RC1–RC8, AS1–AS7, CR1–CR5, VS-LIFECYCLE-01, recovery, instrumentation, V5 firewall,
+first-milestone) — for those it points the reader to CMS07.0, consistent with §3A.
+The §3A register is authoritative for the owned rules; if Document A and §3A disagree,
+§3A wins. **A Document A whose owned-rules section does not faithfully reproduce the
+populated §3A owned rules, or which restates/duplicates the handed-off CMS07.0 rules,
+FAILS production review.** (Until §3A is populated, this requirement is held in
+abeyance; a RELEASED pack, by §3A.1, requires the populated register and a matching
+Document A.)
+
+Document A therefore presents, for the human reader: the owned rules in full, then a
+short hand-off paragraph — e.g. *"Design, cache-core, reference-count, VapourSynth-
+lifecycle, recovery, parameter-coherence, instrumentation, atomic-scope and
+first-milestone rules are defined in CMS07.0; consult it directly — they are not
+restated here."* This keeps a single source per rule and avoids the duplication that
+drifts.
 
 ### 3.6 Required coding rules (carried verbatim in intent)
 
@@ -323,28 +330,88 @@ Carry the Visual Studio commit title/body convention used on each PASS.
 
 ---
 
-## 3A. Prevailing Rules Register (AUTHORITATIVE master list — lives HERE)
+## 3A. Prevailing Rules Register (master list of OWNED rules — lives HERE)
 
-**Why the register lives in this spec, not in Document A.** Document A is regenerated
+**Scope — the register OWNS some rules and HANDS OFF others (no rule is stored twice).**
+This project's recurring failure mode is paired artifacts drifting out of sync. To
+prevent it, the register stores a rule in exactly ONE place:
+
+```text
+OWNED by the register (full text held HERE — these have no home in CMS07.0):
+    - Authority / precedence / supersession / old-new separation / no-action gate
+    - Pack governance and §3A register mechanics (draft/released, candidates, etc.)
+    - Coding process: comments, patch format, phase naming, commits, diagnostics-gate,
+      Design Compliance Review
+    - Architecture separation and salvage policy
+    - Retired-fact entries (the FACT that a CMS06-era rule is superseded — see below)
+    - Candidate / prior-context-derived rules
+
+HANDED OFF to CMS07.0 (NOT listed, indexed, or restated here):
+    - Design, cache-core, pinning, checkpoint, hot-zone, locking, pruning rules
+    - Reference-count discipline (RC1–RC8) and RAII baseline
+    - VapourSynth lifecycle (VS-LIFECYCLE-01), frameData, operational modes
+    - Recovery, source-request planning, bounded-start honesty, scene cuts
+    - Parameter-coherence constants (CR1–CR5, decay_margin)
+    - Instrumentation and recovery-search summary
+    - Atomic-scope register (AS1–AS7) and the V5 firewall
+    - The first-milestone proof gates
+```
+
+**Hand-off clause (governs the handed-off rules):**
+```text
+Design, cache-core, reference-count, VapourSynth-lifecycle, recovery, parameter-
+coherence, instrumentation, atomic-scope, and first-milestone rules are defined and
+numbered in CMS07.0 (its RC, AS, CR, V, and section identifiers). CMS07.0 is the
+authoritative register for those rules. This register does NOT restate, index, or
+duplicate them — consult CMS07.0 directly. Where this register and CMS07.0 overlap in
+scope, CMS07.0 wins.
+```
+**Why not even an index.** An index entry (ID + title + section pointer) is still a
+SECOND copy: the title restates the rule and the pointer rots if CMS07.0 renumbers. A
+clean hand-off has nothing to keep in sync — that is the entire point. CMS07.0 is both
+the source AND the register for its own rules; §3A is the source AND register only for
+the owned rules above.
+
+**Retired-fact entries are register-owned (not duplication).** When CMS07.0 supersedes
+a CMS06-era rule, CMS07.0 states the NEW rule, not the retired one. The *fact* that the
+old rule was considered and retired lives nowhere in CMS07.0 — so the register owns a
+short retired-fact entry ("X is superseded; replacement in CMS07.0 §y") for
+anti-regression. It records the retirement fact and points at CMS07.0 for the
+replacement; it does NOT restate the superseded mechanism.
+
+**Why the OWNED rules live in this spec, not in Document A.** Document A is regenerated
 at every handover and is therefore the document where content can be silently lost or
 not transcribed into the next version. This spec is a whole-of-project-life document,
-updated deliberately and infrequently. Placing the authoritative rule list HERE
+updated deliberately and infrequently. Placing the authoritative OWNED-rule list HERE
 guarantees two things Document A cannot: (1) **persistence** — the list lives in the
 least-volatile document; (2) **forced propagation** — because Document A is GENERATED
-to reproduce this register (§3.5), every regeneration of Document A carries the rules
-forward by design, rather than relying on hopeful transcription. If Document A and this
-register ever disagree, THIS REGISTER WINS (Document A was mis-transcribed).
+to reproduce this register's owned rules and the hand-off clause (§3.5), every
+regeneration of Document A carries them forward by design, rather than relying on
+hopeful transcription. If Document A and this register ever disagree, THIS REGISTER
+WINS (Document A was mis-transcribed).
+
+**Identifier scheme (OWNED rules only).** Owned rules use a stable short ID separate
+from the editable title: `R-<CATEGORY>-<NN>` (e.g. `R-AUTH-01`, `R-PROCESS-02`,
+`R-PACK-01`, `R-RETIRED-01`, `R-CAND-01`). No `CMS07` prefix (the register is CMS07's
+by definition; the prefix ages badly into a future epoch) and no reserved numeric bands
+(the category code already groups; numbering is sequential within category). Any
+familiar nickname stays in the TITLE, not the ID. Handed-off rules keep CMS07.0's OWN
+identifiers (RC8, AS3, CR1, §9.5, …) — they are NOT given a second `R-…` ID, because a
+second ID is a second thing to maintain.
 
 **Lifecycle.**
-- The register's FIRST authoritative version is produced by the coder's restart
-  prevailing-rules enumeration (intro + Document B §4) followed by the user's explicit
-  confirm / modify / supersede / retire sign-off.
-- Thereafter, when a rule is added, changed, or retired, **the change is made HERE, in
-  this register**, with the revision date bumped. The next Document A regeneration picks
-  it up automatically.
-- A rule is not "active" / controlling until it appears in this register as confirmed.
+- The register's FIRST authoritative version (owned rules + retired-facts + candidates)
+  is produced by the coder's restart prevailing-rules enumeration (intro + Document B
+  §4) followed by the user's explicit confirm / modify / supersede / retire sign-off.
+  The enumeration distinguishes register-owned rules from handed-off CMS07.0 rules; only
+  the owned set is recorded here.
+- Thereafter, when an OWNED rule is added, changed, or retired, **the change is made
+  HERE**, with the revision date bumped. The next Document A regeneration picks it up
+  automatically. A change to a HANDED-OFF rule is made in CMS07.0, not here.
+- An owned rule is not "active" / controlling until it appears here as confirmed.
 - A rule remembered from prior context but not yet here is a CANDIDATE only — recorded
-  as such, not controlling, until the user confirms it into the register.
+  as such, not controlling, until the user confirms it (into this register if owned, or
+  into CMS07.0 if it is a design rule).
 
 **Register status:** `PENDING FIRST POPULATION` — to be populated by the CMS07.0
 restart enumeration-and-sign-off. Until then, the operative rule sources are CMS07.0
@@ -387,28 +454,30 @@ A `candidate` rule (remembered/prior-context-derived, not yet confirmed) is reco
 non-controlling until the user confirms it. Only `confirmed` and `modified` rules are
 active/controlling.
 
-**Register contents:**
+**Register contents (OWNED rules only):**
 ```text
 [ PENDING — to be populated by the restart prevailing-rules enumeration and sign-off.
-  The enumeration is expected to cover at least:
-    - Rule 1 (code comments; incl. codifying CR1–CR5 as constant comments)
-    - Rule 2 (before/after patch format)
-    - expanded Phase/SubPhase naming
-    - Visual Studio commit title/body format
-    - reuse-existing-processing-boundaries / no-parallel-pixel-algorithms (override)
-    - compute/store/return-decision/return-transfer/output-authority separately provable
-    - diagnostics-as-hard-gate
-    - CR1–CR5 parameter coherence
-    - RC1–RC8 reference-count discipline
-    - atomic-scope register AS1–AS7 (inviolable boundaries)
-    - V5 firewall
-    - VS-LIFECYCLE-01
-    - RAII owned-ref wrapper as baseline
-    - bounded-start honesty
-    - Design Compliance Review + 17-item checklist
-    - instrumentation discipline + recovery-search summary
-    - fmParallel final-goal invariant
-  plus any further rules the coder identifies or the user adds. ]
+  Only REGISTER-OWNED rules are recorded here. The enumeration is expected to produce
+  at least these owned categories:
+    AUTH     - CMS07.0 controlling; ambiguity-stops-work; CMS06 historical; old code is
+               salvage-only; read/understand/propose no-action gate
+    PACK     - §3A is the durable owned-rule source; candidates non-controlling;
+               retired-facts retained; draft-vs-released gate
+    PROCESS  - code comments (concise but safety-complete; incl. codifying CR1–CR5 as
+               constant comments); before/after patch format; expanded Phase/SubPhase
+               naming; Visual Studio commit message on PASS; diagnostics-as-hard-gate;
+               Design Compliance Review + 17-item checklist
+    ARCH     - pixel/cache separation (both directions); reuse processing boundary;
+               salvage is second-step-only; CNR2 pixel-maths-yes / recovery-logic-no
+    RETIRED  - retired-FACT entries for superseded CMS06-era rules (fact + pointer to
+               the CMS07.0 replacement; NOT a restatement of the old mechanism)
+    CAND     - candidate / prior-context-derived rules, marked non-controlling
+  plus any further OWNED rules the coder identifies or the user adds.
+
+  NOT recorded here (HANDED OFF to CMS07.0 — see the hand-off clause above): the
+  design/cache/RC/RAII/VS-lifecycle/recovery/CR/instrumentation/AS/V5-firewall/
+  first-milestone rules. Consult CMS07.0 directly for those; they are NOT indexed
+  here. ]
 ```
 
 ---

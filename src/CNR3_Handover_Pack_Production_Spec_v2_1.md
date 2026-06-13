@@ -42,7 +42,7 @@ No superseded cache assumption carries forward silently.
 
 ## 2. Required handover pack files (LEAN — v2.1)
 
-The v2.1 pack is deliberately smaller than the v1.5/v2.1-era pack. Concerns that were
+The v2.1 pack is deliberately smaller than the v1.5-era pack. Concerns that were
 separate documents are folded into sections where they will actually be read.
 
 ```text
@@ -98,7 +98,7 @@ materials; the manifest/starter prompt notes which companion attachments are exp
 
 **Numbering note:** the pack and its documents take a fresh version line appropriate to
 the restart (this spec is v2.1; the pack manifest version is the producer's choice,
-e.g. v3.0, to signal the clean break from the CMS06-era v2.1 pack). Do not reuse the
+e.g. v3.0, to signal the clean break from the CMS06-era v1.5 pack). Do not reuse the
 old CMS06-era pack version number unqualified.
 
 ---

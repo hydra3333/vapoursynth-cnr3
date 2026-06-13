@@ -29,7 +29,8 @@ carefully before responding.
    implementation detail is pre-specified, and it never licenses improvising.
 
 **Expected attachments for this restart (do not proceed from this introduction
-alone):**
+alone).** Items 1–5 are the CORE handover pack; items 6–7 are COMPANION coding-start
+material (working/environment material, not pack documents):
 1. This introduction.
 2. `cnr3_cache_manager_design_v7_0.md` (CMS07.0) — the controlling design.
 3. `CNR3_Handover_Pack_Document_A_CNR3_Project_Context_and_Standing_Rules_v3_0.md`
@@ -39,9 +40,10 @@ alone):**
    (current work plan / first milestone / do-not-implement list).
 5. `CNR3_Handover_Pack_Production_Spec_v2_0.md` (holds the §3A Prevailing Rules
    Register that your enumeration will populate).
-6. Current code snapshot after the `.h`/`.cpp` → `.txt` transition, if available.
-7. Any CNR2 reference source excerpts/files intended for pixel-layer salvage, if not
-   relying on live web lookup.
+6. *(companion)* Current code snapshot after the `.h`/`.cpp` → `.txt` transition, if
+   available.
+7. *(companion)* Any CNR2 reference source excerpts/files intended for pixel-layer
+   salvage, if not relying on live web lookup.
 
 If CMS07.0 itself is not attached, say so and stop — you can comment on this brief,
 but you cannot enumerate rules or propose a compliant layout without the controlling

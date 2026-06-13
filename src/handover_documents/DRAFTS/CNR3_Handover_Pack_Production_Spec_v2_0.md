@@ -71,6 +71,25 @@ CNR3_Handover_Pack_<version>_MANIFEST.md
   never an active design input. CMS07.0 is the sole design authority.
 - The old CMS06.x reconciliation notes — historical.
 
+**Core pack files vs companion coding-start attachments.** The files listed above are
+the CORE handover pack — self-contained for understanding the project and the
+controlling design. A coding-restart chat additionally needs COMPANION attachments that
+are not part of the pack proper (they are environment/working material, not durable pack
+documents):
+```text
+Core handover pack files (durable, versioned, checksummed in the manifest):
+    Document A, Document B, CMS07.0, this Production Spec, the coder restart
+    introduction, the manifest.
+
+Companion coding-start attachments (provided alongside, not pack documents):
+    - current .txt code snapshot (after the .h/.cpp -> .txt transition), if available;
+    - CNR2 reference source/excerpts for pixel-layer salvage, if not relying on live
+      web lookup;
+    - any relevant logs.
+```
+A pack can be structurally complete while a coding restart still lacks these companion
+materials; the manifest/starter prompt notes which companion attachments are expected.
+
 **Numbering note:** the pack and its documents take a fresh version line appropriate to
 the restart (this spec is v2.0; the pack manifest version is the producer's choice,
 e.g. v3.0, to signal the clean break from the CMS06-era v2.0 pack). Do not reuse the
@@ -89,7 +108,13 @@ deliberately dropped.
   regeneration, the new Document A v3.0 is itself the context baseline — NOT the old
   CMS06-era Document A, which is retired once v3.0 exists). On the very first restart
   generation the prior project Document A was the one-time context source; thereafter
-  the context is self-perpetuating from the current Document A.
+  the context is self-perpetuating from the current Document A. **The rich context in
+  the current Document A IS the canonical context baseline: each regeneration must
+  carry it forward intact or enhanced — never regenerate it from scratch, and never
+  thin it. Thinning fails the §9 checklist (§2A.2).** (The context is preserved by
+  forward-carry, not by duplicating the prose into this spec — a second prose copy
+  would drift; the mandate plus forward-carry gives the durability guarantee without
+  that hazard.)
 - **The prevailing rules** are drafted from §3A (the Prevailing Rules Register held in
   THIS spec) — the authoritative, durable master list. Document A's rules section is
   GENERATED to reproduce §3A; it is not an independent source.
@@ -235,8 +260,11 @@ under CMS07.0 §11 and is not fixed by this document.
 Document A's standing-rules section is GENERATED to reproduce the Prevailing Rules
 Register (§3A) — it is a faithful copy for the reader's convenience, not an independent
 source. The §3A register is authoritative; if Document A and §3A disagree, §3A wins.
-Until §3A is populated by the restart enumeration, Document A reproduces the
-CMS07.0-aligned summary below (each cross-referenced to CMS07.0 where it elaborates):
+**A Document A whose rules section does not faithfully reproduce the populated §3A
+register FAILS production review.** (Until §3A is populated, this requirement is held in
+abeyance and Document A reproduces the CMS07.0-aligned summary below — but a RELEASED
+pack, by §3A.1, requires the populated register and a Document A that matches it.) Each
+rule is cross-referenced to CMS07.0 where it elaborates:
 - Reuse existing processing boundaries; no parallel pixel/frame algorithms without
   explicit agreement (override discipline).
 - Ownership and release-balance discipline (RC1–RC8; CMS07.0 §9A.2).
@@ -318,6 +346,21 @@ restart enumeration-and-sign-off. Until then, the operative rule sources are CMS
 RC1–RC8, §9A.3 RAII baseline, §9A.5/§9A.6 abort+cleanup, §9A.7 bounded-start honesty,
 §9A.8 DCR, §10.2 CR1–CR5) and the standing coding/process rules summarised in §3.5/§3.6.
 
+**3A.1 Draft vs released pack status (gating on §3A).**
+```text
+DRAFT CMS07 handover pack:
+    permitted with §3A PENDING. For review/working use only. Must be labelled draft.
+
+RELEASED CMS07 handover pack:
+    §3A MUST be populated (rules enumerated and signed off), AND Document A's rules
+    section MUST reproduce the populated §3A. A pack with §3A pending must NOT be
+    treated or circulated as an authoritative released pack.
+```
+**Current state acknowledgement:** the pack generated in this session is, by this
+definition, a **DRAFT** — §3A is pending the coder's restart enumeration and the user's
+sign-off. That is the expected and correct state at this point; it becomes releasable
+once §3A is populated and Document A is regenerated from it. This is not a defect.
+
 **Register format (each entry, once populated):**
 ```text
 Rule ID        : stable short identifier (e.g. R-COMMENT-1, R-RC, R-AS, R-LIFECYCLE-01)
@@ -327,6 +370,16 @@ Status         : confirmed | modified | superseded | retired | candidate.
 Notes          : modifications, supersession reason, or confirmation context.
 Last revised   : date.
 ```
+
+**3A.2 Rule dispositions are RETAINED, not dropped.** The register preserves the
+outcome of every rule review, not just the live rules. Each rule carries one
+disposition: `confirmed | modified | superseded | retired | candidate`. **Superseded
+and retired rules are KEPT in the register with their status and reason** — they are
+not deleted. This is deliberate: a retired CMS06-era rule recorded as `retired` cannot
+silently creep back in later, because the register shows it was considered and dropped.
+A `candidate` rule (remembered/prior-context-derived, not yet confirmed) is recorded as
+non-controlling until the user confirms it. Only `confirmed` and `modified` rules are
+active/controlling.
 
 **Register contents:**
 ```text
@@ -419,10 +472,14 @@ CMS06.x design document is included as an active input.
 
 The pack includes a short starter prompt for a new chat. It must:
 - name CMS07.0 as controlling and the precedence rule;
-- list the in-scope attachments (Document A, Document B, CMS07.0, this spec, the coder
-  intro, the manifest) and note B/C-era docs are historical only;
-- ask the new chat to confirm understanding, raise questions on CMS07.0, enumerate the
-  prevailing rules for sign-off, then propose a layout — before any file action.
+- list the in-scope CORE attachments (Document A, Document B, CMS07.0, this spec, the
+  coder intro, the manifest) and the expected COMPANION attachments (.txt snapshot,
+  CNR2 reference), and note the old CMS06-era B/C docs are historical only;
+- make the ORDER explicit: the first substantive action is **prevailing-rules
+  enumeration for sign-off**; the layout proposal follows ONLY after the rule register
+  is settled or the user explicitly defers it;
+- state the no-action rule: **no file renaming, no file creation, no salvage copy, and
+  no getFrame integration without explicit user instruction.**
 
 ---
 
@@ -455,12 +512,26 @@ The pack includes a short starter prompt for a new chat. It must:
 
 ```text
 [ ] Document A leads with rich human-facing context and the project's reason for being.
+[ ] Document A's context was carried forward from the prior Document A intact or
+    enhanced — not regenerated from scratch and not thinned (§2A.1/§2A.2).
 [ ] Document A states the CMS07.0 supersession story and old/new separation.
 [ ] Document A's standing rules are CMS07.0-aligned (no old-architecture rule stated
     as current).
 [ ] Salvage policy present as a Document A section (not a separate document).
 [ ] §3A Prevailing Rules Register present; if populated, Document A's rules section
-    faithfully reproduces it; if pending, both say so consistently.
+    faithfully reproduces it (a mismatch FAILS review); if pending, both say so and the
+    pack is labelled DRAFT (§3A.1).
+[ ] Pack status correct: DRAFT if §3A pending; RELEASED only if §3A populated AND
+    Document A regenerated to match it (§3A.1).
+[ ] Rule dispositions retained in §3A (confirmed/modified/superseded/retired/candidate);
+    retired/superseded rules kept with status, not deleted (§3A.2).
+[ ] Core pack files vs companion coding-start attachments distinguished; expected
+    companion attachments (.txt snapshot, CNR2 reference) noted in manifest/starter
+    prompt (§2).
+[ ] Starter prompt and Document B state the no-action rule: no file renaming, file
+    creation, salvage copy, or getFrame integration without explicit user instruction.
+[ ] Starter prompt states the order: rule enumeration/sign-off first; layout proposal
+    only after the register is settled or explicitly deferred.
 [ ] Any rule change since the last pack was made IN §3A (the register), with the
     revision date bumped — not only in Document A.
 [ ] Document B states controlling authority, first milestone, proof obligations,

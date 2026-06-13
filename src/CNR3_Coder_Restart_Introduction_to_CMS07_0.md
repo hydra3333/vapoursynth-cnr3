@@ -120,19 +120,21 @@ transferred), no leaks, no double-free, that eviction never selects a pinned /
 checkpoint / in-zone slot, and that shutdown clear() releases everything with a
 warning on any non-zero pin — **before** any `getFrame` integration.
 
-**Please estimate and create the header/structure layout yourself** — the likely
-`.h` files, the structures, and the function names/signatures (with purpose/parameter
-comments) needed to do all of the above — aligned with separation of responsibilities
-(pixel processing must not own cache/scheduling policy; the cache manager must not
-contain pixel logic). Propose them back to me for review and subsequent creation
-into new .h and .cpp files.
+**Please estimate and create the file/header/structure layout yourself**
+based on CMS07.0 and your experience. It will be a draft a program structure
+design aligned with separation of responsibilities (eg pixel processing must not
+own cache/scheduling policy; the cache manager must not contain pixel logic, etc).
+To include likely `.h` files, the `.cpp` files, internal structures within each,
+the includes, the function names/signatures (with function purpose/parameter comments)
+needed to comply with CMS07.0 (some of which is mentioned above). Propose it
+back to me for review and subsequent creation into new .h and .cpp files.
 
 ## Second step — salvage
 
-Once the core is proven, identify old code verifiably safe to reuse (response tables,
-memory diagnostics, the pixel/frame-processing layer including the explicit-predecessor
-boundary) for copy/modify from the `.txt` files into the right new locations,
-preserving separation of responsibilities.
+Once the core is proven, identify old code verifiably safe to reuse (eg perhaps
+from response tables, memory diagnostics, the pixel/frame-processing layer
+including the explicit-predecessor boundary) for copy/modify from the `.txt`
+files into the right new locations, preserving separation of responsibilities.
 
 **Salvage warning — the CNR2 reference source (CMS07.0 §12B, §13 V8.1).** The
 upstream CNR2 source (github.com/Asd-g/AviSynth-vsCnr2) is prime salvage for the
@@ -147,9 +149,9 @@ pixel maths; never the `GetFrame` recovery shortcut.
 
 ## Prevailing rules — please enumerate ALL of them back to me
 
-CMS07.0 and the last handover Document A as well as by agreement with you during
-development of the now-superseded cnr3 carry a set of
-standing coding / process / design / safety rules, for example:
+CMS07.0 and the last Handover Documents A/B/C and here as well as
+by agreement with you during development of the now-superseded cnr3,
+carry a set of standing coding / process / design / safety rules, for example:
 
 - code-comment Rule 1;
 - before/after-patch Rule 2;
@@ -173,19 +175,19 @@ standing coding / process / design / safety rules, for example:
   (CMS07.0 §10.4/§10.5);
 - the fmParallel final-goal invariant.
 
-**Please list every prevailing rule you can identify from CMS07.0 and the handover
-documents and as we may have agreed separately, each stated briefly but with enough
-detail so that it is clear to a human, so that I can confirm, modify, supersede, or
-retire each one explicitly before coding begins. A new list of rules will thus be
-created applying to this new design and development.**
+**Please list every prevailing rule you can identify by the aforementioned sources,
+each numbered and stated briefly but with enough detail so that it is clear to
+a human, so that I can confirm, modify, supersede, or retire each one explicitly
+before this process coding begins. A new list of rules will thus be created
+applying to this new design and development.**
 
 **Do not assume any rule carries over silently — surface them all for my sign-off.**
 
 ## Please respond with
 
-- confirmation of your understanding of the restart and the old/new separation;
-- any questions on CMS07.0;
-- your proposed header/structure layout;
-- the enumerated prevailing-rules list.
+a) confirmation of your understanding of the restart and the old/new separation;
+b) any questions on CMS07.0;
+c) the enumerated prevailing-rules list.
+d) your proposed header/structure layout;
 
 **Do you have any comments or questions?**

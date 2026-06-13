@@ -1,10 +1,15 @@
 # Document A — CNR3 Project Context and Standing Rules (CMS07.0 restart)
 
 **Version:** v3.0 (CMS07.0 restart)
-**Role:** Human-facing front door to the CNR3 project. Read this first. It sets the
-scene — what CNR3 is, why it exists, why it is hard — then states the standing rules
-that govern all work. It is **reference and context**, subordinate to CMS07.0: where
-this document and CMS07.0 disagree, CMS07.0 wins.
+**Role:** Human-facing front door to the CNR3 project — the rich context source. It
+sets the scene — what CNR3 is, why it exists, why it is hard — then reproduces the
+standing rules that govern all work. It is **reference and context**, subordinate to
+CMS07.0: where this document and CMS07.0 disagree, CMS07.0 wins.
+
+*Reading order for a coder restart chat:* read the **coder restart introduction
+first**, then **CMS07.0**, then this Document A and Document B. "Front door" means
+this is the human-facing orientation document within the pack — not that it overrides
+the restart introduction's start-here sequencing.
 
 ---
 

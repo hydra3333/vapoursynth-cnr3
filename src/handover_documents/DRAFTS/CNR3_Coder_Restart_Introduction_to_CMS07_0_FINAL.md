@@ -45,9 +45,12 @@ alone):**
 
 If CMS07.0 itself is not attached, say so and stop — you can comment on this brief,
 but you cannot enumerate rules or propose a compliant layout without the controlling
-design. Documents B and C (decision log, volatile state snapshot) are deliberately
-NOT in scope — CMS07.0 §9A already carries forward the still-valid rules, and
-excluding B/C removes the main route for stale CMS06-era rules to re-enter.
+design. The **old CMS06-era Document B (decision log) and Document C (volatile state
+snapshot)** are deliberately NOT in scope — CMS07.0 §9A already carries forward the
+still-valid rules, and excluding them removes the main route for stale CMS06-era rules
+to re-enter. (The **new CMS07.0 restart Document B** listed in the attachments above is
+a different document and IS in scope, as the current work-plan / first-milestone
+document.)
 
 **All existing cache-related code and design is explicitly superseded.**
 

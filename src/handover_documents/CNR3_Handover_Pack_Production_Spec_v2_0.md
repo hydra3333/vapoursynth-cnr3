@@ -84,15 +84,28 @@ v1.5 §2A required the previous approved pack as the drafting baseline and forba
 abbreviation. For the restart, the baseline changes and some preservation is
 deliberately dropped.
 
-**2A.1 Drafting baseline.** Draft the new pack from: CMS07.0 (controlling), the old
-Document A (for enduring human/project context and standing rules ONLY), and the
-CMS07.0 coder restart introduction. Do NOT use the old Document B/C as drafting
-baselines.
+**2A.1 Drafting baseline (context vs rules have DIFFERENT sources).**
+- **Enduring human context** is drafted from the CURRENT Document A (for a future
+  regeneration, the new Document A v3.0 is itself the context baseline — NOT the old
+  CMS06-era Document A, which is retired once v3.0 exists). On the very first restart
+  generation the prior project Document A was the one-time context source; thereafter
+  the context is self-perpetuating from the current Document A.
+- **The prevailing rules** are drafted from §3A (the Prevailing Rules Register held in
+  THIS spec) — the authoritative, durable master list. Document A's rules section is
+  GENERATED to reproduce §3A; it is not an independent source.
+- **The controlling design** is CMS07.0.
+- Do NOT use the old Document B/C as drafting baselines for context or rules.
 
-**2A.2 No abbreviation of ENDURING context.** The human-facing project context, the
-reason the project exists, the algorithmic orientation, the goal statement, and the
-standing coding/process rules must be preserved in full or enhanced — never reduced to
-a stub. (See §3 — the context requirement is mandatory and detailed.)
+**2A.2 No abbreviation of ENDURING context — richness is MANDATORY and checkable.**
+The human-facing project context, the reason the project exists, the algorithmic
+orientation, the goal statement, and the standing coding/process rules must be
+preserved in full or enhanced — NEVER reduced to a stub or a bare bullet list. This is
+the one part of the pack where length and detail are a FEATURE, not a fault: it must
+read as genuine, engaging human orientation that lets a newcomer understand what CNR3
+is, why it exists, and why it is hard, from the document alone. The depth of the prior
+project's context prose must be preserved or improved, never thinned. A regeneration
+that stubs or compresses this context FAILS the §9 checklist (see §3.2). The rules
+content itself comes from §3A (the register), reproduced in full.
 
 **2A.3 DO quarantine superseded material.** Unlike v1.5, the restart REQUIRES omitting
 superseded development material from active sections. The following must NOT appear as
@@ -217,10 +230,13 @@ cache manager must not contain pixel logic; response-table and memory-diagnostic
 utilities are cache-independent. The actual new file layout is the coder's proposal
 under CMS07.0 §11 and is not fixed by this document.
 
-### 3.5 Required safety-critical and durable rules (carried, CMS07.0-aligned)
+### 3.5 Required safety-critical and durable rules (REPRODUCED from the §3A register)
 
-Document A states these standing rules (each also cross-referenced to CMS07.0 where it
-elaborates):
+Document A's standing-rules section is GENERATED to reproduce the Prevailing Rules
+Register (§3A) — it is a faithful copy for the reader's convenience, not an independent
+source. The §3A register is authoritative; if Document A and §3A disagree, §3A wins.
+Until §3A is populated by the restart enumeration, Document A reproduces the
+CMS07.0-aligned summary below (each cross-referenced to CMS07.0 where it elaborates):
 - Reuse existing processing boundaries; no parallel pixel/frame algorithms without
   explicit agreement (override discipline).
 - Ownership and release-balance discipline (RC1–RC8; CMS07.0 §9A.2).
@@ -270,6 +286,71 @@ Carry the Visual Studio commit title/body convention used on each PASS.
   approximation is exactly what CNR3 replaces).
 - No old `.txt` code is copied into new files during the first milestone without
   explicit per-case approval.
+
+---
+
+## 3A. Prevailing Rules Register (AUTHORITATIVE master list — lives HERE)
+
+**Why the register lives in this spec, not in Document A.** Document A is regenerated
+at every handover and is therefore the document where content can be silently lost or
+not transcribed into the next version. This spec is a whole-of-project-life document,
+updated deliberately and infrequently. Placing the authoritative rule list HERE
+guarantees two things Document A cannot: (1) **persistence** — the list lives in the
+least-volatile document; (2) **forced propagation** — because Document A is GENERATED
+to reproduce this register (§3.5), every regeneration of Document A carries the rules
+forward by design, rather than relying on hopeful transcription. If Document A and this
+register ever disagree, THIS REGISTER WINS (Document A was mis-transcribed).
+
+**Lifecycle.**
+- The register's FIRST authoritative version is produced by the coder's restart
+  prevailing-rules enumeration (intro + Document B §4) followed by the user's explicit
+  confirm / modify / supersede / retire sign-off.
+- Thereafter, when a rule is added, changed, or retired, **the change is made HERE, in
+  this register**, with the revision date bumped. The next Document A regeneration picks
+  it up automatically.
+- A rule is not "active" / controlling until it appears in this register as confirmed.
+- A rule remembered from prior context but not yet here is a CANDIDATE only — recorded
+  as such, not controlling, until the user confirms it into the register.
+
+**Register status:** `PENDING FIRST POPULATION` — to be populated by the CMS07.0
+restart enumeration-and-sign-off. Until then, the operative rule sources are CMS07.0
+(its hard rules: §8.6/§8.7 AS register + V5 firewall, §9A.1 VS-LIFECYCLE-01, §9A.2
+RC1–RC8, §9A.3 RAII baseline, §9A.5/§9A.6 abort+cleanup, §9A.7 bounded-start honesty,
+§9A.8 DCR, §10.2 CR1–CR5) and the standing coding/process rules summarised in §3.5/§3.6.
+
+**Register format (each entry, once populated):**
+```text
+Rule ID        : stable short identifier (e.g. R-COMMENT-1, R-RC, R-AS, R-LIFECYCLE-01)
+Statement      : the rule in full, clear to a human.
+Source         : CMS07.0 §x / Document A / prior agreement / coder-proposed.
+Status         : confirmed | modified | superseded | retired | candidate.
+Notes          : modifications, supersession reason, or confirmation context.
+Last revised   : date.
+```
+
+**Register contents:**
+```text
+[ PENDING — to be populated by the restart prevailing-rules enumeration and sign-off.
+  The enumeration is expected to cover at least:
+    - Rule 1 (code comments; incl. codifying CR1–CR5 as constant comments)
+    - Rule 2 (before/after patch format)
+    - expanded Phase/SubPhase naming
+    - Visual Studio commit title/body format
+    - reuse-existing-processing-boundaries / no-parallel-pixel-algorithms (override)
+    - compute/store/return-decision/return-transfer/output-authority separately provable
+    - diagnostics-as-hard-gate
+    - CR1–CR5 parameter coherence
+    - RC1–RC8 reference-count discipline
+    - atomic-scope register AS1–AS7 (inviolable boundaries)
+    - V5 firewall
+    - VS-LIFECYCLE-01
+    - RAII owned-ref wrapper as baseline
+    - bounded-start honesty
+    - Design Compliance Review + 17-item checklist
+    - instrumentation discipline + recovery-search summary
+    - fmParallel final-goal invariant
+  plus any further rules the coder identifies or the user adds. ]
+```
 
 ---
 
@@ -378,6 +459,10 @@ The pack includes a short starter prompt for a new chat. It must:
 [ ] Document A's standing rules are CMS07.0-aligned (no old-architecture rule stated
     as current).
 [ ] Salvage policy present as a Document A section (not a separate document).
+[ ] §3A Prevailing Rules Register present; if populated, Document A's rules section
+    faithfully reproduces it; if pending, both say so consistently.
+[ ] Any rule change since the last pack was made IN §3A (the register), with the
+    revision date bumped — not only in Document A.
 [ ] Document B states controlling authority, first milestone, proof obligations,
     rule-enumeration requirement, do-not-implement list, hard gates.
 [ ] CMS07.0 included unchanged.

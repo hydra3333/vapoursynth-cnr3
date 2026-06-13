@@ -232,10 +232,14 @@ the coder's proposal under CMS07.0 §11, not fixed here):
 
 ---
 
-## 9. Standing rules (CMS07.0-aligned)
+## 9. Standing rules (reproduced from the Production Spec's Prevailing Rules Register)
 
-These govern all CNR3 work. Each is elaborated in CMS07.0 where noted; this list is the
-standing summary for sign-off.
+These govern all CNR3 work. **The authoritative master list is the Prevailing Rules
+Register in the Production Spec (§3A); this section reproduces it for the reader.** If
+this section and the spec's register ever disagree, the spec's register wins (this
+section was mis-transcribed). Once the coder's restart enumeration is signed off into
+the register, this section is regenerated to match it. Each rule is elaborated in
+CMS07.0 where noted.
 
 **9.1 Reuse existing processing boundaries.** Recovery/warm-up compute reuses the
 existing per-frame processing boundary; no parallel/duplicate pixel or frame algorithms
@@ -279,7 +283,10 @@ entry.
 
 ---
 
-## 10. Coding rules
+## 10. Coding rules (reproduced from the Production Spec §3A register)
+
+*(As with §9, the Production Spec's Prevailing Rules Register is authoritative; this
+section reproduces the coding rules for the reader.)*
 
 **Rule 1 — Code comments.** Concise, but never over-compress safety-critical comments:
 locking/threading invariants, ownership/lifetime, reference-count discipline, non-obvious

@@ -32,11 +32,15 @@ carefully before responding.
 alone):**
 1. This introduction.
 2. `cnr3_cache_manager_design_v7_0.md` (CMS07.0) — the controlling design.
-3. `Document_A_CNR3_Project_Context_and_Rules_v2_0.md` or later (project context /
-   standing rules — reference only, subordinate to CMS07.0 per the precedence rule
-   above).
-4. Current code snapshot after the `.h`/`.cpp` → `.txt` transition, if available.
-5. Any CNR2 reference source excerpts/files intended for pixel-layer salvage, if not
+3. `CNR3_Handover_Pack_Document_A_CNR3_Project_Context_and_Standing_Rules_v3_0.md`
+   (project context / standing rules — reference only, subordinate to CMS07.0 per the
+   precedence rule above).
+4. `CNR3_Handover_Pack_Document_B_CNR3_Restart_Work_Plan_and_First_Milestone_v3_0.md`
+   (current work plan / first milestone / do-not-implement list).
+5. `CNR3_Handover_Pack_Production_Spec_v2_0.md` (holds the §3A Prevailing Rules
+   Register that your enumeration will populate).
+6. Current code snapshot after the `.h`/`.cpp` → `.txt` transition, if available.
+7. Any CNR2 reference source excerpts/files intended for pixel-layer salvage, if not
    relying on live web lookup.
 
 If CMS07.0 itself is not attached, say so and stop — you can comment on this brief,
@@ -217,8 +221,11 @@ rules, for example:
 **Please list every prevailing rule you can identify from the aforementioned sources
 (CMS07.0, Document A, and our prior agreements), each numbered and stated briefly but
 with enough detail so that it is clear to a human, so that I can confirm, modify,
-supersede, or retire each one explicitly before this process coding begins. A new
-list of rules will thus be created applying to this new design and development.**
+supersede, or retire each one explicitly before this process coding begins. Once I
+sign off, the confirmed list is recorded into the Production Spec's Prevailing Rules
+Register (§3A) — the authoritative, durable home of the rule list — which future
+Document A versions reproduce. A new confirmed rule list thus applies to this new
+design and development.**
 
 **Do not assume any rule carries over silently — surface them all for my sign-off.**
 If a remembered prior agreement is not present in CMS07.0, Document A, or this

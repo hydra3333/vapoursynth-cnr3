@@ -67,12 +67,15 @@ purpose/parameter comments), aligned with separation of responsibilities, for re
 
 The coder enumerates **all** standing rules — from CMS07.0, Document A, and prior
 agreements — each numbered and stated clearly, for explicit confirmation, modification,
-supersession, or retirement before process coding begins. A new confirmed rule list
-results.
+supersession, or retirement before process coding begins.
+- **The signed-off result is recorded into the Production Spec's Prevailing Rules
+  Register (§3A), which is the authoritative durable home of the rule list.** Document A
+  then reproduces it. This document (B) only tracks the *status* of that task (see §8).
 - **No rule carries over silently.**
 - A rule remembered from prior context but not present in CMS07.0, Document A, or the
   restart introduction is surfaced as a **candidate** rule, marked as
-  remembered/prior-context-derived, and is **not controlling until confirmed.**
+  remembered/prior-context-derived, and is **not controlling until confirmed** into the
+  register.
 
 ---
 
@@ -128,4 +131,8 @@ Pixel layer:           Deferred to the salvage step; V8.1 approach recorded in C
                        pixel-maths reference (not its recovery logic).
 Handover pack bump:    This pack (v3.0) is the CMS07.0-aligned replacement for the
                        CMS06-era v2.0 pack.
+Prevailing Rules
+Register (Spec §3A):   PENDING FIRST POPULATION — to be filled by the coder's restart
+                       enumeration + user sign-off. Until then, CMS07.0 hard rules +
+                       the §3.5/§3.6 summary are operative.
 ```

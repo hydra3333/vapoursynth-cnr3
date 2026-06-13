@@ -1,11 +1,17 @@
 # CNR3 Handover Pack Production Specification
 
 **Date:** 2026-06-13
-**Version:** v2.0
-**Supersedes:** Production Spec v1.5 (which governed continuity through the CMS06.x
-proof phases). v2.0 governs the **CMS07.0 restart**: a clean architectural
+**Version:** v2.1
+**Supersedes:** Production Spec v1.5, which governed continuity through the CMS06.x
+proof phases. v2.1 governs the **CMS07.0 restart**: a clean architectural
 supersession, not a continuation. The governing purpose has changed, so this is a new
 version rather than an in-place edit of v1.5.
+**Reading Rule:** Unless a historical version is being discussed explicitly
+(make no assumption about that), references in this document to this
+spec version, pack version, or generated handover document version should be
+read as “this version or later.”
+For example, a reference to `v2.1` means `v2.1-or-later` once a later approved
+version exists.
 
 ---
 
@@ -19,7 +25,7 @@ controlling context and without re-deriving settled design.
 development line — it required carrying the previous pack forward as a baseline,
 preserving the full decision trail, and maintaining proof-phase state (H15.6B,
 CMS02-J0, old strict-state quarantine). CMS07.0 **completely supersedes** the previous
-cache design. Therefore v2.0 inverts several v1.5 rules: it deliberately *quarantines*
+cache design. Therefore v2.1 inverts several v1.5 rules: it deliberately *quarantines*
 the CMS06.x decision trail and proof state rather than preserving it as active, while
 preserving the enduring project context and standing coding/process rules.
 
@@ -34,9 +40,9 @@ No superseded cache assumption carries forward silently.
 
 ---
 
-## 2. Required handover pack files (LEAN — v2.0)
+## 2. Required handover pack files (LEAN — v2.1)
 
-The v2.0 pack is deliberately smaller than the v1.5/v2.0-era pack. Concerns that were
+The v2.1 pack is deliberately smaller than the v1.5/v2.1-era pack. Concerns that were
 separate documents are folded into sections where they will actually be read.
 
 ```text
@@ -51,7 +57,7 @@ Document_B_CNR3_Restart_Work_Plan_and_First_Milestone_<version>.md
 cnr3_cache_manager_design_v7_0.md
     CMS07.0 — included UNCHANGED as the controlling design authority.
 
-CNR3_Handover_Pack_Production_Spec_v2.0.md
+CNR3_Handover_Pack_Production_Spec_v2.1.md
     This spec — included for future regeneration.
 
 CNR3_Coder_Restart_Introduction_to_CMS07_0_FINAL.md
@@ -91,8 +97,8 @@ A pack can be structurally complete while a coding restart still lacks these com
 materials; the manifest/starter prompt notes which companion attachments are expected.
 
 **Numbering note:** the pack and its documents take a fresh version line appropriate to
-the restart (this spec is v2.0; the pack manifest version is the producer's choice,
-e.g. v3.0, to signal the clean break from the CMS06-era v2.0 pack). Do not reuse the
+the restart (this spec is v2.1; the pack manifest version is the producer's choice,
+e.g. v3.0, to signal the clean break from the CMS06-era v2.1 pack). Do not reuse the
 old CMS06-era pack version number unqualified.
 
 ---
@@ -537,7 +543,7 @@ The pack includes a short starter prompt for a new chat. It must:
 [ ] Document B states controlling authority, first milestone, proof obligations,
     rule-enumeration requirement, do-not-implement list, hard gates.
 [ ] CMS07.0 included unchanged.
-[ ] This Production Spec v2.0 included.
+[ ] This Production Spec v2.1 included.
 [ ] Coder restart introduction included.
 [ ] No old Document B/C, no old CMS06.x design docs, as ACTIVE inputs (archive only).
 [ ] Precedence + stop-and-ask wording present.

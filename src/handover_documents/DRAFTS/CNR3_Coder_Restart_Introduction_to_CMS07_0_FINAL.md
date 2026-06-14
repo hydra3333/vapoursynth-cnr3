@@ -44,7 +44,7 @@ material (working/environment material, not pack documents):
    precedence rule above).
 4. `CNR3_Handover_Pack_Document_B_CNR3_Restart_Work_Plan_and_First_Milestone_v3_0.md`
    (current work plan / first milestone / do-not-implement list).
-5. `CNR3_Handover_Pack_Production_Spec_v2_1.md` (holds the §3A Prevailing Rules
+5. `CNR3_Handover_Pack_Production_Spec_v2_2.md` (holds the §3A Prevailing Rules
    Register that your enumeration will populate).
 6. *(companion)* Current code snapshot after the `.h`/`.cpp` → `.txt` transition, if
    available.

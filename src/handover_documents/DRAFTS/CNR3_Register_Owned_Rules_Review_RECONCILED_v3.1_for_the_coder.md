@@ -646,6 +646,7 @@ descending search for the nearest present output, then ascending fill-of-holes-o
 Nothing in recovery or hole-filling may obstruct the fmParallel end-goal; any unavoidable
 temporary stepping-stone toward it must be explicitly recorded as such, must be slated for
 removal, and must not compromise the design path to fmParallel.
+The latest prevailing CMS outlines this.
 ```
 
 ---
@@ -662,8 +663,19 @@ perform cache-related actions. Adopted and made concrete.
 ```text
 The pixel/frame-processing layer performs pixel-layer work only. It must not own or
 perform any cache, recovery, request, pinning, eviction, checkpoint, hot-zone, or
-scheduling action, and must not read or mutate cache state. Such actions belong solely to
-the cache manager.
+scheduling action, and must not read or mutate cache state. Such actions belong
+solely to the cache manager.
+The pixel/frame-processing layer related code will likely reside in its own
+`.cpp` to encourage separation.
+The cache manager related code will likely reside in
+its own `.cpp` to encourage separation.
+The memory diagnostics related code will likely reside in its own `.cpp` to
+encourage separation.
+There will likely be a common global header `cnr3_common.h` containing common
+imports and ??? definitions etc ???, and likely a separate global header
+`cnr3_build_config.h` containing controlling `#if defined` blocks per R-PROCESS-12.
+Vapoursynth files `VapourSynth4.h` and `VSHelper4.h` remain separate as
+copied from vapoursynth sources.
 ```
 
 ---

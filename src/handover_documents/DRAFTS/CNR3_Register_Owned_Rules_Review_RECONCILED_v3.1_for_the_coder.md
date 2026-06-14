@@ -11,12 +11,12 @@ to the coder as-is.
 
 ## Reviewer general comment (read first)
 
-Three systemic problems run through the coder's proposed list. They should be fixed
-across ALL rules, not just the ones called out individually below.
+Three systemic problems run through the proposed list. They should be fixed
+across ALL rules, not just the ones mentioned individually below.
 
-1. **Lossy re-paraphrasing.** Many rules were restated in broader, vaguer language than
+1. **Lossy re-paraphrasing.** Many rules appear to have been restated in broader, vaguer language than
    we had agreed over the prior development. The effect is rules that "sound about
-   right" but have lost the precision that made them safe. The fix throughout is to pull
+   right" but may have lost the precision that made them safe. The fix throughout is to pull
    each rule back to its specific, operationalisable intent — a human reading it should
    not be able to construe it unsafely.
 
@@ -28,7 +28,7 @@ across ALL rules, not just the ones called out individually below.
    historical statements about what a version superseded, which stay pinned to that
    version.
 
-3. **Handover-pack vs its specification confused.** Some rules muddle "the handover pack"
+3. **Handover-pack vs its specification confused.** Some rules appear to muddle "the handover pack"
    (a point-in-time snapshot of project state, generated *from* the Handover Pack
    Creation Specification, possibly recycling parts of the prior Document A) with "the
    specification that governs how packs are made." These are different things; rules that
@@ -41,6 +41,7 @@ must not leave room for a permissive reading. fmParallel is the explicit end-gam
 nothing may be implemented that obstructs it unless it is an unavoidable, explicitly
 recorded, temporary stepping-stone that does not compromise the design path toward it.
 
+It is probably worth including this definition or similar above the inserted ruleset:
 **Definition used throughout (for clarity):**
 - **Register-owned rule** — a standing process / governance / authority / architecture /
   salvage rule that has NO home in the CMS design document, so the §3A register is its
@@ -50,6 +51,18 @@ recorded, temporary stepping-stone that does not compromise the design path towa
   restate, index, or rename it.
 - **§3A** — the Prevailing Rules Register section inside the Handover Pack Creation
   Specification; the durable, authoritative home for register-owned rules.
+
+The per-rule line starting with `**Decision:**` may be imprecise for this exercise, a
+change could also be inferred from the suggested wording and the rule category;
+where doubt exists ask for confirmation.
+
+The per-rule line starting with `**Reviewer comment:**` may be imprecise or irrelevant
+for this exercise with you, however if relevant they may inform the reason(s) for a
+suggested change.
+
+The per-rule suggested wording text has been reviewed and it would take a persuasive
+argument to vary it; not impossible, although a change must be supported by compelling
+reason(s).
 
 ---
 
@@ -458,6 +471,9 @@ intent.
 At restart commencement, the coder proposes the file/header/structure layout as text, for
 review. No files are created until that layout is explicitly signed off.
 ```
+
+---
+
 ## R-PROCESS-10 — Diagnostic output goes to stderr, not stdout
 
 **Decision:** PROPOSED new — CONFIRM (clean, standalone; no overlap).
@@ -496,7 +512,8 @@ Diagnostics serve two audiences and may be formatted accordingly:
   tooling can collate and analyse them from logs. Clarity must still be preserved.
 - Human-facing summaries — especially end-of-run summaries — must be well-formatted and
   easily read and interpreted by a human. Any tables must have aligned headings and
-  columns, clear labels, and, where helpful, a short legend or explanatory note.
+  columns, and data, clear labels, and, where applicable or by agreement,
+  a short legend and/or explanatory notes.
 ```
 
 ---
@@ -507,17 +524,24 @@ Diagnostics serve two audiences and may be formatted accordingly:
 collision) — CONFIRM. **R-CAND-04 MERGES into this rule (as Part B).**
 
 **Reviewer comment:** This is the compile-time-gating rule. Decisions taken (user
-confirmed): (1) **two independently-named gates per diagnostic** — a COMPUTE gate and a
-PRINT gate, not one shared name; (2) both are preprocessor gates (`#if defined`), because
+confirmed): 
+(1) **two independently-named gates per diagnostic** — a COMPUTE gate and a
+PRINT gate, not one shared name; 
+(2) both are preprocessor gates (`#if defined`), because
 compute and print are foreseen to live in *separate* places (e.g. accumulate during
-processing, print a summary later), and `if constexpr` is unsuitable for a separated print
-gate (the print code would still have to compile and its data still exist when printing is
-off); (3) the **print gate is structurally subordinate to the compute gate** — the print
-`#define` is nested inside `#if defined(<compute gate>)`, so "print on, compute off" is
-impossible to express, not merely detected; (4) a defensive `#error` cross-check is kept
-even though the structure already makes it unreachable, because a future edit to the header
-could break the subordination — the guard then catches that mistake at compile time.
-R-CAND-04 (no correctness behind a disabled guard) folds in as Part B.
+processing, print a summary later), and `if constexpr` is deemed unsuitable for a separated
+print gate (the print code would still have to compile and its data still exist when
+printing is off); 
+(3) the **print gate is structurally subordinate to the compute gate** —
+the print `#define` is nested inside `#if defined(<compute gate>)`, so "print on, compute
+off" is impossible to express, not merely detected; 
+(4) a defensive `#error` cross-check is
+kept even though the structure already makes it unreachable, because a future edit to the
+header could break the subordination — the guard then catches that mistake at compile time.
+R-CAND-04 (no correctness behind a disabled guard) folds in as Part B. **Part C is net-new
+(not from R-CAND-04):** it fences off the legitimate case of a temporary behaviour-changing
+scaffold so it cannot be confused with — or hidden behind — a diagnostic gate, keeping
+Part B's "diagnostics observe only" invariant absolute.
 
 **Suggested wording:**
 ```text
@@ -531,7 +555,6 @@ printing can never be enabled unless computing is enabled (compute-on/print-off 
 but stay silent" — is allowed and is a normal case). A defensive #error cross-check is
 retained to catch any future edit that breaks this subordination. Disabling a gate must
 leave the build warning-clean.
-
 Canonical header pattern:
     // config.h — COMMENT OUT a #define to disable that gate.
     #define DIAG_COMPUTE_X 1          // define to CALCULATE diagnostic X
@@ -546,10 +569,35 @@ Canonical header pattern:
 Then: the compute block guards on DIAG_COMPUTE_X; the print block guards on DIAG_PRINT_X,
 wherever each lives. (Confirm concrete macro naming when proposing the layout.)
 
-Part B — Proof/correctness gating (formerly the R-CAND-04 discipline):
+Part B — Proof/correctness gating:
 Code required for CORRECTNESS must never live inside a disabled diagnostic/proof guard.
 Enabling or disabling any diagnostic or proof gate must never change correct program
-behaviour — gates may add observation, never alter results.
+behaviour — a DIAG_* gate may add observation only, never alter behaviour or results.
+(No exceptions: if toggling a DIAG_* gate would change behaviour, it is misused — the
+behaviour-changing part belongs under Part C, not behind a diagnostic gate.)
+
+Part C — Temporary behavioural scaffolds (NOT diagnostic gates):
+A change that deliberately alters behaviour for a phase/subphase (e.g. forcing a path,
+injecting a stub, disabling an optimisation to expose a defect) is NOT a diagnostic gate
+and must not use a DIAG_* name. It is permitted only when ALL of the following hold:
+  - it is clearly described in the subphase proposal, with the behaviour change and its
+    rationale stated explicitly;
+  - it carries a standard searchable marker so every active scaffold is found with a
+    single search — both a comment tag `// BEHAVIOURAL-SCAFFOLD:` AND a macro named with a
+    `SCAFFOLD_*` prefix (the exact token set is confirmed when the layout is proposed, but
+    one agreed convention is used everywhere — coders/sessions must not invent variants);
+  - it is recorded as an outstanding behaviour-fixing action to be unwound at the earliest
+    safe point;
+  - the outstanding actions are reviewed at every subphase to see whether it is yet safe
+    to unwind them;
+  - if any remain outstanding at the end of a phase, a discussion occurs to agree when
+    each will be fixed (rescheduling is permitted by discussion and agreement).
+A behavioural scaffold must never silently persist.
+
+First-milestone restriction: during the first cache-core milestone (proving the cache
+manager in isolation), behavioural scaffolds are DISALLOWED unless explicitly agreed per
+case — the proving phase is kept free of behaviour-altering scaffolds so the core is
+proven on its real behaviour.
 ```
 
 ---

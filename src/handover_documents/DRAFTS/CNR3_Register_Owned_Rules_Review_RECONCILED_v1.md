@@ -301,10 +301,10 @@ counters the lossy-paraphrasing problem.
 **Suggested wording:**
 ```text
 Code comments must be clear, reasonably concise, relevant, and genuinely useful to a
-human maintainer, but must never over-compress safety-critical information: locking and
-threading invariants, ownership and lifetime, reference-count discipline, non-obvious
+human maintainer, but must never over-compress contextual nor safety-critical information such
+as locking and threading invariants, ownership and lifetime, reference-count discipline, non-obvious
 pre/postconditions, and silent-bug invariants. When modifying code, do not needlessly
-re-word or re-summarise existing safety comments in a way that loses detail. This
+re-word or re-summarise existing safety comments in a way that obscures or loses detail. This
 obligation includes placing clear explanatory comments above the CR1–CR5 constants; the
 substance of CR1–CR5 remains defined in the latest prevailing CMS.
 ```
@@ -323,7 +323,7 @@ typos.
 
 **Suggested wording:**
 ```text
-Code-update instructions for the human developer/maintainer (e.g. for the latest Visual
+Code-update instructions for the human developer/maintainer (e.g. using the latest Visual
 Studio) must let a human uniquely and visually locate the change. Each instruction must:
 state the file and the function/location; show a BEFORE block and an AFTER block; include
 enough surrounding context in BOTH blocks (a few lines immediately before and after the
@@ -344,7 +344,7 @@ mid-development on approval is a useful, realistic clarification and is adopted.
 ```text
 CMS07 development restarts Phase/SubPhase numbering. The coder proposes the concrete
 expanded Phase/SubPhase naming convention before coding, unless the user approves a
-different convention. During development, the coder may propose to split, join, or
+different convention. During development, the coder may propose to split, join, remove, or
 renumber in-progress and/or subsequent phases based on prevailing circumstances, and does
 so only on approval from the managing user.
 ```
@@ -360,17 +360,21 @@ here.
 multi-line body; github/Visual Studio compatible) is good and adopted. R-CAND-05 is a
 duplicate of this rule and should be merged in, not kept separate.
 
+PLEASE REFER TO R-CAND-05 to see if these can be cleaned up somehow.
+
 **Suggested wording:**
 ```text
 When a development or test step is agreed PASS, provide a suitable commit message unless
 the user asks otherwise. The format is github / Visual Studio compatible: a single-line
 title, then a blank line, then a multi-line body. Title and body should carry the
-relevant summary information about the change.
+relevant summary information about the change. Following an agreement to move forward even
+with a part-PASS or a no PASS or another condition, a commit message should generated
+after that agreement.
 ```
 
 ---
 
-## R-PROCESS-05 — Diagnostics-as-hard-gate
+## R-PROCESS-05 — Diagnostic-assessment-as-hard-gate
 
 **Decision:** CONFIRM with modification (the user's wording, adopted and tidied).
 
@@ -381,10 +385,11 @@ a FAIL. Adopted. This is a core safety gate; keep it strong.
 **Suggested wording:**
 ```text
 After each development/maintenance phase or subphase, the relevant diagnostic information
-must be tested, captured, and checked, and a PASS or FAIL view formed (a partial fail is a
-FAIL). Any unexpected counter or error value, or anomalous reference-count, prune,
-validation, recovery-search, or other diagnosed value, stops progression until it is
-understood and discussed and the diagnostic/rectification direction is agreed.
+must be captured and checked, and a PASS or FAIL view formed (a partial fail is a
+FAIL and noted as such). Any unexpected or anomalous counter or error value, or
+reference-count, prune, validation, recovery-search, or other diagnosed value,
+stops progression until it is understood and discussed and the 
+diagnostic/rectification/direction is assessed and agreed.
 ```
 
 ---
@@ -452,6 +457,131 @@ intent.
 ```text
 At restart commencement, the coder proposes the file/header/structure layout as text, for
 review. No files are created until that layout is explicitly signed off.
+```
+## R-PROCESS-10 — All diagnostic output goes to stderr
+
+**Decision:** PROPOSED new.
+
+**Reviewer comment:** outputs going to stdout interferes with vspipe piping into ffmpeg etc.
+
+**Suggested wording:**
+```text
+All outputs such as printed diagnostic information must go to stderr and not to stdout.
+Wherever possible, print should be flushed so that order of occurrence may be inferred.
+For clarity, this specifically does not apply to calls/information exchanged
+between this program and vapoursynth itself.
+```
+
+## R-PROCESS-11 — Human readable diagnostics
+
+**Decision:** PROPOSED new.
+
+**Reviewer comment:** not all diagnostics need to be easily readable as AI may more easily find/collate some
+                        however summaries (eg at the end) must be well-formatted and easily
+                        read and interpreted by humans. All tables nust have lined-up headings
+                        and column data and be well llabeleld and in some cases have relevant legends/comments.
+
+NOW REFER TO R-CAND-03 for potential cleanup somehow.
+
+**Suggested wording:**
+```text
+Although preferable, not all diagnostics need to be easily readable by humans as AI may more
+easily find/collate some categories of diagnostics in logs and analyse and report, however
+summaries (eg at the end) must be well-formatted and easily read and interpreted by humans.
+All tables must have well-aligned headings and column data and be well labeleld and in some
+cases have relevant legends/comments.
+```
+
+## R-PROCESS-10 — All diagnostic must be compile-time gated
+
+**Decision:** PROPOSED new.
+
+**Reviewer comment:** 
+
+Code for diagnostics must be hard gated so that at compile-time it does not end up as 
+executable code unless intentionally enabled; further, associated diagnostic printing must be
+secondarily gated so that diagnostic information may be collected/computed but the
+associated printing of it can be enabled or disabled.
+It is foreseeable that one or several diaganostics may be associated with a specific feature or action
+or proving test, and as such a hard gate pair (one for computing diagnostics and one for the
+associated printing of those diagnostics) may surround several compute-blocks and print-blocks;
+never enable a print-block without its associated-compute block unless the data used in the
+print block is computed differently/elsewhere (eg as a paert of non-diagnostics code).
+Perhaps `static constexpr` and/or `inline constexpr` in a global `.h` can be used to facilitate this
+although Google tells me we may need to adopt a different approach:
+    To prevent blocks of code from being compiled into your executable based on a global
+    configuration header, neither static `constexpr` nor `inline constexpr` should be used alone
+    to surround code blocks. Instead, you must use preprocessor macros (#if / #endif) combined
+    with these constants.
+    How to Prevent Code Compilation:
+        C++ statements like if constexpr do not stop code from being compiled into the executable;
+        they only stop it from executing. The compiler still parses and compiles the code block,
+        and it must be syntactically valid. To completely exclude code from compilation across
+        different modules, you must use preprocessor macros.
+        Approach 1: Preprocessor Macros (True Exclusion)
+            This is the only way to completely prevent code from being compiled or checked
+            by the compiler in that build configuration.
+            config.h
+                #pragma once
+                // Comment this line out to completely exclude the feature
+                #define ENABLE_FEATURE_A 1 
+                // Use code with caution.
+            module.cpp
+                #include "config.h"
+                void process() {
+                #if defined(ENABLE_FEATURE_A)
+                    // This block is compiled ONLY if ENABLE_FEATURE_A is defined
+                    run_heavy_feature();
+                #endif
+                }
+        Approach 2: if constexpr (Dead Code Elimination)
+            If you want to use C++ constants instead of macros, you can use if constexpr.
+            The compiler will still compile the code, but if the condition is false,
+            the compiler optimizer will strip the dead code out of the final executable binary.
+            Note: For if constexpr to work, run_heavy_feature() must still exist and be syntactically valid, even if enable_feature_a is false.
+            config.h
+                #pragma once
+                // inline constexpr is preferred in C++17 to avoid duplicate instances
+                inline constexpr bool enable_feature_a = true; 
+            module.cpp
+                #include "config.h"
+                void process() {
+                    if constexpr (enable_feature_a) {
+                        // Compiled, but stripped from binary if enable_feature_a is false
+                        run_heavy_feature(); 
+                    }
+                }
+If do not know if/how nested #if defined works/
+Please help: how to choose which approach and then encapsulate in a rule ? Probably Approach 1 as a guess.
+
+NOW REFER TO R-CAND-04 for potential cleanup somehow.
+
+**Suggested initial wording subject to reviewing and choosing an approach:**
+```text
+Code for diagnostics must be hard gated so that at compile-time it does not end up as 
+executable code unless intentionally enabled; further, associated diagnostic printing must be
+secondarily gated so that diagnostic information may be collected/computed but the
+associated printing of it can be enabled or disabled.
+It is foreseeable that one or several diaganostics may be associated with a specific feature or action
+or proving test, and as such a hard gate pair (one for computing diagnostics and one for the
+associated printing of those diagnostics) may surround several compute-blocks and print-blocks;
+never enable a print-block without its associated-compute block unless the data used in the
+print block is computed differently/elsewhere (eg as a paert of non-diagnostics code).
+```
+
+## R-PROCESS-13 — Do not perform print and long-running actions etc inside atomics
+
+**Decision:** PROPOSED new.
+
+**Reviewer comment:** atomics are specififcally scoped and the minimum (but all necessary) processing should occur within them
+
+**Suggested wording:**
+```text
+Do not perform print (eg for diagnostics) within atomics; all atomics are specifically
+scoped by the designer and minimum (but all necessary) processing should occur within them.
+Variables and data structures etc (eg including for diagnostics) may be maniplulated within
+atomics however long-running actions not specified by the designer individually require prior
+discussion and approval to proceed before coding.
 ```
 
 ---
@@ -602,7 +732,7 @@ systemic fix is version-neutral wording for the "replacement lives in the CMS" p
 latest prevailing CMS.
 **Suggested wording:**
 ```text
-The old model in which non-checkpoint pinning was deferred or emergency-only is
+The old model in which non-checkpoint pinning was deferred or emergency-only is completely
 superseded by mandatory consumer-pinning, as defined in the latest prevailing CMS.
 ```
 
@@ -615,7 +745,7 @@ superseded by mandatory consumer-pinning, as defined in the latest prevailing CM
 pin-lists) lives in the CMS.
 **Suggested wording:**
 ```text
-Held-ref-only predecessor reservation as the default architecture is superseded by
+Held-ref-only predecessor reservation as the default architecture is completely superseded by
 consumer-held pins on per-invocation pin-lists, as defined in the latest prevailing CMS.
 ```
 
@@ -628,8 +758,8 @@ consumer-held pins on per-invocation pin-lists, as defined in the latest prevail
 recurring confusion. A checkpoint is a separate eviction-protection flag.
 **Suggested wording:**
 ```text
-Any reasoning or wording that treats a checkpoint as a pin is retired. A checkpoint is a
-separate eviction-protection flag with its own retention rule; there is exactly one pin
+Any reasoning or wording that treats a checkpoint as a pin is completely retired. A checkpoint
+is a separate eviction-protection flag with its own retention rule; there is exactly one pin
 concept (consumer-claim), as defined in the latest prevailing CMS.
 ```
 
@@ -637,12 +767,12 @@ concept (consumer-claim), as defined in the latest prevailing CMS.
 
 ## R-RETIRED-04 — Hot-zone-as-active-findability guarantee is superseded
 
-**Decision:** CONFIRM (record as superseded).
+**Decision:** CONFIRM with minor modification (record as superseded).
 **Reviewer comment:** Correct. Pins provide active liveness; hot zones are prune-policy
 hints. Replacement lives in the CMS.
 **Suggested wording:**
 ```text
-The model in which hot zones guaranteed active-frame findability is superseded. Pins
+The model in which hot zones guaranteed active-frame findability is superseded. Instead, pins
 provide active liveness; hot zones are prune-policy hints only, as defined in the latest
 prevailing CMS.
 ```
@@ -658,8 +788,8 @@ model.
 **Suggested wording:**
 ```text
 The old blanket backward source-request window (and its "bounded-warmup" framing) is
-superseded by the dissolved source-window model — request source N plus genuine holes
-only — as defined in the latest prevailing CMS.
+completely superseded by the dissolved source-window model — request source N plus
+genuine holes only — as defined in the latest prevailing CMS.
 ```
 
 ---
@@ -670,8 +800,8 @@ only — as defined in the latest prevailing CMS.
 **Reviewer comment:** Correct. This is a restart; the old work item is not continued.
 **Suggested wording:**
 ```text
-CMS06.x / H15.6B coding is not continued as an active path in the CMS07 restart. It is
-recorded here as a retired work item to prevent accidental resumption.
+CMS06.x / H15.6B coding is completely discontinued as an active path in and beyond the
+CMS07 restart. It is recorded here as a retired work item to prevent accidental resumption.
 ```
 
 ---
@@ -697,7 +827,7 @@ each. None should be treated as controlling yet.
 
 ## R-CAND-01 — Prefer ASCII-only code-update instructions
 
-**Decision:** KEEP AS CANDIDATE (lean: confirm later as a low-cost hygiene rule).
+**Decision:** CONFIRMED (lean: confirm later as a low-cost hygiene rule).
 **Reviewer comment:** Reasonable, low-risk preference (avoids editor/compiler/copy-paste
 issues with non-ASCII). Recommend confirming, but it stays candidate until you say so.
 **Suggested wording (if confirmed):**
@@ -710,7 +840,7 @@ copy-paste issues with non-ASCII characters.
 
 ## R-CAND-02 — Avoid unnecessary unrelated code/comment/layout/name changes
 
-**Decision:** KEEP AS CANDIDATE (lean: confirm — this is a valuable discipline).
+**Decision:** CONFIRMED (lean: confirm — this is a valuable discipline).
 **Reviewer comment:** This is worth confirming; it directly protects against churn and
 against the lossy-rewrite problem seen in this very review. Stays candidate until you
 confirm.
@@ -725,12 +855,19 @@ change actually needs.
 
 ## R-CAND-03 — Large diagnostic prints may be one line where practical
 
-**Decision:** KEEP AS CANDIDATE (lean: confirm as a soft preference, not a hard rule).
+**Decision:** ???? KEEP AS CANDIDATE (lean: confirm as a soft preference, not a hard rule).
 **Reviewer comment:** Fine as a preference; should not be a hard rule. Stays candidate.
+
+QUERY:
+CAN WE COMBINE THIS OR SOMEHOW OTHERWISE MAKE USEFUL SEPARATE RULES WHEN LOOKING
+AT THIS IN CONJUCTION WITH  R-PROCESS-11 — Human readable diagnostics
+I LOOK TO TO DECIDE WHAT TO DO AND HOW TO DO IT.
+
 **Suggested wording (if confirmed):**
 ```text
 Large diagnostic prints may be formatted on a single line where practical to reduce line
 count, provided clarity is preserved.
+
 ```
 
 ---
@@ -742,6 +879,13 @@ count, provided clarity is preserved.
 rule (correctness must never live inside a disabled debug/proof guard). Recommend
 confirming. Note it pairs with the diagnostics gate (R-PROCESS-05). Stays candidate until
 you confirm.
+
+QUERY:
+CAN WE COMBINE THIS OR SOMEHOW OTHERWISE MAKE USEFUL SEPARATE RULES WHEN LOOKING
+AT THIS IN CONJUCTION WITH  R-PROCESS-10 — All diagnostic must be compile-time gated
+I LOOK TO TO DECIDE WHAT TO DO AND HOW TO DO IT.
+
+
 **Suggested wording (if confirmed):**
 ```text
 Proof scaffolding uses compile-time constexpr gates. Code required for correctness must
@@ -756,6 +900,13 @@ correct behaviour.
 **Decision:** MERGE WITH R-PROCESS-04 (do not keep as a separate rule).
 **Reviewer comment:** This duplicates R-PROCESS-04. Merge it in there and drop the
 separate entry, as already flagged.
+
+QUERY:
+CAN WE COMBINE THIS OR SOMEHOW OTHERWISE MAKE USEFUL SEPARATE RULES WHEN LOOKING
+AT THIS IN CONJUCTION WITH  R-PROCESS-10 — All diagnostic must be compile-time gated
+I LOOK TO TO DECIDE WHAT TO DO AND HOW TO DO IT.
+
+
 **Suggested wording:** (folded into R-PROCESS-04 above.)
 
 ---

@@ -1,0 +1,770 @@
+# CNR3 Handover Pack Production Specification
+
+**Date:** 2026-06-13
+**Version:** v2.2
+**Supersedes:** Production Spec v1.5, which governed continuity through the CMS06.x
+proof phases. v2.2 governs the **CMS07.0 restart**: a clean architectural
+supersession, not a continuation. The governing purpose has changed, so this is a new
+version rather than an in-place edit of v1.5.
+**Reading Rule:** Unless a historical version is being discussed explicitly
+(make no assumption about that), references in this document to this
+spec version, pack version, or generated handover document version should be
+read as “this version or later.”
+For example, a reference to `v2.2` means `v2.2-or-later` once a later approved
+version exists.
+
+**CMS07.0 Reading Rule:** References to **CMS07.0** as the controlling design mean
+**CMS07.0 or its later approved successor** (e.g. a future CMS07.1 / CMS08). EXCEPT:
+(a) specific CMS07.0 section pointers (e.g. “§9A.2”, “§8.7”) are version-specific to
+CMS07.0 and must be re-checked against any successor — “or-later” does NOT promise a
+section number is stable across versions; (b) historical statements about what CMS07.0
+superseded remain pinned to CMS07.0; (c) the literal filename
+`cnr3_cache_manager_design_v7_0.md` denotes that specific file. This convention is
+stated once here and governs the whole document; body references are written as plain
+“CMS07.0”.
+
+---
+
+## 1. Purpose of this specification
+
+This specification defines how to produce the CNR3 handover pack for the **CMS07.0
+restart**. A handover pack lets a new chat (AI or human) resume CNR3 work with full
+controlling context and without re-deriving settled design.
+
+**What changed from v1.5.** v1.5 was built to *preserve and continue* the CMS06.x
+development line — it required carrying the previous pack forward as a baseline,
+preserving the full decision trail, and maintaining proof-phase state (H15.6B,
+CMS02-J0, old strict-state quarantine). CMS07.0 **completely supersedes** the previous
+cache design. Therefore v2.2 inverts several v1.5 rules: it deliberately *quarantines*
+the CMS06.x decision trail and proof state rather than preserving it as active, while
+preserving the enduring project context and standing coding/process rules.
+
+**The single most important principle:**
+
+```text
+CMS07.0 is the controlling design authority.
+The CMS06.x decision trail and proof state are historical, not active.
+Old code is salvage reference only, where verifiably safe.
+No superseded cache assumption carries forward silently.
+```
+
+---
+
+## 2. Required handover pack files (LEAN — v2.2)
+
+The v2.2 pack is deliberately smaller than the v1.5/v2.0-era (CMS06-era) pack. Concerns that were
+separate documents are folded into sections where they will actually be read.
+
+```text
+Document_A_CNR3_Project_Context_and_Standing_Rules_<version>.md
+    Human-facing project context + goal + the old/new supersession story +
+    standing coding/process/design/safety rules + salvage policy (as a section).
+
+Document_B_CNR3_Restart_Work_Plan_and_First_Milestone_<version>.md
+    Current controlling authority pointer, first milestone, proof obligations,
+    prevailing-rules-enumeration requirement, current do-not-implement list.
+
+cnr3_cache_manager_design_v7_0.md
+    CMS07.0 — included UNCHANGED as the controlling design authority.
+
+CNR3_Handover_Pack_Production_Spec_v2.2.md
+    This spec — included for future regeneration.
+
+CNR3_Coder_Restart_Introduction_to_CMS07_0_FINAL.md
+    The coder restart brief (paste-ahead introduction).
+
+CNR3_Handover_Pack_<version>_MANIFEST.md
+    Reading order, hard precedence, pack integrity (checksums).
+```
+
+**Deliberately NOT in the pack:**
+- The old Document B (CMS06.x decision log) and Document C (CMS06.x volatile state) —
+  excluded as active inputs. CMS07.0 §9A and §12/§12A already carry forward the
+  still-valid rules and decisions; including the old B/C is the main route by which
+  stale CMS06-era assumptions re-enter. They may be retained OUTSIDE the pack as
+  historical archive only.
+- The old `cnr3_cache_manager_design_v6_11.md` and earlier — historical archive only,
+  never an active design input. CMS07.0 is the sole design authority.
+- The old CMS06.x reconciliation notes — historical.
+
+**Core pack files vs companion coding-start attachments.** The files listed above are
+the CORE handover pack — self-contained for understanding the project and the
+controlling design. A coding-restart chat additionally needs COMPANION attachments that
+are not part of the pack proper (they are environment/working material, not durable pack
+documents):
+```text
+Core handover pack files (durable, versioned, checksummed in the manifest):
+    Document A, Document B, CMS07.0, this Production Spec, the coder restart
+    introduction, the manifest.
+
+Companion coding-start attachments (provided alongside, not pack documents):
+    - current .txt code snapshot (after the .h/.cpp -> .txt transition), if available;
+    - CNR2 reference source/excerpts for pixel-layer salvage, if not relying on live
+      web lookup;
+    - any relevant logs.
+```
+A pack can be structurally complete while a coding restart still lacks these companion
+materials; the manifest/starter prompt notes which companion attachments are expected.
+
+**Numbering note:** the pack and its documents take a fresh version line appropriate to
+the restart (this spec is v2.2; the pack manifest version is the producer's choice,
+e.g. v3.0, to signal the clean break from the CMS06-era v2.0-or-lower pack). Do not reuse the
+old CMS06-era pack version number unqualified.
+
+---
+
+## 2A. Drafting rules for the restart (replaces v1.5 §2A continuity rules)
+
+v1.5 §2A required the previous approved pack as the drafting baseline and forbade
+abbreviation. For the restart, the baseline changes and some preservation is
+deliberately dropped.
+
+**2A.1 Drafting baseline (context AND rules are mastered in THIS spec).**
+- **Enduring human context** is mastered in §3.2 of THIS specification (the canonical
+  context). Document A's context section is a **verbatim reproduction** of §3.2 — copied,
+  not paraphrased, summarised, or regenerated. This reverses the earlier
+  forward-carry-from-Document-A approach: because the regeneration tooling favours brevity
+  and may silently thin detail, the authoritative copy is held in the spec (hand-edited,
+  infrequent) and Document A reproduces it. If Document A's context and §3.2 differ, §3.2
+  wins and Document A is corrected to match (§3.2.0). Context changes are made in §3.2,
+  not in Document A.
+- **The prevailing rules** are mastered in §3A (the Prevailing Rules Register held in
+  THIS spec). Document A's rules section is GENERATED to reproduce §3A; it is not an
+  independent source.
+- **The controlling design** is the latest prevailing CMS.
+- Do NOT use the old Document B/C as drafting baselines for context or rules.
+
+**2A.2 No abbreviation of ENDURING context — richness is MANDATORY and checkable.**
+The canonical context (§3.2) is rich by design, and Document A reproduces it verbatim.
+The human-facing project context, the reason the project exists, the algorithmic
+orientation, and the goal statement must never be reduced to a stub or a bare bullet
+list. This is the one part of the pack where length and detail are a FEATURE, not a
+fault: it must read as genuine, engaging human orientation that lets a newcomer
+understand what CNR3 is, why it exists, and why it is hard, from the document alone. A
+generated Document A whose context is thinned, summarised, or otherwise diverges from
+§3.2 FAILS the §9 checklist and is corrected to match §3.2. The rules content likewise
+comes from §3A (the register), reproduced in full.
+
+**2A.3 DO quarantine superseded material.** Unlike v1.5, the restart REQUIRES omitting
+superseded development material from active sections. The following must NOT appear as
+current/active direction (only, if at all, as explicitly-labelled historical note):
+- CMS06.x phase state as active state;
+- CMS06.x decisions as controlling decisions;
+- old Document B/C content as active decision/state input;
+- H15.6B, CMS02-H, CMS02-J0, old strict-state quarantine, old cache-authority work, or
+  reserved-predecessor/held-ref mechanisms as current implementation direction;
+- old cache-manager implementation detail except as explicitly marked
+  historical/salvage reference.
+
+**2A.4 Correct, don't silently distort.** Where old Document A context is still true,
+keep it. Where it described the OLD architecture (deferred pinning, held-ref
+reservation, bounded-warmup conservative window, zone-as-findability-guarantee), it
+must be CORRECTED to the CMS07.0 model, not silently carried. Mark such corrections so
+a reader sees the supersession.
+
+**2A.5 Review requirement.** A generated pack is reviewed before use: confirm CMS07.0
+is the stated authority everywhere, confirm no superseded material appears as active,
+confirm the §3 context requirement is met, and run the §11 checklist.
+
+---
+
+## 3. Document A — project context and standing rules
+
+`Document_A_CNR3_Project_Context_and_Standing_Rules_<version>.md`
+
+### 3.1 Purpose
+
+Document A orients a new AI or human maintainer BEFORE they touch anything. It is the
+human-facing front door to the project. It must set the scene richly: what CNR3 is,
+why it exists, why it is hard, what changed at the CMS07.0 restart, and the standing
+rules that govern all work.
+
+### 3.2 Canonical project context (AUTHORITATIVE MASTER — Document A reproduces this verbatim)
+
+**This section is the authoritative master copy of the CNR3 overall-context material.**
+It is not merely a checklist of what Document A must cover — the prose below IS the
+context, and Document A reproduces it **verbatim** (see §3.2.0). It is intentionally
+detailed and must remain so: a new maintainer should be able to understand the project's
+purpose and dangers from this text alone.
+
+**3.2.0 Why the context master lives HERE, and how it propagates.**
+The authoritative copy of the overall-context material lives in THIS specification, not
+in Document A, for a concrete operational reason: Document A is regenerated at every
+handover, and the regeneration tooling tends to favour brevity and may silently thin or
+"mangle" detail — especially if asked to do something else (e.g. a code cross-check) in
+the same pass. The specification, by contrast, is hand-edited deliberately and
+infrequently. Holding the master here therefore protects the context from gradual
+erosion. Propagation and precedence:
+- Document A's context section is a **verbatim reproduction** of §3.2 (§3.2.1–§3.2.8
+  below) — copied, NOT paraphrased, summarised, or regenerated. The region is reproduced
+  exactly, headings and all.
+- If Document A's context and §3.2 ever differ, **§3.2 wins**; the difference is treated
+  as a transcription/thinning error and Document A is corrected (regenerated) to match,
+  with the mismatch noted.
+- When the context genuinely needs to change, it is changed **HERE in §3.2** (deliberate,
+  hand-edited), with the change date noted; the next Document A regeneration carries it
+  forward verbatim.
+- This is a deliberate, documented duplication (master here, verbatim copy in Document A).
+  It is NOT accidental redundancy and must not be "tidied away" by removing the copy from
+  Document A — the copy exists so the human-facing front door is self-contained, while the
+  master exists so the text cannot be silently eroded by regeneration tooling.
+
+*(The §3.2.x text below is the canonical context. BEGIN verbatim-reproduction region.)*
+
+**3.2.1 What CNR3 is, and why this project exists.**
+CNR3 is a VapourSynth **API4-only**, **integer-YUV-only** recursive temporal chroma
+stabiliser, inspired by the CNR2 / vscnr2 temporal chroma-stabilisation algorithm.
+
+The human reason for the project: old analogue video — VHS, VHS-C, and similar tape and
+capture sources — carries temporal chroma instability: colour that shimmers, crawls, and
+flickers frame to frame even where the picture is essentially still. CNR3 exists to
+*stabilise that chroma* during restoration: to reduce chroma shimmer, dot-crawl-like
+instability, and temporal chroma noise by reusing controlled amounts of the **previous
+filtered chroma** where the content is stable enough to allow it — without smearing
+genuine motion and without dragging colour across scene cuts. The aim is clean, stable
+colour on restored analogue captures that still looks natural.
+
+The project's concrete aims:
+- redevelop CNR2/vscnr2-style chroma stabilisation in modern C++;
+- target VapourSynth API4 only (no API3-era types, assumptions, or scheduling shortcuts);
+- support integer YUV formats only;
+- get recursive chroma-stabilisation correctness right *before* pursuing parallel
+  performance;
+- operate safely under modern, possibly out-of-order, VapourSynth frame requests;
+- provide strong diagnostics for cache, threading, memory, and reference-count behaviour.
+
+Primary target material is PAL VHS/VHS-C captures (720×576), though the design is
+format-adaptive.
+
+**3.2.2 The load-bearing fact (why CNR3 is not a normal filter).**
+CNR3 is **not** a normal stateless image filter. It is a **recursive temporal** filter:
+the output for one frame depends on the *already-filtered output* of the previous frame.
+```text
+output[N] depends on source[N] and output[N - 1]
+```
+The predecessor is **not** merely `source[N - 1]`. It is the already-filtered output
+frame `N - 1`.
+
+If VapourSynth requested frames strictly in display order (0, 1, 2, 3, 4), a naive
+previous-frame-only implementation could appear to work. But a modern VapourSynth graph
+is **not** required to request frames in display order. A filter may be asked for, e.g.:
+```text
+0, 3, 1, 2, 4
+```
+A naive implementation fails at frame 3, because the correct filtered `output[2]` does
+not yet exist. It might reject the request, use the wrong predecessor, or corrupt the
+recursive chain. **This single fact is the source of every hard problem in CNR3, and the
+reason the cache subsystem exists.**
+
+**3.2.3 The algorithmic core.**
+At a high level:
+```text
+For luma Y:
+    copy source luma unchanged.
+
+For chroma U/V:
+    compare current source chroma against previous filtered chroma;
+    compare current downsampled luma against previous downsampled luma;
+    use signed-difference response tables for luma and chroma;
+    blend current source chroma toward previous filtered chroma by the combined response.
+```
+Conceptually:
+```text
+weight = response_y(diff_y) * response_chroma(diff_chroma)
+output_chroma[N] = weighted blend of  output_chroma[N-1]  and  source_chroma[N]
+```
+Small differences (stable content) → strong blend toward the previous filtered chroma
+(denoise). Large differences (motion, change) → weak blend, trust the current source
+(don't smear).
+
+Scene-change handling: carrying previous filtered chroma across a true scene cut would
+smear or contaminate the new scene. When scene-change detection fires (during the
+compute, by comparing the frame to its predecessor), CNR3 copies the current source
+chroma and skips the recursive blend for that frame — a fresh start.
+
+*(Pixel-layer implementation note: CNR3 computes in native subsampling at native bit
+depth, using a wide int64 arithmetic accumulator for the weighted blend with the shift
+scaled by depth — the proven overflow-safe approach. This is pixel-layer detail; see the
+latest prevailing CMS, V8.1.)*
+
+**3.2.4 Why VapourSynth scheduling is central.**
+VapourSynth evaluates a filter graph by asking filters for frames through a `getFrame`
+callback.
+```text
+arInitial:
+    VapourSynth is asking the filter to start work for frame N.
+    The filter requests any upstream/source frames it needs.
+
+arAllFramesReady:
+    The requested upstream/source frames are available.
+    The filter reads source data, produces output, and returns a frame.
+```
+Implications a recursive filter must respect:
+- `arInitial` is request-arrival; `arAllFramesReady` is **not** the same as frame N being
+  next in display order.
+- A filter must not assume `N-1` was already requested or produced.
+- A filter must not assume only nearby frame numbers will be requested.
+- A filter must not let pruning discard a frame an active request needs.
+- A recursive filter must deliberately manage predecessor availability.
+
+(There is also a hard API rule — any source retrieved in `arAllFramesReady` must have
+been requested in `arInitial` of the same activation; see the latest prevailing CMS,
+the VS-LIFECYCLE rule.)
+
+**3.2.5 Filter modes and the final goal.**
+- **`fmUnordered`** — the filter may be called for frames in any order, one activation at
+  a time per frame; the safe baseline for current work.
+- **`fmParallelRequests`** — multiple requests in flight; the filter must be safe under
+  concurrent arInitial activity.
+- **`fmParallel`** — fully parallel execution; the final operational target.
+
+Goal posture:
+```text
+safe under fmUnordered now
+structurally compatible with fmParallelRequests
+final design target: fmParallel
+```
+Design and coding must not make choices that block eventual safe `fmParallel` unless
+explicitly justified and recorded. This posture is the reason the CMS adopts mandatory
+consumer-pinning (see §3.2.7).
+
+**3.2.6 Why the cache manager exists (correctness, not performance).**
+The cache manager is a **correctness subsystem, not a performance cache.** It retains
+computed outputs so the recursion can find each predecessor — or recover it — rather than
+rebuilding the chain from frame 0 on every request. It exists to provide:
+- safe predecessor availability and cache-hit reuse;
+- checkpoints and bounded recovery of missing outputs ("holes");
+- pruning with bounded memory use;
+- safety under out-of-order and (eventually) parallel requests;
+- no dangling frame pointers, no leaked `VSFrame` references, no double frees, no stale
+  index entries.
+
+Historical note that motivates the whole design: the ancestor CNR2 runs serialized
+(`MT_SERIALIZED`) and keeps a single previous-output member. When asked for a
+non-sequential frame, CNR2 cannot supply the true previous output and substitutes the
+previous *source* frame as an approximate predecessor (`last_frame != n-1 →
+GetFrame(n-1)`). It gets away with this only because it is serialized and the recursive
+blend forgives a one-frame stand-in. CNR3 abandons serialization to reach `fmParallel`,
+so it **cannot** rely on that approximation — and CNR3's cache + recovery architecture is
+precisely the principled replacement: supply the *exact* previous output, present or
+recovered.
+
+**3.2.7 What changed at the CMS07.0 restart (the supersession story), and what safety means.**
+A reassessment found the previous (CMS06.x) cache mechanism workable but not genuinely
+fit for purpose. The current CMS is a new architecture that completely supersedes the
+previous cache design. In plain terms:
+- **Pinning is now the mandatory correctness mechanism.** Any frame a request actively
+  needs is *pinned* by that request (a consumer-held pin), and the cache is the complete
+  liveness index for the active set. (Previously, pinning was a deferred escalation —
+  that decision is superseded.)
+- **Hot zones are demoted to prune-policy hints.** They no longer guarantee findability
+  of active frames (pins do that); they protect the anticipatory/decaying set.
+- **A checkpoint is a retention flag, not a pin.** There is exactly one pin concept
+  (consumer-claim).
+- **One cache-wide lock, held minimally**; slow work (pixel compute, source requests,
+  freeFrame) happens outside it.
+- **Bounded prune** (decide-and-detach under the lock, batch freeFrame outside).
+- **Recovery is two-phase:** a descending search from N-1 for the nearest present output
+  (checkpoint flag irrelevant at search time), then an ascending fill-holes-only walk;
+  with a dissolved source-request window (request source N plus the genuine holes only,
+  not a blanket backward window).
+
+The old/new separation — three highest-risk traps (do not conflate): (1) treating pinning
+as optional/deferred — it is now the mandatory baseline; (2) reintroducing held-ref-only
+predecessor reservation — superseded by consumer-pins; (3) thinking of a checkpoint as a
+pin — it is a separate eviction-protection flag.
+
+What safety means here: correctness of the recursive chain before performance; no
+dangling pointers, no leaked `VSFrame` refs, no double frees, no stale index entries;
+proof before progression.
+
+**3.2.8 High-level architecture, and why diagnostics are mandatory.**
+For the restart, responsibilities separate as follows (the concrete new file layout is
+the coder's proposal under the latest prevailing CMS, not fixed here):
+- **Pixel/frame processing** — luma copy, downsampled-luma buffers, scene-change
+  detection, recursive chroma blend. Must NOT own cache or scheduling policy.
+- **Cache manager** — pools, ordered index, pins/pin-list, hot zones, checkpoint flags,
+  store/prune, recovery planning, validation, cache diagnostics. Must NOT contain pixel
+  logic.
+- **Response tables** and **memory diagnostics** — cache-independent utilities.
+
+Why diagnostics are mandatory: diagnostics are proof of safety. Unexpected
+reference-count, prune, validation, or recovery-search values stop the next phase until
+understood. An unexpected non-zero error counter is a hard gate.
+
+*(END verbatim-reproduction region. The §3.2.1–§3.2.8 text above is reproduced verbatim
+into Document A.)*
+
+### 3.3 Required Document A sections (structure)
+
+```text
+1. Project context and reason for the project — a VERBATIM reproduction of §3.2 of this
+   spec (the canonical context). RICH, human-facing, at the TOP to set the scene. Copied
+   exactly, not paraphrased or regenerated (§3.2.0).
+2. The load-bearing recursion fact and why scheduling is central.
+3. The CMS07.0 restart: what it supersedes and the old/new separation.
+4. Current controlling authority: CMS07.0 (with precedence: CMS07.0 wins over any
+   prior material; if CMS07.0 itself is silent/ambiguous, stop and ask).
+5. Standing coding / process / design / safety rules (§3.5/§3.6/§3.7/§3.8).
+6. Salvage policy (§3.9) — as a section, not a separate document.
+7. Continuity note (brief): this Document A is for the CMS07.0 restart; the old
+   CMS06-era Documents B/C are historical archive only.
+```
+
+### 3.4 Required high-level architecture content
+
+State the intended separation of responsibilities for the restart (NOT the old code
+layout as current): pixel/frame processing must not own cache or scheduling policy; the
+cache manager must not contain pixel logic; response-table and memory-diagnostic
+utilities are cache-independent. The actual new file layout is the coder's proposal
+under CMS07.0 §11 and is not fixed by this document.
+
+### 3.5 Required rules content (OWNED rules reproduced + hand-off clause)
+
+Document A's standing-rules section is GENERATED from §3A: it reproduces the
+REGISTER-OWNED rules in full (authority, pack, process, architecture/salvage,
+retired-facts, candidates) AND carries the §3A hand-off clause for the rules that live
+in CMS07.0. It does **NOT** restate, index, or summarise the handed-off CMS07.0 rules
+(RC1–RC8, AS1–AS7, CR1–CR5, VS-LIFECYCLE-01, recovery, instrumentation, V5 firewall,
+first-milestone) — for those it points the reader to CMS07.0, consistent with §3A.
+The §3A register is authoritative for the owned rules; if Document A and §3A disagree,
+§3A wins. **A Document A whose owned-rules section does not faithfully reproduce the
+populated §3A owned rules, or which restates/duplicates the handed-off CMS07.0 rules,
+FAILS production review.** (Until §3A is populated, this requirement is held in
+abeyance; a RELEASED pack, by §3A.1, requires the populated register and a matching
+Document A.)
+
+Document A therefore presents, for the human reader: the owned rules in full, then a
+short hand-off paragraph — e.g. *"Design, cache-core, reference-count, VapourSynth-
+lifecycle, recovery, parameter-coherence, instrumentation, atomic-scope and
+first-milestone rules are defined in CMS07.0; consult it directly — they are not
+restated here."* This keeps a single source per rule and avoids the duplication that
+drifts.
+
+### 3.6 Required coding rules (carried verbatim in intent)
+
+- **Rule 1 — Code comments.** Concise but never over-compressing safety-critical detail
+  (locking/threading invariants, ownership/lifetime, reference-count discipline,
+  non-obvious pre/postconditions). This now also covers codifying CR1–CR5 as constant
+  comments.
+- **Rule 2 — Code update instructions.** Before/after patch format: file and function
+  stated, before-block uniquely matchable with enough context, after-block the exact
+  replacement.
+
+### 3.7 Required phase and SubPhase naming rules
+
+Phase/SubPhase numbering restarts for the new development. Document A states the
+expanded-naming convention; the coder proposes the concrete new convention before
+coding (CMS07.0 restart intro), using the expanded style unless the user approves a
+different one.
+
+### 3.8 Commit title and body rules
+
+Carry the Visual Studio commit title/body convention used on each PASS.
+
+### 3.9 Salvage policy (section, not a separate document)
+
+- Salvage is the SECOND step, only after the new cache-core ownership/pinning/eviction
+  discipline is proven in isolation.
+- Likely-salvageable (cache-independent): response-table creation, memory diagnostics,
+  the pixel/frame-processing layer including the explicit-predecessor boundary.
+- CNR2 reference (github.com/Asd-g/AviSynth-vsCnr2): salvage the PIXEL maths
+  (response tables, the int64-accumulator weighted blend with `shift2 = 2*depth`,
+  `downSampleLuma`, in-compute scene detection). **Never** adopt CNR2's
+  recovery/predecessor logic (its serialized `last_frame != n-1 → source[n-1]`
+  approximation is exactly what CNR3 replaces).
+- No old `.txt` code is copied into new files during the first milestone without
+  explicit per-case approval.
+
+---
+
+## 3A. Prevailing Rules Register (master list of OWNED rules — lives HERE)
+
+**Scope — the register OWNS some rules and HANDS OFF others (no rule is stored twice).**
+This project's recurring failure mode is paired artifacts drifting out of sync. To
+prevent it, the register stores a rule in exactly ONE place:
+
+```text
+OWNED by the register (full text held HERE — these have no home in CMS07.0):
+    - Authority / precedence / supersession / old-new separation / no-action gate
+    - Pack governance and §3A register mechanics (draft/released, candidates, etc.)
+    - Coding process: comments, patch format, phase naming, commits, diagnostics-gate,
+      Design Compliance Review
+    - Architecture separation and salvage policy
+    - Retired-fact entries (the FACT that a CMS06-era rule is superseded — see below)
+    - Candidate / prior-context-derived rules
+
+HANDED OFF to CMS07.0 (NOT listed, indexed, or restated here):
+    - Design, cache-core, pinning, checkpoint, hot-zone, locking, pruning rules
+    - Reference-count discipline (RC1–RC8) and RAII baseline
+    - VapourSynth lifecycle (VS-LIFECYCLE-01), frameData, operational modes
+    - Recovery, source-request planning, bounded-start honesty, scene cuts
+    - Parameter-coherence constants (CR1–CR5, decay_margin)
+    - Instrumentation and recovery-search summary
+    - Atomic-scope register (AS1–AS7) and the V5 firewall
+    - The first-milestone proof gates
+```
+
+**Hand-off clause (governs the handed-off rules):**
+```text
+Design, cache-core, reference-count, VapourSynth-lifecycle, recovery, parameter-
+coherence, instrumentation, atomic-scope, and first-milestone rules are defined and
+numbered in CMS07.0 (its RC, AS, CR, V, and section identifiers). CMS07.0 is the
+authoritative register for those rules. This register does NOT restate, index, or
+duplicate them — consult CMS07.0 directly. Where this register and CMS07.0 overlap in
+scope, CMS07.0 wins.
+```
+**Why not even an index.** An index entry (ID + title + section pointer) is still a
+SECOND copy: the title restates the rule and the pointer rots if CMS07.0 renumbers. A
+clean hand-off has nothing to keep in sync — that is the entire point. CMS07.0 is both
+the source AND the register for its own rules; §3A is the source AND register only for
+the owned rules above.
+
+**Retired-fact entries are register-owned (not duplication).** When CMS07.0 supersedes
+a CMS06-era rule, CMS07.0 states the NEW rule, not the retired one. The *fact* that the
+old rule was considered and retired lives nowhere in CMS07.0 — so the register owns a
+short retired-fact entry ("X is superseded; replacement in CMS07.0 §y") for
+anti-regression. It records the retirement fact and points at CMS07.0 for the
+replacement; it does NOT restate the superseded mechanism.
+
+**Why the OWNED rules live in this spec, not in Document A.** Document A is regenerated
+at every handover and is therefore the document where content can be silently lost or
+not transcribed into the next version. This spec is a whole-of-project-life document,
+updated deliberately and infrequently. Placing the authoritative OWNED-rule list HERE
+guarantees two things Document A cannot: (1) **persistence** — the list lives in the
+least-volatile document; (2) **forced propagation** — because Document A is GENERATED
+to reproduce this register's owned rules and the hand-off clause (§3.5), every
+regeneration of Document A carries them forward by design, rather than relying on
+hopeful transcription. If Document A and this register ever disagree, THIS REGISTER
+WINS (Document A was mis-transcribed).
+
+**Identifier scheme (OWNED rules only).** Owned rules use a stable short ID separate
+from the editable title: `R-<CATEGORY>-<NN>` (e.g. `R-AUTH-01`, `R-PROCESS-02`,
+`R-PACK-01`, `R-RETIRED-01`, `R-CAND-01`). No `CMS07` prefix (the register is CMS07's
+by definition; the prefix ages badly into a future epoch) and no reserved numeric bands
+(the category code already groups; numbering is sequential within category). Any
+familiar nickname stays in the TITLE, not the ID. Handed-off rules keep CMS07.0's OWN
+identifiers (RC8, AS3, CR1, §9.5, …) — they are NOT given a second `R-…` ID, because a
+second ID is a second thing to maintain.
+
+**Lifecycle.**
+- The register's FIRST authoritative version (owned rules + retired-facts + candidates)
+  is produced by the coder's restart prevailing-rules enumeration (intro + Document B
+  §4) followed by the user's explicit confirm / modify / supersede / retire sign-off.
+  The enumeration distinguishes register-owned rules from handed-off CMS07.0 rules; only
+  the owned set is recorded here.
+- Thereafter, when an OWNED rule is added, changed, or retired, **the change is made
+  HERE**, with the revision date bumped. The next Document A regeneration picks it up
+  automatically. A change to a HANDED-OFF rule is made in CMS07.0, not here.
+- An owned rule is not "active" / controlling until it appears here as confirmed.
+- A rule remembered from prior context but not yet here is a CANDIDATE only — recorded
+  as such, not controlling, until the user confirms it (into this register if owned, or
+  into CMS07.0 if it is a design rule).
+
+**Register status:** `PENDING FIRST POPULATION` — to be populated by the CMS07.0
+restart enumeration-and-sign-off. Until then, the operative rule sources are CMS07.0
+(its hard rules: §8.6/§8.7 AS register + V5 firewall, §9A.1 VS-LIFECYCLE-01, §9A.2
+RC1–RC8, §9A.3 RAII baseline, §9A.5/§9A.6 abort+cleanup, §9A.7 bounded-start honesty,
+§9A.8 DCR, §10.2 CR1–CR5) and the standing coding/process rules summarised in §3.5/§3.6.
+
+**3A.1 Draft vs released pack status (gating on §3A).**
+```text
+DRAFT CMS07 handover pack:
+    permitted with §3A PENDING. For review/working use only. Must be labelled draft.
+
+RELEASED CMS07 handover pack:
+    §3A MUST be populated (rules enumerated and signed off), AND Document A's rules
+    section MUST reproduce the populated §3A. A pack with §3A pending must NOT be
+    treated or circulated as an authoritative released pack.
+```
+**Current state acknowledgement:** the pack generated in this session is, by this
+definition, a **DRAFT** — §3A is pending the coder's restart enumeration and the user's
+sign-off. That is the expected and correct state at this point; it becomes releasable
+once §3A is populated and Document A is regenerated from it. This is not a defect.
+
+**Register format (each entry, once populated):**
+```text
+Rule ID        : stable short identifier (e.g. R-COMMENT-1, R-RC, R-AS, R-LIFECYCLE-01)
+Statement      : the rule in full, clear to a human.
+Source         : CMS07.0 §x / Document A / prior agreement / coder-proposed.
+Status         : confirmed | modified | superseded | retired | candidate.
+Notes          : modifications, supersession reason, or confirmation context.
+Last revised   : date.
+```
+
+**3A.2 Rule dispositions are RETAINED, not dropped.** The register preserves the
+outcome of every rule review, not just the live rules. Each rule carries one
+disposition: `confirmed | modified | superseded | retired | candidate`. **Superseded
+and retired rules are KEPT in the register with their status and reason** — they are
+not deleted. This is deliberate: a retired CMS06-era rule recorded as `retired` cannot
+silently creep back in later, because the register shows it was considered and dropped.
+A `candidate` rule (remembered/prior-context-derived, not yet confirmed) is recorded as
+non-controlling until the user confirms it. Only `confirmed` and `modified` rules are
+active/controlling.
+
+**Register contents (OWNED rules only):**
+```text
+[ PENDING — to be populated by the restart prevailing-rules enumeration and sign-off.
+  Only REGISTER-OWNED rules are recorded here. The enumeration is expected to produce
+  at least these owned categories:
+    AUTH     - CMS07.0 controlling; ambiguity-stops-work; CMS06 historical; old code is
+               salvage-only; read/understand/propose no-action gate
+    PACK     - §3A is the durable owned-rule source; candidates non-controlling;
+               retired-facts retained; draft-vs-released gate
+    PROCESS  - code comments (concise but safety-complete; incl. codifying CR1–CR5 as
+               constant comments); before/after patch format; expanded Phase/SubPhase
+               naming; Visual Studio commit message on PASS; diagnostics-as-hard-gate;
+               Design Compliance Review + 17-item checklist
+    ARCH     - pixel/cache separation (both directions); reuse processing boundary;
+               salvage is second-step-only; CNR2 pixel-maths-yes / recovery-logic-no
+    RETIRED  - retired-FACT entries for superseded CMS06-era rules (fact + pointer to
+               the CMS07.0 replacement; NOT a restatement of the old mechanism)
+    CAND     - candidate / prior-context-derived rules, marked non-controlling
+  plus any further OWNED rules the coder identifies or the user adds.
+
+  NOT recorded here (HANDED OFF to CMS07.0 — see the hand-off clause above): the
+  design/cache/RC/RAII/VS-lifecycle/recovery/CR/instrumentation/AS/V5-firewall/
+  first-milestone rules. Consult CMS07.0 directly for those; they are NOT indexed
+  here. ]
+```
+
+---
+
+## 4. Document B — restart work plan and first milestone
+
+`Document_B_CNR3_Restart_Work_Plan_and_First_Milestone_<version>.md`
+
+(This replaces the old volatile "Document C". It is the current-state document and is
+re-issued each session.)
+
+### 4.1 Purpose
+
+Document B states the current controlling authority, the immediate work, the proof
+obligations, the rule-enumeration requirement, and what must NOT be implemented yet.
+
+### 4.2 Required sections
+
+```text
+1. Controlling authority: CMS07.0 (final/complete for this restart unless revised).
+   Precedence: CMS07.0 wins over prior material; if CMS07.0 itself is silent or
+   ambiguous, stop and ask — do not guess.
+2. Build/transition state: .h/.cpp → .txt rename decided; old binary need not build;
+   CI may break; Visual Studio 2026; transition not to be actioned without explicit
+   instruction.
+3. First milestone (CMS07.0 §11, per D30): prove the cache-manager core in isolation,
+   no VapourSynth wiring — data structures, single-lock skeleton, pin/pin-list,
+   composite eviction predicate + bounded prune. Proof obligations: pin/unpin
+   balance = 0, lookup-ref balance = 0 (acquired == released + transferred), no leaks,
+   no double-free, eviction never selects a pinned/checkpoint/in-zone slot, shutdown
+   clear() releases everything with a warning on any non-zero pin.
+4. Prevailing-rules enumeration requirement: the coder enumerates ALL standing rules
+   (from CMS07.0, Document A, prior agreements) for explicit sign-off before coding;
+   no rule carries silently; a remembered-but-undocumented rule is surfaced as a
+   candidate, not treated as controlling until confirmed.
+5. Do-not-implement list (restart form):
+   - no continuation of CMS06.x / H15.6B coding;
+   - no patching of the old cache manager;
+   - no old cache concepts assumed forward;
+   - no getFrame/VapourSynth wiring until the core is proven;
+   - no old-code salvage copy until explicitly approved (second step);
+   - no CNR2 recovery/predecessor logic.
+6. Hard gates: diagnostics-as-hard-gate; the §11-style design-compliance review per
+   phase (CMS07.0 §9A.8, 17-item checklist incl. AS-register match).
+7. Proposed-layout expectation: the coder proposes the file/header/structure layout
+   (text) for review before any file creation.
+```
+
+### 4.3 Required current-state precedence wording
+
+Document B states plainly that if it ever conflicts with CMS07.0, CMS07.0 wins; and
+that Document B is volatile (re-issued per session) whereas CMS07.0 is the stable
+design authority.
+
+---
+
+## 5. Companion design document rule
+
+CMS07.0 (`cnr3_cache_manager_design_v7_0.md`) is included UNCHANGED as the controlling
+design authority. It is not edited as part of pack production; if a design change is
+needed, CMS07.0 is revised on its own and the pack regenerated against it. No earlier
+CMS06.x design document is included as an active input.
+
+---
+
+## 6. New chat starter prompt
+
+The pack includes a short starter prompt for a new chat. It must:
+- name CMS07.0 as controlling and the precedence rule;
+- list the in-scope CORE attachments (Document A, Document B, CMS07.0, this spec, the
+  coder intro, the manifest) and the expected COMPANION attachments (.txt snapshot,
+  CNR2 reference), and note the old CMS06-era B/C docs are historical only;
+- make the ORDER explicit: the first substantive action is **prevailing-rules
+  enumeration for sign-off**; the layout proposal follows ONLY after the rule register
+  is settled or the user explicitly defers it;
+- state the no-action rule: **no file renaming, no file creation, no salvage copy, and
+  no getFrame integration without explicit user instruction.**
+
+---
+
+## 7. Maintenance rules
+
+- **7.1 Updating Document A** — when project-wide context, standing rules, or the
+  architecture story change. A CMS07.0 revision is such a trigger.
+- **7.2 Updating Document B** — every session (it is the volatile current-state doc).
+- **7.3 Regenerating the pack** — produce a new manifest with updated checksums and an
+  incremented pack version; never silently mutate a released pack.
+
+---
+
+## 8. Success criteria for a handover pack
+
+```text
+- A new chat can resume with CMS07.0 as unambiguous controlling authority.
+- The human-facing project context and reason-for-being are rich and at the top.
+- No superseded CMS06.x material appears as active direction.
+- Old code is clearly salvage-reference-only.
+- The first milestone and its proof obligations are unambiguous.
+- The prevailing-rules-enumeration-before-coding requirement is explicit.
+- Precedence and stop-and-ask rules are stated.
+- The manifest gives reading order, precedence, and integrity checksums.
+```
+
+---
+
+## 9. Final production checklist
+
+```text
+[ ] Document A leads with rich human-facing context and the project's reason for being.
+[ ] Document A's context section is a VERBATIM reproduction of §3.2 (the canonical
+    context master) — copied exactly, not paraphrased, summarised, regenerated, or
+    thinned. Any divergence from §3.2 FAILS review and is corrected to match (§3.2.0).
+[ ] Document A states the CMS07.0 supersession story and old/new separation.
+[ ] Document A's standing rules are CMS07.0-aligned (no old-architecture rule stated
+    as current).
+[ ] Salvage policy present as a Document A section (not a separate document).
+[ ] §3A Prevailing Rules Register present; if populated, Document A's rules section
+    faithfully reproduces it (a mismatch FAILS review); if pending, both say so and the
+    pack is labelled DRAFT (§3A.1).
+[ ] Pack status correct: DRAFT if §3A pending; RELEASED only if §3A populated AND
+    Document A regenerated to match it (§3A.1).
+[ ] Rule dispositions retained in §3A (confirmed/modified/superseded/retired/candidate);
+    retired/superseded rules kept with status, not deleted (§3A.2).
+[ ] Core pack files vs companion coding-start attachments distinguished; expected
+    companion attachments (.txt snapshot, CNR2 reference) noted in manifest/starter
+    prompt (§2).
+[ ] Starter prompt and Document B state the no-action rule: no file renaming, file
+    creation, salvage copy, or getFrame integration without explicit user instruction.
+[ ] Starter prompt states the order: rule enumeration/sign-off first; layout proposal
+    only after the register is settled or explicitly deferred.
+[ ] Any rule change since the last pack was made IN §3A (the register), with the
+    revision date bumped — not only in Document A.
+[ ] Document B states controlling authority, first milestone, proof obligations,
+    rule-enumeration requirement, do-not-implement list, hard gates.
+[ ] CMS07.0 included unchanged.
+[ ] This Production Spec v2.2 included.
+[ ] Coder restart introduction included.
+[ ] No old Document B/C, no old CMS06.x design docs, as ACTIVE inputs (archive only).
+[ ] Precedence + stop-and-ask wording present.
+[ ] Manifest: reading order, hard precedence, SHA256 checksums, pack version.
+[ ] Pack reviewed against §8 success criteria.
+```

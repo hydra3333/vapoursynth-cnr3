@@ -645,8 +645,8 @@ mechanism. (There is no separate "warm-up" phase: recovery is the CMS two-phase 
 descending search for the nearest present output, then ascending fill-of-holes-only.)
 Nothing in recovery or hole-filling may obstruct the fmParallel end-goal; any unavoidable
 temporary stepping-stone toward it must be explicitly recorded as such, must be slated for
-removal, and must not compromise the design path to fmParallel.
-The latest prevailing CMS outlines this.
+removal, and must not compromise the design path to fmParallel. The recovery model this
+rule refers to is the one defined in the latest prevailing CMS.
 ```
 
 ---
@@ -657,7 +657,10 @@ The latest prevailing CMS outlines this.
 actions").
 
 **Reviewer comment:** The user asked that it explicitly say the pixel layer must not
-perform cache-related actions. Adopted and made concrete.
+perform cache-related actions. Adopted and made concrete. (The file-layout material the
+user sketched here has been moved to R-ARCH-08, since it is layout guidance, not a
+behavioural boundary, and the concrete layout is the coder's proposal under the latest
+prevailing CMS §11.)
 
 **Suggested wording:**
 ```text
@@ -665,22 +668,6 @@ The pixel/frame-processing layer performs pixel-layer work only. It must not own
 perform any cache, recovery, request, pinning, eviction, checkpoint, hot-zone, or
 scheduling action, and must not read or mutate cache state. Such actions belong
 solely to the cache manager.
-
-The pixel/frame-processing layer related code will likely reside in its own
-`.cpp` to encourage separation.
-
-The cache manager related code will likely reside in
-its own `.cpp` to encourage separation.
-
-The memory diagnostics related code will likely reside in its own `.cpp` to
-encourage separation.
-
-There will likely be a common global header `cnr3_common.h` containing common
-imports and ??? definitions etc ???, and likely a separate global header
-`cnr3_build_config.h` containing controlling `#if defined` blocks per R-PROCESS-12.
-
-Vapoursynth files `VapourSynth4.h` and `VSHelper4.h` remain separate as
-copied from vapoursynth sources.
 ```
 
 ---
@@ -731,7 +718,7 @@ cache core is proven in isolation. No change.
 
 **Suggested wording:**
 ```text
-(Confirm as written.) Salvage from old .txt code happens only after the new cache-core
+Salvage from old .txt code happens only after the new cache-core
 ownership/pinning/eviction discipline is proven in isolation.
 ```
 
@@ -755,22 +742,65 @@ approximation is exactly what the CMS cache-and-recovery architecture exists to 
 
 ---
 
-## R-ARCH-07 — No old .txt code copied into new files during the first milestone without approval
+## R-ARCH-07 — Old .txt code is not copied into new files without per-case approval (emphasised during the first milestone)
 
-**Decision:** CONFIRM (no change needed).
+**Decision:** CONFIRM with modification (strip the leaked review-note from the wording;
+broaden beyond the first milestone while keeping first-milestone emphasis — the user's
+lean).
 
-**Reviewer comment:** Clear and correct. Consistent with R-AUTH-05 and R-ARCH-05. No
-change.
+**Reviewer comment:** Clear and correct. Consistent with R-AUTH-05 and R-ARCH-05/06. The
+principle (no old .txt code copied into new files without explicit per-case approval) is a
+standing salvage-discipline rule, not limited to the first milestone — broadened so it does
+not accidentally read as "after milestone one, copy freely," with the first milestone
+called out as the period of strictest application.
 
 **Suggested wording:**
 ```text
-(Confirm as written.) During the first cache-core milestone, old .txt code is not copied
-into new .h/.cpp files without explicit per-case approval.
+Old .txt code is not copied into new .h/.cpp files without explicit per-case approval.
+This applies throughout development; it is enforced most strictly during the first
+cache-core milestone, where the new core is being proven in isolation.
 ```
 
 ---
 
-# Retired-fact entries (anti-regression record)
+## R-ARCH-08 — Indicative file separation (guidance; the coder confirms the actual layout)
+
+**Decision:** PROPOSED new (carries the file-layout material moved out of R-ARCH-02) —
+CONFIRM as GUIDANCE, not a fixed mandate.
+
+**Reviewer comment:** The user sketched a file layout inside R-ARCH-02. It is useful signal
+about the intended separation, but it must not be a hard rule, because the concrete layout
+is explicitly the coder's proposal under the latest prevailing CMS §11 (and R-PROCESS-09:
+layout proposed as text, signed off before files are created). So it lives here as
+*indicative guidance*: the names are illustrative and the coder confirms the actual layout.
+The build-config↔R-PROCESS-12 link is genuinely useful and is kept. The `cnr3_common.h`
+contents are left as an explicit open question for the coder, not a bare placeholder.
+
+**Suggested wording:**
+```text
+This is INDICATIVE guidance on file separation, not a fixed layout. The concrete file and
+header layout is the coder's proposal under the latest prevailing CMS §11, proposed as text
+and signed off before any files are created (R-PROCESS-09). The names below are
+illustrative; the coder confirms the actual names.
+
+To encourage separation of concerns, each of the following will likely reside in its own
+`.cpp`:
+  - the pixel/frame-processing layer;
+  - the cache manager;
+  - the memory diagnostics.
+
+Likely there is also:
+  - a common global header (illustrative name `cnr3_common.h`) for common imports and
+    shared definitions. (OPEN QUESTION for the coder: what exactly belongs in this common
+    header versus the per-concern files — to be settled in the layout proposal.)
+  - a separate global build-configuration header (illustrative name `cnr3_build_config.h`)
+    holding the controlling `#if defined` gate blocks per R-PROCESS-12.
+
+The VapourSynth headers `VapourSynth4.h` and `VSHelper4.h` remain separate, as copied
+from the VapourSynth sources (not merged into project headers).
+```
+
+---
 
 These record the *fact* that an old mechanism was considered and dropped, so it cannot
 silently return. They are register-owned (the fact lives nowhere in the CMS; the CMS

@@ -1,6 +1,6 @@
 /*
     CNR3 - VapourSynth API4 temporal chroma stabiliser, based on the
-    venerable CNR2/vscnr2..
+    venerable CNR2/vscnr2.
 
     CNR3 is a redevelopment inspired by the CNR2/vscnr2 recursive temporal
     chroma-stabilisation model, using VapourSynth API4 only.

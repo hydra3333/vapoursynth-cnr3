@@ -102,6 +102,61 @@ Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame(
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+    int frame_number,
+    const VSAPI* vsapi,
+    Cnr3OwnedFrameRef& out_frame
+) const {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (vsapi == nullptr || vsapi->addFrameRef == nullptr || vsapi->freeFrame == nullptr) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (out_frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const VSFrame* acquired_frame = nullptr;
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = lookup_frame_and_add_ref_locked(
+            frame_number,
+            vsapi,
+            &acquired_frame
+        );
+    }
+
+    if (!cnr3_status_is_ok(status)) {
+        return status;
+    }
+
+    if (acquired_frame == nullptr) {
+        return Cnr3Status::vapoursynth_error;
+    }
+
+    const Cnr3Status adopt_status =
+        out_frame.reset_to_owned_frame(acquired_frame, vsapi);
+
+    if (!cnr3_status_is_ok(adopt_status)) {
+        /*
+            This should be unreachable because vsapi was validated before the
+            lookup. If it ever happens, rebalance the acquired lookup reference
+            outside cache_mutex_ before reporting the ownership error.
+        */
+        vsapi->freeFrame(acquired_frame);
+
+        return adopt_status;
+    }
+
+    return Cnr3Status::ok;
+}
+
 bool Cnr3OutputCacheCore::empty_locked() const noexcept {
     return slots_.empty() &&
         frame_index_.empty() &&
@@ -173,6 +228,68 @@ Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
     }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+    int frame_number,
+    const VSAPI* vsapi,
+    const VSFrame** out_acquired_frame
+) const {
+    if (out_acquired_frame == nullptr) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    *out_acquired_frame = nullptr;
+
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (vsapi == nullptr || vsapi->addFrameRef == nullptr) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const auto frame_index_it = frame_index_.find(frame_number);
+
+    if (frame_index_it == frame_index_.end()) {
+        return Cnr3Status::not_found;
+    }
+
+    const std::size_t slot_position = frame_index_it->second;
+
+    if (slot_position >= slots_.size()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const Cnr3CacheSlot& slot = slots_[slot_position];
+
+    if (!cnr3_cache_slot_is_indexable(slot)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.frame_number != frame_number) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const VSFrame* cached_frame = slot.frame.get();
+
+    if (cached_frame == nullptr) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const VSFrame* acquired_frame = vsapi->addFrameRef(cached_frame);
+
+    if (acquired_frame == nullptr) {
+        return Cnr3Status::vapoursynth_error;
+    }
+
+    *out_acquired_frame = acquired_frame;
 
     return Cnr3Status::ok;
 }
@@ -271,8 +388,10 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
     mutating functions exist. CMS07-C.3D split public read-only observers from
     private lock-protected observer helpers. CMS07-C.3E added a structural
     invariant observer so future mutating phases have a concrete cache-state
-    consistency check to call. CMS07-C.4 introduces the first real mutator:
+    consistency check to call. CMS07-C.4 introduced the first real mutator:
     storing one owned, non-checkpoint output frame as a slot/index unit.
+    CMS07-C.5 introduces immediate lookup/addref for caller-owned lookup
+    results without introducing slot pins.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

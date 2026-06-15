@@ -40,7 +40,7 @@
 
     VapourSynth frame-reference ownership may appear here only through the
     Cnr3OwnedFrameRef boundary. CMS07-C.1 stores the ownership wrapper in the
-    slot model, but does not yet call addFrameRef(), freeFrame(), lookup,
+    slot model, but does not yet call freeFrame() for cache removal or teardown,
     prune, or return-transfer logic.
 
     Position B reminder:
@@ -239,6 +239,30 @@ public:
         Cnr3OwnedFrameRef frame
     );
 
+    /*
+        Lock-owning immediate lookup/addref operation.
+
+        This operation is for immediate returned-frame ownership only. It does
+        not pin the cache slot and does not reserve slot liveness for a future
+        consumer.
+
+        On hit, the cache core calls VSAPI::addFrameRef() while holding
+        cache_mutex_ so the frame pointer and cache index cannot be invalidated
+        between lookup and reference acquisition. The acquired reference is then
+        adopted by out_frame after cache_mutex_ has been released.
+
+        out_frame must be empty on entry. Replacing an already-owned caller
+        reference is deliberately rejected so this operation never releases a
+        caller-owned frame while holding cache_mutex_.
+
+        On miss, no reference is acquired and out_frame remains empty.
+    */
+    [[nodiscard]] Cnr3Status lookup_frame_and_add_ref(
+        int frame_number,
+        const VSAPI* vsapi,
+        Cnr3OwnedFrameRef& out_frame
+    ) const;
+
 private:
     /*
         Lock-protected observer helpers.
@@ -284,6 +308,26 @@ private:
         int frame_number,
         Cnr3OwnedFrameRef& frame
     );
+
+    /*
+        Lock-protected immediate lookup/addref helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        On hit, this helper calls VSAPI::addFrameRef() while cache_mutex_ is
+        held and writes the acquired raw reference to out_acquired_frame. The
+        public wrapper adopts that acquired reference into Cnr3OwnedFrameRef
+        after the lock scope exits.
+
+        This helper does not pin the slot. Pin-based lookup/reservation is a
+        separate later phase.
+    */
+    [[nodiscard]] Cnr3Status lookup_frame_and_add_ref_locked(
+        int frame_number,
+        const VSAPI* vsapi,
+        const VSFrame** out_acquired_frame
+    ) const;
 
     /*
         Single CMS07 cache-core mutex.

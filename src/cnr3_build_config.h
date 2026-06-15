@@ -22,8 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.4A-cache-core-store-success-duplicate-selftest";
-
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.5-cache-core-lookup-addref-owned-result";
 /*
     Temporary proof scaffold convention.
 

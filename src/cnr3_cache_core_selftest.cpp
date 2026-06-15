@@ -21,6 +21,10 @@ Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept {
         return Cnr3Status::invariant_violation;
     }
 
+    if (!cache.cache_state_invariants_hold()) {
+        return Cnr3Status::invariant_violation;
+    }
+
     return Cnr3Status::ok;
 }
 

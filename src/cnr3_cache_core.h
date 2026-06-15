@@ -207,6 +207,17 @@ public:
     [[nodiscard]] std::size_t index_count() const;
     [[nodiscard]] std::size_t checkpoint_count() const;
 
+    /*
+        Lock-owning invariant observer.
+
+        This is a read-only public observer. It acquires cache_mutex_ once at
+        its outer boundary and then calls the lock-protected invariant helper.
+
+        Future AS/mutating code that already holds cache_mutex_ must call
+        cache_state_invariants_hold_locked() directly, not this public observer.
+    */
+    [[nodiscard]] bool cache_state_invariants_hold() const;
+
 private:
     /*
         Lock-protected observer helpers.
@@ -223,6 +234,20 @@ private:
     [[nodiscard]] std::size_t slot_count_locked() const noexcept;
     [[nodiscard]] std::size_t index_count_locked() const noexcept;
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
+
+    /*
+        Lock-protected cache-state invariant helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        The invariant checked here is structural only. It verifies that the
+        slot vector, frame index, checkpoint-position list, live slot metadata,
+        and basic pin counts are mutually consistent. It does not perform
+        VapourSynth reference-count checks, ownership accounting, recovery
+        planning, pruning, or pixel validation.
+    */
+    [[nodiscard]] bool cache_state_invariants_hold_locked() const noexcept;
 
     /*
         Single CMS07 cache-core mutex.

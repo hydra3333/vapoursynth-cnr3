@@ -56,6 +56,12 @@ std::size_t Cnr3OutputCacheCore::checkpoint_count() const {
     return checkpoint_count_locked();
 }
 
+bool Cnr3OutputCacheCore::cache_state_invariants_hold() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return cache_state_invariants_hold_locked();
+}
+
 bool Cnr3OutputCacheCore::empty_locked() const noexcept {
     return slots_.empty() &&
         frame_index_.empty() &&
@@ -74,14 +80,104 @@ std::size_t Cnr3OutputCacheCore::checkpoint_count_locked() const noexcept {
     return checkpoint_slot_positions_.size();
 }
 
+bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+    for (const auto& frame_index_entry : frame_index_) {
+        const int frame_number = frame_index_entry.first;
+        const std::size_t slot_position = frame_index_entry.second;
+
+        if (slot_position >= slots_.size()) {
+            return false;
+        }
+
+        const Cnr3CacheSlot& slot = slots_[slot_position];
+
+        if (!cnr3_cache_slot_is_indexable(slot)) {
+            return false;
+        }
+
+        if (slot.frame_number != frame_number) {
+            return false;
+        }
+    }
+
+    for (std::size_t slot_position = 0; slot_position < slots_.size(); ++slot_position) {
+        const Cnr3CacheSlot& slot = slots_[slot_position];
+
+        if (slot.pin_count < 0) {
+            return false;
+        }
+
+        if (!cnr3_cache_slot_has_frame(slot)) {
+            if (cnr3_cache_slot_id_is_valid(slot.slot_id)) {
+                return false;
+            }
+
+            if (cnr3_frame_number_is_valid(slot.frame_number)) {
+                return false;
+            }
+
+            if (slot.is_checkpoint) {
+                return false;
+            }
+
+            if (slot.pin_count != 0) {
+                return false;
+            }
+
+            continue;
+        }
+
+        if (!cnr3_cache_slot_id_is_valid(slot.slot_id)) {
+            return false;
+        }
+
+        if (!cnr3_frame_number_is_valid(slot.frame_number)) {
+            return false;
+        }
+
+        const auto frame_index_it = frame_index_.find(slot.frame_number);
+
+        if (frame_index_it == frame_index_.end()) {
+            return false;
+        }
+
+        if (frame_index_it->second != slot_position) {
+            return false;
+        }
+    }
+
+    for (const std::size_t checkpoint_slot_position : checkpoint_slot_positions_) {
+        if (checkpoint_slot_position >= slots_.size()) {
+            return false;
+        }
+
+        const Cnr3CacheSlot& slot = slots_[checkpoint_slot_position];
+
+        if (!slot.is_checkpoint) {
+            return false;
+        }
+
+        if (!cnr3_cache_slot_is_indexable(slot)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /*
-    CMS07-C.1 cache-core data model placeholder.
+    CMS07 cache-core implementation placeholder.
 
     Mutating cache-core functions start in later CMS07-C subphases.
 
-    CMS07-C.3C introduces the single non-recursive std::mutex skeleton before
-    those mutating functions exist. The current public read-only observers
-    acquire the mutex once at their outer boundary using RAII scoped guards.
+    CMS07-C.3C introduced the single non-recursive std::mutex skeleton before
+    mutating functions exist. CMS07-C.3D split public read-only observers from
+    private lock-protected observer helpers. CMS07-C.3E adds a structural
+    invariant observer so future mutating phases have a concrete cache-state
+    consistency check to call.
+
+    The current public read-only observers acquire the mutex once at their outer
+    boundary using RAII scoped guards.
 
     Future lock-protected helpers that are called from AS implementations must
     assume the caller already holds the mutex and must not acquire it

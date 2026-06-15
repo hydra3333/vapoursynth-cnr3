@@ -49,3 +49,12 @@
     insert into the frame index, store frames, or mutate Cnr3OutputCacheCore.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept;
+
+/*
+    Run the CMS07-C.4 invalid-store selftest.
+
+    This verifies that the store mutator rejects an empty owned-frame wrapper
+    without mutating the cache. It does not create a real VSFrame and does not
+    exercise successful frame storage.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_rejects_empty_owned_frame() noexcept;

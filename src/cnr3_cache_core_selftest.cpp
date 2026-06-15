@@ -66,8 +66,41 @@ Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_store_rejects_empty_owned_frame() noexcept {
+    Cnr3OutputCacheCore cache{};
+
+    if (
+        cache.store_noncheckpoint_owned_frame(0, Cnr3OwnedFrameRef{}) !=
+        Cnr3Status::invalid_argument
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.empty()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.slot_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.index_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.checkpoint_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.cache_state_invariants_hold()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
 /*
-    CMS07-C.3 cache-core selftest placeholder.
+    CMS07-C.4 cache-core selftest placeholder.
 
     The executable selftests in this phase are the empty-model check and the
     isolated slot-ID source check above.

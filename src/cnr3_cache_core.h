@@ -40,7 +40,7 @@
 
     VapourSynth frame-reference ownership may appear here only through the
     Cnr3OwnedFrameRef boundary. CMS07-C.1 stores the ownership wrapper in the
-    slot model, but does not yet call addFrameRef(), freeFrame(), lookup, store,
+    slot model, but does not yet call addFrameRef(), freeFrame(), lookup,
     prune, or return-transfer logic.
 
     Position B reminder:
@@ -218,6 +218,27 @@ public:
     */
     [[nodiscard]] bool cache_state_invariants_hold() const;
 
+    /*
+        Lock-owning non-checkpoint store operation.
+
+        The caller passes an already-owned frame reference. The cache core does
+        not call addFrameRef(). On successful store, this operation consumes the
+        Cnr3OwnedFrameRef and the cache owns the retained frame.
+
+        If the store is rejected, the incoming owned frame remains in the public
+        wrapper and is released after cache_mutex_ is unlocked. This preserves
+        the CMS07 rule that slow frame release work is not performed inside the
+        cache atomic scope.
+
+        Duplicate frame numbers preserve first-in-best-dressed behaviour: the
+        existing cache slot remains authoritative and the rejected incoming
+        frame is released by the caller-side wrapper after the lock scope exits.
+    */
+    [[nodiscard]] Cnr3Status store_noncheckpoint_owned_frame(
+        int frame_number,
+        Cnr3OwnedFrameRef frame
+    );
+
 private:
     /*
         Lock-protected observer helpers.
@@ -248,6 +269,21 @@ private:
         planning, pruning, or pixel validation.
     */
     [[nodiscard]] bool cache_state_invariants_hold_locked() const noexcept;
+
+    /*
+        Lock-protected non-checkpoint store helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        The helper may move from frame only on successful insertion. On rejected
+        paths, frame remains owned by the public wrapper so it can be released
+        after cache_mutex_ is unlocked.
+    */
+    [[nodiscard]] Cnr3Status store_noncheckpoint_owned_frame_locked(
+        int frame_number,
+        Cnr3OwnedFrameRef& frame
+    );
 
     /*
         Single CMS07 cache-core mutex.

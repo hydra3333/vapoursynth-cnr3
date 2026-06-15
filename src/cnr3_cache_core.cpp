@@ -2,6 +2,19 @@
 
 #include <limits>
 #include <mutex>
+#include <new>
+#include <type_traits>
+#include <utility>
+
+static_assert(
+    std::is_nothrow_move_constructible_v<Cnr3CacheSlot>,
+    "Cnr3CacheSlot must be nothrow move-constructible for cache vector insertion."
+    );
+
+static_assert(
+    std::is_nothrow_move_assignable_v<Cnr3OwnedFrameRef>,
+    "Cnr3OwnedFrameRef must be nothrow move-assignable for cache slot adoption."
+    );
 
 Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
     const std::uint64_t value_to_return = (next_value_ != 0U) ? next_value_ : 1U;
@@ -62,6 +75,33 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold() const {
     return cache_state_invariants_hold_locked();
 }
 
+Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame(
+    int frame_number,
+    Cnr3OwnedFrameRef frame
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so a rejected owned frame is released after
+        cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = store_noncheckpoint_owned_frame_locked(frame_number, frame);
+    }
+
+    return status;
+}
+
 bool Cnr3OutputCacheCore::empty_locked() const noexcept {
     return slots_.empty() &&
         frame_index_.empty() &&
@@ -78,6 +118,63 @@ std::size_t Cnr3OutputCacheCore::index_count_locked() const noexcept {
 
 std::size_t Cnr3OutputCacheCore::checkpoint_count_locked() const noexcept {
     return checkpoint_slot_positions_.size();
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
+    int frame_number,
+    Cnr3OwnedFrameRef& frame
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (frame_index_.find(frame_number) != frame_index_.end()) {
+        return Cnr3Status::duplicate;
+    }
+
+    const std::size_t slot_position = slots_.size();
+
+    if (slot_position >= slots_.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        slots_.reserve(slot_position + 1U);
+
+        const auto insert_result = frame_index_.emplace(frame_number, slot_position);
+
+        if (!insert_result.second) {
+            return Cnr3Status::duplicate;
+        }
+    }
+    catch (const std::bad_alloc&) {
+        frame_index_.erase(frame_number);
+
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3CacheSlot slot{};
+    slot.slot_id = slot_id_source_.allocate();
+    slot.frame_number = frame_number;
+    slot.frame = std::move(frame);
+    slot.is_checkpoint = false;
+    slot.pin_count = 0;
+
+    slots_.push_back(std::move(slot));
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
 }
 
 bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
@@ -172,9 +269,10 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
 
     CMS07-C.3C introduced the single non-recursive std::mutex skeleton before
     mutating functions exist. CMS07-C.3D split public read-only observers from
-    private lock-protected observer helpers. CMS07-C.3E adds a structural
+    private lock-protected observer helpers. CMS07-C.3E added a structural
     invariant observer so future mutating phases have a concrete cache-state
-    consistency check to call.
+    consistency check to call. CMS07-C.4 introduces the first real mutator:
+    storing one owned, non-checkpoint output frame as a slot/index unit.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

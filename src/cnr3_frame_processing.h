@@ -1,28 +1,34 @@
 #pragma once
 
 /*
-    CNR3 pixel/frame processing.
+    CNR3 frame-processing scaffold.
 
-    CMS07-A.2 skeleton only.
+    CMS07-B.2.7 keeps this module as a future pixel-layer boundary only.
 
-    This module will later perform pixel-layer work:
-        - luma copy;
-        - downsampled-luma buffer construction;
-        - scene-change detection;
-        - recursive chroma blend using explicit previous OUTPUT.
+    The settled algorithmic boundary is:
 
-    It must not:
-        - find predecessor frames;
-        - cache frames;
-        - pin frames;
-        - recover frames;
-        - prune frames;
-        - schedule source requests;
-        - substitute SOURCE[N - 1] for OUTPUT[N - 1].
+        output[N] depends on source[N] and previous filtered output[N-1].
 
-    The pixel layer receives SOURCE[N] and an explicit previous OUTPUT frame
-    supplied by the cache/recovery layer.
+    The predecessor is the previous filtered OUTPUT frame, not source[N-1].
+    That distinction is essential to CNR2/CNR3 recursive temporal behaviour and
+    must not be weakened when this module later receives implementation code.
 
-    CNR2/vscnr2 may be used as pixel-maths guidance only. CNR3 must not adopt
-    CNR2's serialized recovery/predecessor approximation.
+    CMS07.0 V8.1 controls the future pixel-layer arithmetic. In summary:
+        - operate on native subsampling;
+        - operate at native integer bit depth;
+        - preserve 8-bit-domain parameter semantics;
+        - use the settled CNR2-compatible response-table behaviour;
+        - use a sufficiently wide accumulator for weighted blends;
+        - perform scene-change/reset decisions inside the compute path.
+
+    This module must not own or inspect:
+        - cache slots, pins, checkpoints, hot zones, prune, or recovery state;
+        - VapourSynth request lifecycle state;
+        - per-instance cache authority;
+        - diagnostics counters or summary printers.
+
+    Future implementation may use VapourSynth frame data only in an explicit
+    pixel-layer phase. CMS07-B.2.7 intentionally introduces no VSFrame access,
+    no pixel loops, no response-table calls, no scene-change implementation,
+    no diagnostics output, and no cache dependency.
 */

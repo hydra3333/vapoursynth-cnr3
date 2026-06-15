@@ -1,9 +1,8 @@
-# CNR3 Diagnostics Specification v1.1
+# CNR3 Diagnostics Specification v1.2
 
-**Status:** Draft v1.1 for review and iteration, separate numbering convention to CMS
+**Status:** Draft v1.2 for review and iteration, separate numbering convention to CMS
 **Date:** 2026-06-15  
 **Design epoch:** CMS07.0 restart  
-**Requested filename:** `cnr3_diagnostics_specification_v1_1.md`
 
 ---
 
@@ -96,9 +95,8 @@ behavioural-scaffold rules and must not use a `DIAG_*` name.
 
 IMPORTANT:
     Refer to Item 1 in "IMPORTANT NOTE 4A" under Section 4 Summary catalogue, which
-    outlines the text to go into the "Gate Description:" text area.
+    outlines the text to go into each "Gate Description:" text area.
     
-
 ### 2.4 Human-readable end summaries
 
 Detailed per-event diagnostics may be compact and machine-oriented. End-of-run summaries

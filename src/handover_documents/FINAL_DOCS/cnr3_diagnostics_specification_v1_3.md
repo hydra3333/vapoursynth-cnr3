@@ -1,6 +1,6 @@
-# CNR3 Diagnostics Specification v1.2
+# CNR3 Diagnostics Specification v1.3
 
-**Status:** Draft v1.2 for review and iteration, separate numbering convention to CMS
+**Status:** Draft v1.3 for review and iteration, separate numbering convention to CMS
 **Date:** 2026-06-15  
 **Design epoch:** CMS07.0 restart  
 
@@ -65,48 +65,83 @@ work occurs inside a cache lock.
 ### 2.3 Observation gates observe only
 
 Each diagnostic summary should have unique compute and print gates. Exact macro names
-are confirmed in the implementation layout, but the pattern is per this example:
+are confirmed in the implementation layout, but the pattern is per this example, taking
+into account Item 1 in "IMPORTANT NOTE 4A" under Section 4 Summary catalogue.
+
+Template for Item 1 of "IMPORTANT NOTE 4A" under Section 4. Item 2 has different
+fields and applies later to printed summary `Notes:` sections.
 
 ```cpp
 // ---------------------------------------------------------------------------------------------
 // NOTE:    Comment out the relevant #define line(s) to
 //          disable compute and/or print for this diagnostic.
 // Gate Description:
-//          human understandable description of what diagnostic thing is being gated
-//          maybe along with perceived impact (eg lots of compute, or huge number of
-//          output lines, etc)
+//  ID: D-SUM-xx
+//  Name: [PLACEHOLDER: diagnostic summary name]
+//  Purpose: [PLACEHOLDER: compact purpose text from the relevant D-SUM catalogue entry]
+//  Activation condition: [PLACEHOLDER: compact activation condition from the relevant D-SUM catalogue entry]
+//  Likely collection: [PLACEHOLDER: compact likely collection text from the relevant D-SUM catalogue entry]
+//  Field definitions: [PLACEHOLDER: compact field definitions from the relevant D-SUM catalogue entry]
+//  Human interpretation: [PLACEHOLDER: compact human interpretation from the relevant D-SUM catalogue entry]
+#define CNR3_DIAG_COMPUTE_DSUMxx_NAME 1
+#if defined(CNR3_DIAG_COMPUTE_DSUMxx_NAME)
+#   define CNR3_DIAG_PRINT_DSUMxx_NAME 1
+#endif
+// paired safety cross-check:
+#if defined(CNR3_DIAG_PRINT_DSUMxx_NAME) && !defined(CNR3_DIAG_COMPUTE_DSUMxx_NAME)
+#   error "Cannot print DSUMxx_NAME without computing DSUMxx_NAME"
+#endif
+// ---------------------------------------------------------------------------------------------
+```
+
+Example for Item 1 of "IMPORTANT NOTE 4A" under Section 4. Item 2 has different
+fields and applies later to printed summary `Notes:` sections.
+
+```cpp
+// ---------------------------------------------------------------------------------------------
+// NOTE:    Comment out the relevant #define line(s) to
+//          disable compute and/or print for this diagnostic.
 // Gate Description:
-//          ID: D-SUM-01
-//          Name: Frame request arrival / ordering summary
-//          Purpose: human understandable description of what diagnostic thing is being gated
-//                   maybe along with perceived impact (eg lots of compute, or huge number of
-//                   output lines, etc)
-//          Activation condition: ...
-//          Likely collection: ...
-//          Field definitions: ...
-//          Human interpretation: ...
-//
+//  ID: D-SUM-01
+//  Name: Frame request arrival / ordering summary
+//  Purpose: Shows what request ordering CNR3 observed; helps a human see whether the run
+//           was sequential, mostly sequential, or strongly out of order, and whether the
+//           test exercised the scheduling stress it was meant to exercise.
+//  Activation condition: Add when request-arrival observation exists; in full VapourSynth
+//                        integration this is arInitial, while isolated cache-core tests may
+//                        use a synthetic request driver.
+//  Likely collection: Collect the requested frame number at request-arrival time and compare
+//                     it with the previous request for the same instance; optionally keep a
+//                     bounded sample of first/last arrivals.
+//  Field definitions: arInitial_count, arAllFramesReady_count if available,
+//                     first_requested_frame, last_requested_frame, monotonic_forward_count,
+//                     same_frame_or_duplicate_count, backward_jump_count, forward_jump_count,
+//                     max_forward_jump, max_backward_jump, arrival_gap_histogram,
+//                     out_of_order_count.
+//  Human interpretation: Out-of-order arrivals are INFO if intentionally stressed, WARN if
+//                        sequential order was expected, and not correctness failures by
+//                        themselves; impossible accounting is failure evidence.
 #define CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
 #   define CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER 1
 #endif
 // paired safety cross-check:
-#if defined(CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER) && \
-    !defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+#if defined(CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER) && !defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
 #   error "Cannot print DSUM01_REQUEST_ORDER without computing DSUM01_REQUEST_ORDER"
 #endif
 // ---------------------------------------------------------------------------------------------
 ```
 
-Diagnostic/proof-observation gates must not affect correct program behaviour or output
-frames. They may observe only.
+Diagnostic observation gates must not affect correct program behaviour or output frames.
+They may observe only.
 
 A behaviour-changing scaffold is not a diagnostic. It must use the project's
 behavioural-scaffold rules and must not use a `DIAG_*` name.
 
 IMPORTANT:
-    Refer to Item 1 in "IMPORTANT NOTE 4A" under Section 4 Summary catalogue, which
-    outlines the text to go into each "Gate Description:" text area.
+Refer to Item 1 in "IMPORTANT NOTE 4A" under Section 4 Summary catalogue, which
+outlines the text to go into each `Gate Description:` text area.
+
     
 ### 2.4 Human-readable end summaries
 

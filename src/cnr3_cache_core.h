@@ -1,33 +1,37 @@
 #pragma once
 
 /*
-    CNR3 CMS07 cache core.
+    CNR3 cache-core scaffold.
 
-    CMS07-A.2 skeleton only.
+    CMS07-B.2.8 aligns this module as the future CMS07 cache-manager core
+    boundary. It intentionally introduces no cache data structures or behaviour.
 
-    This module will own the CMS07 cache-manager core:
-        - output frame reference slots;
+    Future responsibilities of this module include:
+        - cache slot ownership;
         - ordered frame-number index;
         - non-checkpoint and checkpoint pools;
-        - consumer-held pins;
-        - per-invocation pin-lists;
-        - checkpoint flags;
-        - hot zones;
-        - prune policy;
-        - recovery planning;
-        - validation;
-        - cache diagnostics counters.
+        - consumer pins and per-invocation pin-lists;
+        - hot-zone state;
+        - bounded recovery planning;
+        - store / lookup / remove helpers;
+        - prune / eviction;
+        - integrity validation;
+        - teardown / clear discipline.
 
     This module must not contain:
         - pixel loops;
         - response-table construction;
-        - memory-diagnostic internals;
-        - VapourSynth getFrame orchestration;
-        - parameter parsing.
+        - VapourSynth getFrame request/retrieve lifecycle code;
+        - VSMap parsing;
+        - D-SUM formatting or printing;
+        - old strict-streaming authority;
+        - CMS06 output-cache-manager state.
 
-    The exact CMS07 AS1-AS7 lock scopes are designer-owned and inviolable.
-    They must be implemented exactly as CMS07.0 section 8.7 defines them.
+    VapourSynth frame-reference ownership may appear here later only where the
+    cache core is explicitly responsible for retaining or releasing a cached
+    VSFrame reference. That later implementation must obey the CMS07 ownership,
+    pin, checkpoint, hot-zone, prune, and atomic-scope rules exactly.
 
-    If comments in this file ever diverge from CMS07.0 section 8.7, CMS07.0
-    wins and the comments must be corrected.
+    CMS07-B.2.8 does not expose a public cache API yet. Public cache functions
+    will be introduced only when CMS07-C creates the first real cache data model.
 */

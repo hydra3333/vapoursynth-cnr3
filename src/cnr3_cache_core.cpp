@@ -1,9 +1,41 @@
 #include "cnr3_cache_core.h"
 
-/*
-    CMS07-B.2.8 cache-core placeholder.
+bool cnr3_cache_slot_has_frame(
+    const Cnr3CacheSlot& slot
+) noexcept {
+    return slot.frame.has_frame();
+}
 
-    Real cache-core data structures and functions start later, in CMS07-C.
+bool cnr3_cache_slot_is_indexable(
+    const Cnr3CacheSlot& slot
+) noexcept {
+    return cnr3_cache_slot_id_is_valid(slot.slot_id) &&
+        cnr3_frame_number_is_valid(slot.frame_number) &&
+        slot.frame.has_frame();
+}
+
+bool Cnr3OutputCacheCore::empty() const noexcept {
+    return slots_.empty() &&
+        frame_index_.empty() &&
+        checkpoint_slot_positions_.empty();
+}
+
+std::size_t Cnr3OutputCacheCore::slot_count() const noexcept {
+    return slots_.size();
+}
+
+std::size_t Cnr3OutputCacheCore::index_count() const noexcept {
+    return frame_index_.size();
+}
+
+std::size_t Cnr3OutputCacheCore::checkpoint_count() const noexcept {
+    return checkpoint_slot_positions_.size();
+}
+
+/*
+    CMS07-C.1 cache-core data model placeholder.
+
+    Mutating cache-core functions start in later CMS07-C subphases.
 
     The comments below are intentionally placed in this source file because AS
     implementation will live here initially. Keeping AS functions close to the

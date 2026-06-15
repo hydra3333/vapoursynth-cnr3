@@ -1,10 +1,33 @@
 #include "cnr3_cache_core_selftest.h"
 
-/*
-    CMS07-B.2.9 cache-core selftest placeholder.
+#include "cnr3_cache_core.h"
 
-    Executable selftests start only after CMS07-C introduces real cache-core
-    state and public testable operations.
+Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept {
+    const Cnr3OutputCacheCore cache{};
+
+    if (!cache.empty()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.slot_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.index_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.checkpoint_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+/*
+    CMS07-C.2 cache-core selftest placeholder.
+
+    The only executable selftest in this phase is the empty-model check above.
 
     Future selftests must verify ownership and lifecycle properties before
     behaviour is trusted. In particular, tests must prove that:

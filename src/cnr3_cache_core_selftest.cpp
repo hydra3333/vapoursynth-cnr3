@@ -24,10 +24,49 @@ Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept {
     return Cnr3Status::ok;
 }
 
-/*
-    CMS07-C.2 cache-core selftest placeholder.
+Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept {
+    Cnr3CacheSlotIdSource source{};
 
-    The only executable selftest in this phase is the empty-model check above.
+    if (source.next_value_for_diagnostics() != 1) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const Cnr3CacheSlotId first = source.allocate();
+
+    if (!cnr3_cache_slot_id_is_valid(first)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (first.value != 1) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (source.next_value_for_diagnostics() != 2) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const Cnr3CacheSlotId second = source.allocate();
+
+    if (!cnr3_cache_slot_id_is_valid(second)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (second.value != 2) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (first.value == second.value) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+/*
+    CMS07-C.3 cache-core selftest placeholder.
+
+    The executable selftests in this phase are the empty-model check and the
+    isolated slot-ID source check above.
 
     Future selftests must verify ownership and lifecycle properties before
     behaviour is trusted. In particular, tests must prove that:

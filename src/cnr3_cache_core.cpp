@@ -1,5 +1,19 @@
 #include "cnr3_cache_core.h"
 
+#include <climits>
+
+Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
+    const int value_to_return = (next_value_ > 0) ? next_value_ : 1;
+
+    next_value_ = (value_to_return < INT_MAX) ? (value_to_return + 1) : 1;
+
+    return Cnr3CacheSlotId{ value_to_return };
+}
+
+int Cnr3CacheSlotIdSource::next_value_for_diagnostics() const noexcept {
+    return next_value_;
+}
+
 bool cnr3_cache_slot_has_frame(
     const Cnr3CacheSlot& slot
 ) noexcept {

@@ -41,3 +41,11 @@
     call selftests and how to report failures.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept;
+
+/*
+    Run the CMS07-C.3 slot-ID source selftest.
+
+    This checks only the isolated ID source. It does not create cache slots,
+    insert into the frame index, store frames, or mutate Cnr3OutputCacheCore.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept;

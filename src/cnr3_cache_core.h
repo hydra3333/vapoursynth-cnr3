@@ -67,6 +67,39 @@ struct Cnr3CacheSlotId {
 }
 
 /*
+    Slot-ID source.
+
+    CMS07-C.3 introduces only the ID source used by future cache-slot creation.
+    It does not create slots and does not insert anything into the cache index.
+
+    IDs are diagnostic/stability aids for slot identity. They are distinct from:
+        - frame number;
+        - vector position;
+        - checkpoint index position.
+
+    The source wraps back to 1 after INT_MAX. That is acceptable for this
+    single-process diagnostic identity source because slot IDs are not used as
+    long-term persistent identifiers. Future live-slot collision checks belong
+    in the slot creation/store phase, not in this isolated ID source.
+*/
+class Cnr3CacheSlotIdSource {
+public:
+    Cnr3CacheSlotIdSource() noexcept = default;
+
+    [[nodiscard]] Cnr3CacheSlotId allocate() noexcept;
+
+    /*
+        Diagnostic/test visibility only.
+
+        This does not reserve an ID.
+    */
+    [[nodiscard]] int next_value_for_diagnostics() const noexcept;
+
+private:
+    int next_value_ = 1;
+};
+
+/*
     A cache slot is the unit that binds:
         - output frame number;
         - owned VapourSynth frame reference;
@@ -135,4 +168,5 @@ private:
     std::vector<Cnr3CacheSlot> slots_{};
     Cnr3CacheFrameIndex frame_index_{};
     std::vector<std::size_t> checkpoint_slot_positions_{};
+    Cnr3CacheSlotIdSource slot_id_source_{};
 };

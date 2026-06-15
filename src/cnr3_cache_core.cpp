@@ -1,16 +1,19 @@
 #include "cnr3_cache_core.h"
 
-#include <climits>
+#include <limits>
 
 Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
-    const int value_to_return = (next_value_ > 0) ? next_value_ : 1;
+    const std::uint64_t value_to_return = (next_value_ != 0U) ? next_value_ : 1U;
 
-    next_value_ = (value_to_return < INT_MAX) ? (value_to_return + 1) : 1;
+    next_value_ =
+        (value_to_return < std::numeric_limits<std::uint64_t>::max())
+        ? (value_to_return + 1U)
+        : 1U;
 
     return Cnr3CacheSlotId{ value_to_return };
 }
 
-int Cnr3CacheSlotIdSource::next_value_for_diagnostics() const noexcept {
+std::uint64_t Cnr3CacheSlotIdSource::next_value_for_diagnostics() const noexcept {
     return next_value_;
 }
 

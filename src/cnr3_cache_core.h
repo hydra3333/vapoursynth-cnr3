@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <vector>
 
@@ -57,13 +58,13 @@
     data model has a clear place for that invariant when slot creation begins.
 */
 struct Cnr3CacheSlotId {
-    int value = 0;
+    std::uint64_t value = 0;
 };
 
 [[nodiscard]] constexpr bool cnr3_cache_slot_id_is_valid(
     Cnr3CacheSlotId slot_id
 ) noexcept {
-    return slot_id.value > 0;
+    return slot_id.value != 0U;
 }
 
 /*
@@ -77,10 +78,11 @@ struct Cnr3CacheSlotId {
         - vector position;
         - checkpoint index position.
 
-    The source wraps back to 1 after INT_MAX. That is acceptable for this
-    single-process diagnostic identity source because slot IDs are not used as
-    long-term persistent identifiers. Future live-slot collision checks belong
-    in the slot creation/store phase, not in this isolated ID source.
+    The source uses std::uint64_t to avoid signed-overflow undefined behaviour
+    and to make realistic long-run slot churn effectively irrelevant. The
+    source wraps back to 1 after UINT64_MAX only as a theoretical fallback.
+    Future live-slot collision checks belong in the slot creation/store phase,
+    not in this isolated ID source.
 
     Threading rule:
         Cnr3CacheSlotIdSource is not independently thread-safe.
@@ -106,10 +108,10 @@ public:
 
         This does not reserve an ID.
     */
-    [[nodiscard]] int next_value_for_diagnostics() const noexcept;
+    [[nodiscard]] std::uint64_t next_value_for_diagnostics() const noexcept;
 
 private:
-    int next_value_ = 1;
+    std::uint64_t next_value_ = 1;
 };
 
 /*

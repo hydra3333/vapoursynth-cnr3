@@ -27,7 +27,7 @@ Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept {
 Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept {
     Cnr3CacheSlotIdSource source{};
 
-    if (source.next_value_for_diagnostics() != 1) {
+    if (source.next_value_for_diagnostics() != 1U) {
         return Cnr3Status::invariant_violation;
     }
 
@@ -37,11 +37,11 @@ Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept {
         return Cnr3Status::invariant_violation;
     }
 
-    if (first.value != 1) {
+    if (first.value != 1U) {
         return Cnr3Status::invariant_violation;
     }
 
-    if (source.next_value_for_diagnostics() != 2) {
+    if (source.next_value_for_diagnostics() != 2U) {
         return Cnr3Status::invariant_violation;
     }
 
@@ -51,7 +51,7 @@ Cnr3Status cnr3_cache_core_selftest_slot_id_source() noexcept {
         return Cnr3Status::invariant_violation;
     }
 
-    if (second.value != 2) {
+    if (second.value != 2U) {
         return Cnr3Status::invariant_violation;
     }
 

@@ -81,6 +81,19 @@ struct Cnr3CacheSlotId {
     single-process diagnostic identity source because slot IDs are not used as
     long-term persistent identifiers. Future live-slot collision checks belong
     in the slot creation/store phase, not in this isolated ID source.
+
+    Threading rule:
+        Cnr3CacheSlotIdSource is not independently thread-safe.
+
+        In production cache code, allocate() must be called only while holding
+        the Cnr3OutputCacheCore mutex as part of the larger CMS07 atomic scope
+        that creates/inserts the slot. Making this counter atomic would not be
+        sufficient, because slot identity, slot storage, frame-number index
+        insertion, checkpoint state, and pin visibility must be updated as one
+        protected cache-state operation.
+
+        The isolated selftest may instantiate a local Cnr3CacheSlotIdSource
+        without a mutex because that object is not shared between threads.
 */
 class Cnr3CacheSlotIdSource {
 public:

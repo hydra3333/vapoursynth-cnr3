@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.3-cache-core-slot-id-source";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.3A-slot-id-lock-ownership-doc";
 
 /*
     Temporary proof scaffold convention.

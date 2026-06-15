@@ -66,3 +66,12 @@
     It does not allocate real VapourSynth frames and does not call addFrameRef().
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept;
+
+/*
+    Run the CMS07-C.5A lookup/addref selftest.
+
+    This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque
+    VSFrame pointers. It does not allocate real VapourSynth frames and does not
+    introduce pinning, checkpoints, prune, recovery, or getFrame wiring.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept;

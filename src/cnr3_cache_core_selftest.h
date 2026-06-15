@@ -58,3 +58,11 @@
     exercise successful frame storage.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_rejects_empty_owned_frame() noexcept;
+
+/*
+    Run the CMS07-C.4A successful-store and duplicate-store selftest.
+
+    This uses a synthetic VSAPI freeFrame stub and fake opaque VSFrame pointers.
+    It does not allocate real VapourSynth frames and does not call addFrameRef().
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept;

@@ -35,26 +35,42 @@ bool cnr3_cache_slot_is_indexable(
 bool Cnr3OutputCacheCore::empty() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    return slots_.empty() &&
-        frame_index_.empty() &&
-        checkpoint_slot_positions_.empty();
+    return empty_locked();
 }
 
 std::size_t Cnr3OutputCacheCore::slot_count() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    return slots_.size();
+    return slot_count_locked();
 }
 
 std::size_t Cnr3OutputCacheCore::index_count() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    return frame_index_.size();
+    return index_count_locked();
 }
 
 std::size_t Cnr3OutputCacheCore::checkpoint_count() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
+    return checkpoint_count_locked();
+}
+
+bool Cnr3OutputCacheCore::empty_locked() const noexcept {
+    return slots_.empty() &&
+        frame_index_.empty() &&
+        checkpoint_slot_positions_.empty();
+}
+
+std::size_t Cnr3OutputCacheCore::slot_count_locked() const noexcept {
+    return slots_.size();
+}
+
+std::size_t Cnr3OutputCacheCore::index_count_locked() const noexcept {
+    return frame_index_.size();
+}
+
+std::size_t Cnr3OutputCacheCore::checkpoint_count_locked() const noexcept {
     return checkpoint_slot_positions_.size();
 }
 

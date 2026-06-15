@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.3C-cache-core-single-mutex-skeleton";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.3D-cache-core-lock-protected-observer-helpers";
 
 /*
     Temporary proof scaffold convention.

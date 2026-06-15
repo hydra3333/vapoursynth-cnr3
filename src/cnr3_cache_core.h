@@ -209,6 +209,22 @@ public:
 
 private:
     /*
+        Lock-protected observer helpers.
+
+        These helpers assume the caller already holds cache_mutex_. They must
+        not acquire cache_mutex_ themselves.
+
+        Public observers may acquire the mutex once at their outer boundary and
+        then call these helpers. Future AS/mutating code that already holds the
+        mutex must call these helpers directly, not the public observers, to
+        avoid re-entering the non-recursive mutex.
+    */
+    [[nodiscard]] bool empty_locked() const noexcept;
+    [[nodiscard]] std::size_t slot_count_locked() const noexcept;
+    [[nodiscard]] std::size_t index_count_locked() const noexcept;
+    [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
+
+    /*
         Single CMS07 cache-core mutex.
 
         This is a non-recursive std::mutex.

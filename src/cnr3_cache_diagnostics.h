@@ -1,27 +1,24 @@
 #pragma once
 
 /*
-    CNR3 cache diagnostics.
+    CNR3 cache diagnostics scaffold.
 
-    CMS07-A.2 skeleton only.
+    CMS07-B.2.4 keeps this module cache-specific.
 
-    This module will later hold ongoing D-SUM cache summaries.
+    Generic stderr output belongs in cnr3_diagnostics.*. This module must not
+    own generic print/flush helpers because memory diagnostics, VapourSynth
+    integration, future proof summaries, and other modules also need diagnostic
+    output without depending on cache diagnostics.
 
-    Early cache-core summaries:
-        D-SUM-04  Ownership / pin / lookup-ref balance summary
-        D-SUM-05  Cache integrity / teardown summary
-        D-SUM-08  Cache store / duplicate-store / first-in-best-dressed summary
-        D-SUM-10  Prune / eviction safety summary
-        D-SUM-11  Hot-zone operation summary
+    This module is reserved for future cache-specific diagnostic state and
+    D-SUM support, for example:
+        - cache integrity summaries;
+        - ownership / pin / lookup-ref balance summaries;
+        - store / duplicate-store summaries;
+        - prune / eviction summaries;
+        - hot-zone summaries;
+        - recovery-search and recovery-plan summaries.
 
-    Later recovery summaries:
-        D-SUM-03  Recovery-search summary
-        D-SUM-12  Recovery planning / hole-filling summary
-        D-SUM-13  Recalculation histogram
-
-    Diagnostics must:
-        - print to stderr only;
-        - observe only when using DIAG_* gates;
-        - perform formatting and printing outside locked/atomic cache scopes;
-        - remain separate from temporary SCAFFOLD_* proof logic.
+    CMS07-B.2.4 intentionally introduces no cache diagnostic counters, no D-SUM
+    printers, no cache-state inspection, and no stderr output from this module.
 */

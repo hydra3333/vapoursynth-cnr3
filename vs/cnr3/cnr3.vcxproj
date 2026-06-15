@@ -22,6 +22,7 @@
     <ClCompile Include="..\..\src\cnr3_cache_core.cpp" />
     <ClCompile Include="..\..\src\cnr3_cache_core_selftest.cpp" />
     <ClCompile Include="..\..\src\cnr3_cache_diagnostics.cpp" />
+    <ClCompile Include="..\..\src\cnr3_diagnostics.cpp" />
     <ClCompile Include="..\..\src\cnr3_frame_processing.cpp" />
     <ClCompile Include="..\..\src\cnr3_instance_config.cpp" />
     <ClCompile Include="..\..\src\cnr3_memory_diagnostics.cpp" />
@@ -30,8 +31,6 @@
     <ClCompile Include="..\..\src\vapoursynth-Cnr3.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-      <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</WholeProgramOptimization>
-      <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</WholeProgramOptimization>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -40,6 +39,7 @@
     <ClInclude Include="..\..\src\cnr3_cache_core_selftest.h" />
     <ClInclude Include="..\..\src\cnr3_cache_diagnostics.h" />
     <ClInclude Include="..\..\src\cnr3_common.h" />
+    <ClInclude Include="..\..\src\cnr3_diagnostics.h" />
     <ClInclude Include="..\..\src\cnr3_frame_processing.h" />
     <ClInclude Include="..\..\src\cnr3_instance_config.h" />
     <ClInclude Include="..\..\src\cnr3_memory_diagnostics.h" />

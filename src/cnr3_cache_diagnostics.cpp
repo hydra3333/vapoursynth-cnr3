@@ -1,9 +1,10 @@
 #include "cnr3_cache_diagnostics.h"
 
 /*
-    CNR3 cache diagnostics implementation.
+    CMS07-B.2.4 cache diagnostics placeholder.
 
-    CMS07-A.2 skeleton only.
+    Cache-specific diagnostics will be added here only when the corresponding
+    cache data structures and D-SUM ownership points exist.
 
-    No diagnostics counters or summaries are introduced in this phase.
+    Generic stderr output is implemented in cnr3_diagnostics.cpp.
 */

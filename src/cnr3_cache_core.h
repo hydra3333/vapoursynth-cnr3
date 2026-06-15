@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <vector>
 
 #include "cnr3_common.h"
@@ -156,12 +157,32 @@ using Cnr3CacheFrameIndex = std::map<int, std::size_t>;
 /*
     CMS07 output cache core.
 
-    CMS07-C.1 owns the data containers only. It provides read-only mechanical
-    queries so selftests and later phases can verify the empty model compiles
-    and has the expected initial state.
+    CMS07-C.1 introduced the initial data containers. CMS07-C.3C introduces the
+    single cache-core mutex skeleton before the first real mutating cache
+    operation.
 
-    No lock is introduced in CMS07-C.1. Mutex/atomic-scope implementation starts
-    in a later explicit phase, when the first mutating cache operation is added.
+    Mutex model:
+        - exactly one cache-core mutex protects cache state;
+        - the mutex type is std::mutex;
+        - std::mutex is intentionally non-recursive;
+        - no AS scope may re-enter the cache lock;
+        - public lock-owning operations acquire the mutex once at their outer
+          boundary;
+        - lock-protected internal helpers must assume the caller already holds
+          the mutex and must not acquire it themselves;
+        - all cache-core lock acquisition must use an RAII scoped guard such as
+          std::lock_guard or std::scoped_lock;
+        - manual lock()/unlock() calls are forbidden.
+
+    This keeps a plain non-recursive std::mutex viable and prevents accidental
+    self-deadlock. It also avoids the false safety of making isolated fields
+    atomic while leaving compound cache invariants unprotected.
+
+    The current read-only query helpers acquire the mutex themselves because
+    they are public lock-owning observers. Future internal AS helpers must not
+    call these public observers while already holding the cache lock.
+
+    No mutating cache operation is introduced in CMS07-C.3C.
 */
 class Cnr3OutputCacheCore {
 public:
@@ -171,15 +192,49 @@ public:
     Cnr3OutputCacheCore(const Cnr3OutputCacheCore&) = delete;
     Cnr3OutputCacheCore& operator=(const Cnr3OutputCacheCore&) = delete;
 
-    Cnr3OutputCacheCore(Cnr3OutputCacheCore&&) noexcept = default;
-    Cnr3OutputCacheCore& operator=(Cnr3OutputCacheCore&&) noexcept = default;
+    /*
+        The cache core is intentionally not movable.
 
-    [[nodiscard]] bool empty() const noexcept;
-    [[nodiscard]] std::size_t slot_count() const noexcept;
-    [[nodiscard]] std::size_t index_count() const noexcept;
-    [[nodiscard]] std::size_t checkpoint_count() const noexcept;
+        Moving a live cache core would also move/replace the mutex and all
+        cache-state containers, which is not a supported runtime operation.
+        Cache lifetime is per filter instance.
+    */
+    Cnr3OutputCacheCore(Cnr3OutputCacheCore&&) = delete;
+    Cnr3OutputCacheCore& operator=(Cnr3OutputCacheCore&&) = delete;
+
+    [[nodiscard]] bool empty() const;
+    [[nodiscard]] std::size_t slot_count() const;
+    [[nodiscard]] std::size_t index_count() const;
+    [[nodiscard]] std::size_t checkpoint_count() const;
 
 private:
+    /*
+        Single CMS07 cache-core mutex.
+
+        This is a non-recursive std::mutex.
+
+        Lock acquisition rule:
+            All cache-core lock acquisition must use an RAII scoped guard, such
+            as std::lock_guard or std::scoped_lock.
+
+            Manual lock()/unlock() calls are forbidden. They make it too easy to
+            split a CMS07 atomic scope accidentally, leak a held lock through an
+            early return, or reorder a protected operation without noticing.
+
+        AS re-entry rule:
+            No AS scope may re-enter the cache lock. Public lock-owning
+            operations acquire the mutex once at the outer boundary.
+
+        Lock-protected helper rule:
+            Internal helpers that require lock protection must assume the caller
+            already holds cache_mutex_. They must not acquire cache_mutex_
+            themselves.
+
+        Do not change this to std::recursive_mutex. A recursive mutex would hide
+        accidental AS re-entry and weaken the single-lock design discipline.
+    */
+    mutable std::mutex cache_mutex_{};
+
     std::vector<Cnr3CacheSlot> slots_{};
     Cnr3CacheFrameIndex frame_index_{};
     std::vector<std::size_t> checkpoint_slot_positions_{};

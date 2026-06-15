@@ -1,6 +1,7 @@
 #include "cnr3_cache_core.h"
 
 #include <limits>
+#include <mutex>
 
 Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
     const std::uint64_t value_to_return = (next_value_ != 0U) ? next_value_ : 1U;
@@ -31,21 +32,29 @@ bool cnr3_cache_slot_is_indexable(
         slot.frame.has_frame();
 }
 
-bool Cnr3OutputCacheCore::empty() const noexcept {
+bool Cnr3OutputCacheCore::empty() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
     return slots_.empty() &&
         frame_index_.empty() &&
         checkpoint_slot_positions_.empty();
 }
 
-std::size_t Cnr3OutputCacheCore::slot_count() const noexcept {
+std::size_t Cnr3OutputCacheCore::slot_count() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
     return slots_.size();
 }
 
-std::size_t Cnr3OutputCacheCore::index_count() const noexcept {
+std::size_t Cnr3OutputCacheCore::index_count() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
     return frame_index_.size();
 }
 
-std::size_t Cnr3OutputCacheCore::checkpoint_count() const noexcept {
+std::size_t Cnr3OutputCacheCore::checkpoint_count() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
     return checkpoint_slot_positions_.size();
 }
 
@@ -53,6 +62,16 @@ std::size_t Cnr3OutputCacheCore::checkpoint_count() const noexcept {
     CMS07-C.1 cache-core data model placeholder.
 
     Mutating cache-core functions start in later CMS07-C subphases.
+
+    CMS07-C.3C introduces the single non-recursive std::mutex skeleton before
+    those mutating functions exist. The current public read-only observers
+    acquire the mutex once at their outer boundary using RAII scoped guards.
+
+    Future lock-protected helpers that are called from AS implementations must
+    assume the caller already holds the mutex and must not acquire it
+    themselves. Manual lock()/unlock() calls are forbidden. This is required to
+    keep std::mutex non-recursive, to avoid AS self-deadlock, and to make
+    accidental AS-boundary splitting structurally hard to write.
 
     The comments below are intentionally placed in this source file because AS
     implementation will live here initially. Keeping AS functions close to the

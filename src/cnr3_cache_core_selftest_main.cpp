@@ -1,0 +1,143 @@
+#include "cnr3_build_config.h"
+
+#include "cnr3_cache_core_selftest.h"
+
+#include "cnr3_diagnostics.h"
+
+#include <cstdio>
+#include <cstring>
+
+namespace {
+
+    constexpr Cnr3InstanceId CNR3_SELFTEST_INSTANCE_ID{};
+
+    constexpr const char* CNR3_SELFTEST_COMPONENT = "cache_core_selftest";
+
+    void cnr3_selftest_write_summary_line(
+        const char* message
+    ) noexcept {
+        cnr3_diag_write_line(
+            CNR3_SELFTEST_INSTANCE_ID,
+            Cnr3DiagnosticLevel::info,
+            CNR3_SELFTEST_COMPONENT,
+            message,
+            Cnr3StderrFlushPolicy::no_flush
+        );
+    }
+
+    void cnr3_selftest_write_summary_int_line(
+        const char* label,
+        int value
+    ) noexcept {
+        char message[128] = {};
+
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "%s%d",
+            label != nullptr ? label : "(null)",
+            value
+        );
+
+        if (written < 0) {
+            cnr3_selftest_write_summary_line("formatting_error");
+            return;
+        }
+
+        message[sizeof(message) - 1U] = '\0';
+        cnr3_selftest_write_summary_line(message);
+    }
+
+    void cnr3_selftest_write_summary_text_line(
+        const char* label,
+        const char* value
+    ) noexcept {
+        char message[256] = {};
+
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "%s%s",
+            label != nullptr ? label : "(null)",
+            value != nullptr ? value : "<none>"
+        );
+
+        if (written < 0) {
+            cnr3_selftest_write_summary_line("formatting_error");
+            return;
+        }
+
+        message[sizeof(message) - 1U] = '\0';
+        cnr3_selftest_write_summary_line(message);
+    }
+
+    Cnr3CacheCoreSelftestRunResult
+        cnr3_selftest_make_forced_failure_result() noexcept {
+        Cnr3CacheCoreSelftestRunResult result{};
+
+        result.total_count = 1;
+        result.passed_count = 0;
+        result.failed_count = 1;
+        result.first_failed_test_name = "forced_failure_for_harness_proof";
+        result.first_failed_status = Cnr3Status::invariant_violation;
+
+        return result;
+    }
+
+    void cnr3_selftest_print_summary_to_stderr(
+        const Cnr3CacheCoreSelftestRunResult& result
+    ) noexcept {
+        cnr3_selftest_write_summary_line("CNR3 cache-core selftest runner");
+        cnr3_selftest_write_summary_text_line("edit_version: ", CNR3_EDIT_VERSION);
+        cnr3_selftest_write_summary_line("");
+
+        cnr3_selftest_write_summary_line("summary:");
+        cnr3_selftest_write_summary_int_line("    total: ", result.total_count);
+        cnr3_selftest_write_summary_int_line("    passed: ", result.passed_count);
+        cnr3_selftest_write_summary_int_line("    failed: ", result.failed_count);
+
+        if (cnr3_cache_core_selftest_run_result_passed(result)) {
+            cnr3_selftest_write_summary_line("    result: PASS");
+            cnr3_diag_flush_stderr();
+            return;
+        }
+
+        cnr3_selftest_write_summary_line("    result: FAIL");
+        cnr3_selftest_write_summary_text_line(
+            "    first_failed_test_name: ",
+            result.first_failed_test_name
+        );
+        cnr3_selftest_write_summary_text_line(
+            "    first_failed_status: ",
+            cnr3_status_name(result.first_failed_status)
+        );
+
+        cnr3_diag_flush_stderr();
+    }
+
+    bool cnr3_selftest_argument_is_forced_failure_proof(
+        int argc,
+        char** argv
+    ) noexcept {
+        return
+            argc == 2 &&
+            argv != nullptr &&
+            argv[1] != nullptr &&
+            std::strcmp(argv[1], "--force-fail-for-harness-proof") == 0;
+    }
+
+} // namespace
+
+int main(int argc, char** argv) {
+    const bool force_failure_proof =
+        cnr3_selftest_argument_is_forced_failure_proof(argc, argv);
+
+    const Cnr3CacheCoreSelftestRunResult result =
+        force_failure_proof ?
+        cnr3_selftest_make_forced_failure_result() :
+        cnr3_cache_core_selftest_run_all();
+
+    cnr3_selftest_print_summary_to_stderr(result);
+
+    return cnr3_cache_core_selftest_run_result_passed(result) ? 0 : 1;
+}

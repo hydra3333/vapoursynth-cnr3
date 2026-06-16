@@ -606,6 +606,68 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
     return true;
 }
 
+bool Cnr3CachePinList::empty() const noexcept {
+    return pin_count() == 0U;
+}
+
+std::size_t Cnr3CachePinList::pin_count() const noexcept {
+    std::size_t valid_pin_count = 0;
+
+    for (const Cnr3CacheSlotPinToken& pin_token : pin_tokens_) {
+        if (cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+            ++valid_pin_count;
+        }
+    }
+
+    return valid_pin_count;
+}
+
+Cnr3Status Cnr3CachePinList::record_pin(
+    Cnr3CacheSlotPinToken& pin_token
+) {
+    if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    try {
+        pin_tokens_.push_back(pin_token);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    cnr3_cache_slot_pin_token_reset(pin_token);
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3CachePinList::discharge_all(
+    Cnr3OutputCacheCore& cache
+) {
+    Cnr3Status first_failure_status = Cnr3Status::ok;
+
+    for (Cnr3CacheSlotPinToken& pin_token : pin_tokens_) {
+        if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+            continue;
+        }
+
+        const Cnr3Status unpin_status = cache.unpin_frame(pin_token);
+
+        if (
+            !cnr3_status_is_ok(unpin_status) &&
+            cnr3_status_is_ok(first_failure_status)
+            ) {
+            first_failure_status = unpin_status;
+        }
+    }
+
+    if (cnr3_status_is_ok(first_failure_status)) {
+        pin_tokens_.clear();
+    }
+
+    return first_failure_status;
+}
+
 /*
     CMS07 cache-core implementation placeholder.
 

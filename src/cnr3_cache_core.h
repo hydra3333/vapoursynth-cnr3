@@ -515,3 +515,59 @@ private:
     std::vector<std::size_t> checkpoint_slot_positions_{};
     Cnr3CacheSlotIdSource slot_id_source_{};
 };
+
+/*
+    Per-invocation cache pin list.
+
+    This list owns slot-pin tokens recorded during one cache-core activation.
+    Recording a token consumes the caller token by resetting it after the list
+    has stored its own copy. Discharge walks the recorded tokens and releases
+    each still-valid token through Cnr3OutputCacheCore::unpin_frame().
+
+    The list is deliberately not copyable or movable. A copied pin list would
+    duplicate pin-token ownership and could cause double-unpin attempts.
+
+    This is cache-core lifecycle infrastructure only. It does not call
+    addFrameRef(), freeFrame(), transfer a VSFrame, perform getFrame work,
+    compute pixels, prune, create checkpoints, or perform recovery.
+*/
+class Cnr3CachePinList {
+public:
+    Cnr3CachePinList() = default;
+    ~Cnr3CachePinList() = default;
+
+    Cnr3CachePinList(const Cnr3CachePinList&) = delete;
+    Cnr3CachePinList& operator=(const Cnr3CachePinList&) = delete;
+
+    Cnr3CachePinList(Cnr3CachePinList&&) = delete;
+    Cnr3CachePinList& operator=(Cnr3CachePinList&&) = delete;
+
+    [[nodiscard]] bool empty() const noexcept;
+    [[nodiscard]] std::size_t pin_count() const noexcept;
+
+    /*
+        Record one already-acquired slot pin.
+
+        pin_token must be valid on entry. On success, this function stores its
+        own copy and resets pin_token so the caller no longer owns that pin
+        token. If storage allocation fails, pin_token remains valid and the
+        caller remains responsible for releasing it.
+    */
+    [[nodiscard]] Cnr3Status record_pin(
+        Cnr3CacheSlotPinToken& pin_token
+    );
+
+    /*
+        Release every still-valid token recorded in this list.
+
+        A clean discharge invalidates all recorded entries and leaves the list
+        empty, so a second discharge is a no-op success. If any unpin fails, the
+        first failure status is returned after all entries have been attempted.
+    */
+    [[nodiscard]] Cnr3Status discharge_all(
+        Cnr3OutputCacheCore& cache
+    );
+
+private:
+    std::vector<Cnr3CacheSlotPinToken> pin_tokens_{};
+};

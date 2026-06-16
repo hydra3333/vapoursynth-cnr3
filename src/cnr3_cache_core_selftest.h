@@ -106,6 +106,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept;
 
 /*
+    Run the CMS07-D.1 per-invocation pin-list selftest.
+
+    This verifies that a pin list consumes recorded pin tokens, discharges them
+    exactly once through Cnr3OutputCacheCore::unpin_frame(), and remains safe to
+    discharge repeatedly after a clean discharge. It does not introduce
+    getFrame wiring, source lifecycle handling, pixel behaviour, prune,
+    checkpoints, hot zones, recovery, or D-SUM production counters.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept;
+
+/*
     Permanent cache-core selftest runner result.
 
     This is test infrastructure, not production diagnostics. It is intentionally

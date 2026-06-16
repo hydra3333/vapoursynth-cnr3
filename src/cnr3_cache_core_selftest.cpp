@@ -943,6 +943,203 @@ Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int cached_frame_storage = 1;
+
+    const VSFrame* cached_frame =
+        reinterpret_cast<const VSFrame*>(&cached_frame_storage);
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        Cnr3OwnedFrameRef cached_owned_frame{};
+
+        if (
+            cached_owned_frame.reset_to_owned_frame(cached_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(1, std::move(cached_owned_frame)) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheSlotPinToken missing_pin{};
+
+        if (
+            cache.lookup_frame_and_pin(2, missing_pin) !=
+            Cnr3Status::not_found
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cnr3_cache_slot_pin_token_is_valid(missing_pin)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheSlotPinToken reserved_pin{};
+
+        if (
+            cache.lookup_frame_and_pin(1, reserved_pin) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cnr3_cache_slot_pin_token_is_valid(reserved_pin)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (reserved_pin.frame_number != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheSlotPinToken already_valid_pin = reserved_pin;
+
+        if (
+            cache.lookup_frame_and_pin(1, already_valid_pin) !=
+            Cnr3Status::invalid_argument
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::lifecycle_violation) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.index_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.unpin_frame(reserved_pin) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cnr3_cache_slot_pin_token_is_valid(reserved_pin)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.last_freed_frame != cached_frame) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (vsapi_state.add_frame_ref_count != 0) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.free_frame_count != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -979,6 +1176,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "slot_pin_unpin_lifecycle",
             cnr3_cache_core_selftest_slot_pin_unpin_lifecycle
+        },
+        {
+            "lookup_pin_reservation_lifecycle",
+            cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle
         }
     };
 
@@ -1028,13 +1229,13 @@ bool cnr3_cache_core_selftest_run_result_passed(
 }
 
 /*
-    CMS07-C.7 cache-core selftest placeholder.
+    CMS07-C.8 cache-core selftest placeholder.
 
     The compiled selftests in this phase are the empty-model check, the isolated
     slot-ID source check, the empty-owned-frame store rejection check, the
     successful-store/duplicate-store check, the lookup-addref hit/miss check,
-    the clear/teardown release-count check, and the slot pin/unpin lifecycle
-    check above.
+    the clear/teardown release-count check, the slot pin/unpin lifecycle check,
+    and the lookup-pin reservation lifecycle check above.
 
     CMS07-C.6B added a permanent selftest runner. CMS07-C.6C added the separate
     console executable that calls the runner and reports the stderr-only summary.

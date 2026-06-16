@@ -96,6 +96,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept;
 
 /*
+    Run the CMS07-C.8 lookup-pin reservation selftest.
+
+    This verifies that lookup_frame_and_pin() performs hit/miss reservation
+    through the explicit lookup-pin boundary. It must acquire only a slot pin:
+    no addFrameRef(), freeFrame(), frame transfer, checkpoint, prune, recovery,
+    or getFrame behaviour is introduced.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept;
+
+/*
     Permanent cache-core selftest runner result.
 
     This is test infrastructure, not production diagnostics. It is intentionally

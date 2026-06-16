@@ -300,6 +300,23 @@ public:
     ) const;
 
     /*
+        Lock-owning lookup-pin reservation operation.
+
+        This is the future cache-core reservation boundary for reusing a cached
+        frame later in the same activation. It finds the frame-number index
+        entry and increments the matching slot pin count while holding
+        cache_mutex_.
+
+        This operation does not call addFrameRef(), freeFrame(), or transfer a
+        VSFrame. It reserves slot liveness only. The caller must later release
+        the returned token with unpin_frame().
+    */
+    [[nodiscard]] Cnr3Status lookup_frame_and_pin(
+        int frame_number,
+        Cnr3CacheSlotPinToken& out_pin_token
+    );
+
+    /*
         Lock-owning slot pin operation.
 
         This reserves cache-slot liveness for a future cache-core operation. It
@@ -397,14 +414,29 @@ private:
         public wrapper adopts that acquired reference into Cnr3OwnedFrameRef
         after the lock scope exits.
 
-        This helper does not pin the slot. Pin-based lookup/reservation is a
-        separate later phase.
+        This helper does not pin the slot. Lookup-pin reservation is handled
+        by lookup_frame_and_pin_locked().
     */
     [[nodiscard]] Cnr3Status lookup_frame_and_add_ref_locked(
         int frame_number,
         const VSAPI* vsapi,
         const VSFrame** out_acquired_frame
     ) const;
+
+    /*
+        Lock-protected lookup-pin reservation helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        It performs the C.8 reservation shape: frame-number lookup and
+        pin-count increment as one cache-locked operation. It does not call
+        VSAPI::addFrameRef(), VSAPI::freeFrame(), or move a Cnr3OwnedFrameRef.
+    */
+    [[nodiscard]] Cnr3Status lookup_frame_and_pin_locked(
+        int frame_number,
+        Cnr3CacheSlotPinToken& out_pin_token
+    );
 
     /*
         Lock-protected slot pin helper.

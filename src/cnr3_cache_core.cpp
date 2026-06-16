@@ -163,6 +163,23 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     return Cnr3Status::ok;
 }
 
+Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_pin(
+    int frame_number,
+    Cnr3CacheSlotPinToken& out_pin_token
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (cnr3_cache_slot_pin_token_is_valid(out_pin_token)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return lookup_frame_and_pin_locked(frame_number, out_pin_token);
+}
+
 Cnr3Status Cnr3OutputCacheCore::pin_frame(
     int frame_number,
     Cnr3CacheSlotPinToken& out_pin_token
@@ -362,6 +379,13 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     *out_acquired_frame = acquired_frame;
 
     return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_pin_locked(
+    int frame_number,
+    Cnr3CacheSlotPinToken& out_pin_token
+) {
+    return pin_frame_locked(frame_number, out_pin_token);
 }
 
 Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(

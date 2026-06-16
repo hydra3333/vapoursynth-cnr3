@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-D.1-per-invocation-pin-list";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-D.2A-AS-scope-comment-audit-and-alignment";
 
 /*
     Temporary proof scaffold convention.

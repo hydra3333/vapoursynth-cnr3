@@ -669,24 +669,16 @@ Cnr3Status Cnr3CachePinList::discharge_all(
 }
 
 /*
-    CMS07 cache-core implementation placeholder.
+    CMS07 cache-core implementation notes.
 
-    Mutating cache-core functions start in later CMS07-C subphases.
-
-    CMS07-C.3C introduced the single non-recursive std::mutex skeleton before
-    mutating functions exist. CMS07-C.3D split public read-only observers from
-    private lock-protected observer helpers. CMS07-C.3E added a structural
-    invariant observer so future mutating phases have a concrete cache-state
-    consistency check to call. CMS07-C.4 introduced the first real mutator:
-    storing one owned, non-checkpoint output frame as a slot/index unit.
-    
-    CMS07-C.5 introduced immediate lookup/addref for caller-owned lookup
-    results without introducing slot pins. CMS07-C.6 introduced explicit
-    clear/teardown detach: cached slots are detached under cache_mutex_, then
-    retained frame references are released outside the lock by Cnr3OwnedFrameRef
-    destruction. CMS07-C.7 introduces balanced slot pin/unpin mechanics without
-    introducing lookup-pin reservation, prune, checkpoint promotion, recovery,
-    or getFrame wiring.
+    CMS07-C.3C introduced the single non-recursive std::mutex skeleton.
+    CMS07-C.3D split public read-only observers from private lock-protected
+    observer helpers. CMS07-C.3E added a structural invariant observer.
+    CMS07-C.4 introduced non-checkpoint store. CMS07-C.5 introduced
+    immediate lookup/addref. CMS07-C.6 introduced clear/teardown detach.
+    CMS07-C.7 introduced balanced slot pin/unpin mechanics. CMS07-C.8
+    introduced explicit lookup-pin reservation. CMS07-D.1 introduced
+    per-invocation pin-list record/discharge.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.
@@ -724,153 +716,61 @@ Cnr3Status Cnr3CachePinList::discharge_all(
 */
 
 /*
-    CMS07 AS1 - arInitial plan-and-pin.
+    CMS07 8.7 atomic-scope register copy.
 
-    What must happen inside the lock:
-        - Phase-1 descending bounded search [max(0, N - B), N].
-        - Pin the start point and every present reused frame.
-        - Catalogue output holes.
-        - Append every pin to the frameData pin-list.
-        - Update/slide hot zone(s) for N.
+    This block is the source-code copy of the CMS07.0 8.7 AS1-AS7 register.
+    It is intentionally not paraphrased; only C++ comment indentation and
+    ASCII punctuation are normalised for source style. If this block and
+    CMS07.0 differ, update this block from the CMS rather than editing the
+    rule locally.
 
-    What must not happen inside the lock:
-        - VapourSynth source requests.
-        - VapourSynth source retrieval.
-        - Pixel compute.
-        - Diagnostic formatting or printing.
-        - Heap-heavy summary construction.
+    Atomic-scope register - DESIGNER-OWNED, MANDATORY, boundaries inviolable.
 
-    Lock rule:
-        One lock acquisition, indivisible.
+    Each entry is one indivisible cache-lock critical section. The coder
+    IMPLEMENTS these exactly; the coder may NOT shrink, split, merge, or
+    reorder the contents of a scope without explicit designer agreement. All
+    slow work (pixel compute, VS source requests, the batch freeFrame) is
+    OUTSIDE these scopes by mandate.
 
-    Do not split, merge, reorder, or reinterpret this scope without explicit
-    CMS update / user approval.
-*/
+    AS1  arInitial plan-and-pin (Section 9.1):
+           { Phase-1 descending bounded search [max(0,N-B), N];
+             pin the start point and every present reused frame;
+             catalogue the output holes;
+             append every pin to frameData pin-list;
+             update/slide hot zone(s) for N }
+           - one lock acquisition, indivisible.
 
-/*
-    CMS07 AS2 - arAllFramesReady per-hole store-and-pin.
+    AS2  arAllFramesReady per-hole store-and-pin (Section 9.2), repeated per hole:
+           { first-in-best-dressed check;
+             store computed output (or adopt existing winner);
+             pin it; append to pin-list }
+           - one lock acquisition PER hole; compute happens OUTSIDE before this.
 
-    What must happen inside the lock:
-        - First-in-best-dressed check.
-        - Store computed output or adopt the existing winner.
-        - Pin the stored/adopted output.
-        - Append the pin to the frameData pin-list.
-        - If the stored frame is a grid checkpoint or detected-cut checkpoint,
-          establish checkpoint state in this same store scope.
+    AS3  reused-frame pin during ascending fill (Section 9.2/9.5), as encountered:
+           { confirm output[K] present; addFrameRef under lock; append to pin-list }
+           - find-and-pin is one indivisible unit (the find-and-add-ref primitive, D06).
 
-    What must not happen inside the lock:
-        - Pixel compute.
-        - Source requests or retrieval.
-        - Batch freeFrame.
-        - Diagnostic formatting or printing.
-        - Heap-heavy summary construction.
+    AS4  final unpin (Section 4.5):
+           { for every entry on the pin-list: unpin (decrement) }
+           - one lock acquisition for the whole list at end of arAllFramesReady.
 
-    Lock rule:
-        One lock acquisition per hole. Compute happens outside before this
-        scope. AS6 checkpoint establishment is folded into this store scope, not
-        implemented as a separate lock.
+    AS5  bounded prune decide+detach (Section 7.3 a+b):
+           { evaluate composite eviction predicate;
+             select up to K victims (greatest-distance-first);
+             detach each victim slot from the index (central remove helper, D09);
+             collect freed VSFrame* refs into a local list }
+           - one lock acquisition; the batch freeFrame (c) is OUTSIDE this scope.
 
-    Do not split, merge, reorder, or reinterpret this scope without explicit
-    CMS update / user approval.
-*/
+    AS6  checkpoint establish (Sections 6.3/6.4):
+           { on store of a grid frame or a detected-cut frame, set is_checkpoint;
+             insert into checkpoint pool / ordered index }
+           - folded into the relevant AS2 store scope (same lock), not a separate lock.
 
-/*
-    CMS07 AS3 - reused-frame pin during ascending fill.
+    AS7  zone retirement / merge (Sections 5.5/5.6):
+           { test no-pins-in-range + decay-margin; mark zone inactive / merge }
+           - performed under the same lock during AS1 or the prune pass; never split.
 
-    What must happen inside the lock:
-        - Confirm output[K] is present.
-        - Add/retain the frame reference under the cache lock.
-        - Append the pin to the frameData pin-list.
-
-    What must not happen inside the lock:
-        - Pixel compute.
-        - Source requests or retrieval.
-        - Diagnostic formatting or printing.
-
-    Lock rule:
-        Find-and-pin is one indivisible unit. Do not separate the lookup from
-        the add-ref/pin record.
-
-    Do not split, merge, reorder, or reinterpret this scope without explicit
-    CMS update / user approval.
-*/
-
-/*
-    CMS07 AS4 - final unpin.
-
-    What must happen inside the lock:
-        - For every entry on the frameData pin-list, unpin/decrement exactly
-          once.
-        - Discharge the pin-list entries so cleanup cannot unpin them again.
-
-    What must not happen inside the lock:
-        - Pixel compute.
-        - Source requests or retrieval.
-        - Diagnostic formatting or printing.
-        - Heap-heavy summary construction.
-
-    Lock rule:
-        One lock acquisition for the whole pin-list at the end of
-        arAllFramesReady.
-
-    Do not split, merge, reorder, or reinterpret this scope without explicit
-    CMS update / user approval.
-*/
-
-/*
-    CMS07 AS5 - bounded prune decide-and-detach.
-
-    What must happen inside the lock:
-        - Evaluate the composite eviction predicate.
-        - Select up to K victims, greatest-distance-first.
-        - Detach each victim slot from the index using the central remove
-          helper.
-        - Collect freed VSFrame references into a local list for later release.
-
-    What must not happen inside the lock:
-        - Batch freeFrame.
-        - Pixel compute.
-        - Source requests or retrieval.
-        - Diagnostic formatting or printing.
-        - Heap-heavy summary construction.
-
-    Lock rule:
-        One lock acquisition for decide-and-detach. The batch freeFrame work is
-        outside this scope.
-
-    Do not split, merge, reorder, or reinterpret this scope without explicit
-    CMS update / user approval.
-*/
-
-/*
-    CMS07 AS6 - checkpoint establish.
-
-    What must happen inside the lock:
-        - On store of a grid frame or detected-cut frame, set is_checkpoint.
-        - Insert the frame into the checkpoint pool / ordered checkpoint index.
-
-    Lock rule:
-        AS6 is not a separate lock. It is folded into the relevant AS2
-        store-and-pin scope using the same lock.
-
-    Do not split AS6 out of AS2 without explicit CMS update / user approval.
-*/
-
-/*
-    CMS07 AS7 - zone retirement / merge.
-
-    What must happen inside the lock:
-        - Test no-pins-in-range plus decay margin.
-        - Mark a zone inactive/retired or merge zones as required.
-
-    What must not happen inside the lock:
-        - Diagnostic formatting or printing.
-        - Heap-heavy summary construction.
-
-    Lock rule:
-        Performed under the same lock during AS1 or the prune pass. Never split
-        into an ad-hoc separate lock.
-
-    Do not split, merge, reorder, or reinterpret this scope without explicit
-    CMS update / user approval.
+    The register is the single authority on critical-section boundaries. If an
+    operation needed in practice is not covered here, it is raised to the
+    designer - NOT improvised with an ad-hoc smaller lock.
 */

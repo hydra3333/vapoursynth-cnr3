@@ -157,6 +157,23 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     return Cnr3Status::ok;
 }
 
+Cnr3Status Cnr3OutputCacheCore::clear() {
+    std::vector<Cnr3CacheSlot> detached_slots{};
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so detached Cnr3OwnedFrameRef objects are
+        destroyed only after cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = clear_locked(detached_slots);
+    }
+
+    return status;
+}
+
 bool Cnr3OutputCacheCore::empty_locked() const noexcept {
     return slots_.empty() &&
         frame_index_.empty() &&
@@ -294,6 +311,34 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     return Cnr3Status::ok;
 }
 
+Cnr3Status Cnr3OutputCacheCore::clear_locked(
+    std::vector<Cnr3CacheSlot>& detached_slots
+) {
+    if (!detached_slots.empty()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    for (const Cnr3CacheSlot& slot : slots_) {
+        if (slot.pin_count != 0) {
+            return Cnr3Status::lifecycle_violation;
+        }
+    }
+
+    detached_slots.swap(slots_);
+    frame_index_.clear();
+    checkpoint_slot_positions_.clear();
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
 bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
     for (const auto& frame_index_entry : frame_index_) {
         const int frame_number = frame_index_entry.first;
@@ -390,8 +435,12 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
     invariant observer so future mutating phases have a concrete cache-state
     consistency check to call. CMS07-C.4 introduced the first real mutator:
     storing one owned, non-checkpoint output frame as a slot/index unit.
-    CMS07-C.5 introduces immediate lookup/addref for caller-owned lookup
-    results without introducing slot pins.
+    
+    CMS07-C.5 introduced immediate lookup/addref for caller-owned lookup
+    results without introducing slot pins. CMS07-C.6 introduces explicit
+    clear/teardown detach: cached slots are detached under cache_mutex_, then
+    retained frame references are released outside the lock by Cnr3OwnedFrameRef
+    destruction.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

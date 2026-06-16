@@ -40,7 +40,7 @@
 
     VapourSynth frame-reference ownership may appear here only through the
     Cnr3OwnedFrameRef boundary. CMS07-C.1 stores the ownership wrapper in the
-    slot model, but does not yet call freeFrame() for cache removal or teardown,
+    slot model, and must not call freeFrame() while cache_mutex_ is held,
     prune, or return-transfer logic.
 
     Position B reminder:
@@ -263,6 +263,18 @@ public:
         Cnr3OwnedFrameRef& out_frame
     ) const;
 
+    /*
+        Lock-owning clear operation.
+
+        This operation detaches cached slots and clears frame-index/checkpoint
+        metadata while holding cache_mutex_. Detached Cnr3OwnedFrameRef objects
+        are then destroyed after cache_mutex_ has been released.
+
+        This preserves the CMS07 §8.2 rule: no VSAPI::freeFrame work is done
+        inside the cache atomic scope.
+    */
+    [[nodiscard]] Cnr3Status clear();
+
 private:
     /*
         Lock-protected observer helpers.
@@ -328,6 +340,24 @@ private:
         const VSAPI* vsapi,
         const VSFrame** out_acquired_frame
     ) const;
+
+    /*
+        Lock-protected clear helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        The helper swaps the slot vector into detached_slots and clears cache
+        index/checkpoint metadata. The detached slots must be destroyed by the
+        public wrapper after cache_mutex_ has been released, so retained
+        Cnr3OwnedFrameRef objects release their VSFrame references outside the
+        cache atomic scope.
+
+        detached_slots must be empty on entry.
+    */
+    [[nodiscard]] Cnr3Status clear_locked(
+        std::vector<Cnr3CacheSlot>& detached_slots
+    );
 
     /*
         Single CMS07 cache-core mutex.

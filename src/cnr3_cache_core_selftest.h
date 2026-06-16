@@ -86,6 +86,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_clear_teardown_releases_cached_frames_once() noexcept;
 
 /*
+    Run the CMS07-C.7 slot pin/unpin selftest.
+
+    This verifies that slot pins are balanced liveness reservations only. It
+    checks hit/miss pin behaviour, clear rejection while pinned, unpin balance,
+    token invalidation, and absence of addFrameRef/freeFrame side effects during
+    pin/unpin.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept;
+
+/*
     Permanent cache-core selftest runner result.
 
     This is test infrastructure, not production diagnostics. It is intentionally

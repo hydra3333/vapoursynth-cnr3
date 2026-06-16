@@ -69,6 +69,34 @@ struct Cnr3CacheSlotId {
 }
 
 /*
+    Slot pin token.
+
+    A pin protects cache-slot liveness only. It is not a VapourSynth frame
+    reference and does not call addFrameRef(), freeFrame(), or transfer a frame.
+
+    The token binds the caller-held pin to the slot identity observed at pin
+    time. Later unpin must match both frame number and slot ID, so stale or
+    mismatched tokens cannot silently decrement the wrong slot.
+*/
+struct Cnr3CacheSlotPinToken {
+    Cnr3CacheSlotId slot_id{};
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+};
+
+[[nodiscard]] constexpr bool cnr3_cache_slot_pin_token_is_valid(
+    Cnr3CacheSlotPinToken pin_token
+) noexcept {
+    return cnr3_cache_slot_id_is_valid(pin_token.slot_id) &&
+        cnr3_frame_number_is_valid(pin_token.frame_number);
+}
+
+constexpr void cnr3_cache_slot_pin_token_reset(
+    Cnr3CacheSlotPinToken& pin_token
+) noexcept {
+    pin_token = Cnr3CacheSlotPinToken{};
+}
+
+/*
     Slot-ID source.
 
     CMS07-C.3 introduces only the ID source used by future cache-slot creation.
@@ -122,8 +150,8 @@ private:
         - checkpoint protection state;
         - active consumer pin count.
 
-    CMS07-C.1 introduces the fields only. It does not implement store, lookup,
-    pin, unpin, checkpoint promotion, prune, or teardown behaviour.
+    CMS07-C.1 introduced the fields only. CMS07-C.7 adds balanced pin/unpin
+    operations without adding checkpoint promotion, prune, or teardown policy.
 */
 struct Cnr3CacheSlot {
     Cnr3CacheSlotId slot_id{};
@@ -208,6 +236,14 @@ public:
     [[nodiscard]] std::size_t checkpoint_count() const;
 
     /*
+        Lock-owning diagnostic/test observer for active slot pins.
+
+        Pins are cache-slot liveness reservations only. They are not frame
+        references and must not be confused with lookup addrefs or checkpoints.
+    */
+    [[nodiscard]] int total_pin_count() const;
+
+    /*
         Lock-owning invariant observer.
 
         This is a read-only public observer. It acquires cache_mutex_ once at
@@ -264,6 +300,34 @@ public:
     ) const;
 
     /*
+        Lock-owning slot pin operation.
+
+        This reserves cache-slot liveness for a future cache-core operation. It
+        does not acquire, release, or transfer any VSFrame reference.
+
+        out_pin_token must be invalid on entry. On success, it records the
+        frame number and slot ID that must later be supplied to unpin_frame().
+        On miss, no pin is acquired and out_pin_token remains invalid.
+    */
+    [[nodiscard]] Cnr3Status pin_frame(
+        int frame_number,
+        Cnr3CacheSlotPinToken& out_pin_token
+    );
+
+    /*
+        Lock-owning slot unpin operation.
+
+        The token must have been returned by pin_frame(). On success, the slot
+        pin count is decremented and the token is invalidated.
+
+        A token mismatch is a lifecycle violation because decrementing the wrong
+        slot would break cache liveness accounting.
+    */
+    [[nodiscard]] Cnr3Status unpin_frame(
+        Cnr3CacheSlotPinToken& pin_token
+    );
+
+    /*
         Lock-owning clear operation.
 
         This operation detaches cached slots and clears frame-index/checkpoint
@@ -291,6 +355,7 @@ private:
     [[nodiscard]] std::size_t slot_count_locked() const noexcept;
     [[nodiscard]] std::size_t index_count_locked() const noexcept;
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
+    [[nodiscard]] int total_pin_count_locked() const noexcept;
 
     /*
         Lock-protected cache-state invariant helper.
@@ -340,6 +405,33 @@ private:
         const VSAPI* vsapi,
         const VSFrame** out_acquired_frame
     ) const;
+
+    /*
+        Lock-protected slot pin helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        The helper increments only slot.pin_count. It must not call
+        VSAPI::addFrameRef(), VSAPI::freeFrame(), or move a Cnr3OwnedFrameRef.
+    */
+    [[nodiscard]] Cnr3Status pin_frame_locked(
+        int frame_number,
+        Cnr3CacheSlotPinToken& out_pin_token
+    );
+
+    /*
+        Lock-protected slot unpin helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself.
+
+        The token must match the current slot identity before pin_count is
+        decremented.
+    */
+    [[nodiscard]] Cnr3Status unpin_frame_locked(
+        Cnr3CacheSlotPinToken& pin_token
+    );
 
     /*
         Lock-protected clear helper.

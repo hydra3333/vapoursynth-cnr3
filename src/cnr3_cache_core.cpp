@@ -69,6 +69,12 @@ std::size_t Cnr3OutputCacheCore::checkpoint_count() const {
     return checkpoint_count_locked();
 }
 
+int Cnr3OutputCacheCore::total_pin_count() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return total_pin_count_locked();
+}
+
 bool Cnr3OutputCacheCore::cache_state_invariants_hold() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
@@ -157,6 +163,35 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     return Cnr3Status::ok;
 }
 
+Cnr3Status Cnr3OutputCacheCore::pin_frame(
+    int frame_number,
+    Cnr3CacheSlotPinToken& out_pin_token
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (cnr3_cache_slot_pin_token_is_valid(out_pin_token)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return pin_frame_locked(frame_number, out_pin_token);
+}
+
+Cnr3Status Cnr3OutputCacheCore::unpin_frame(
+    Cnr3CacheSlotPinToken& pin_token
+) {
+    if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return unpin_frame_locked(pin_token);
+}
+
 Cnr3Status Cnr3OutputCacheCore::clear() {
     std::vector<Cnr3CacheSlot> detached_slots{};
     Cnr3Status status = Cnr3Status::invariant_violation;
@@ -190,6 +225,24 @@ std::size_t Cnr3OutputCacheCore::index_count_locked() const noexcept {
 
 std::size_t Cnr3OutputCacheCore::checkpoint_count_locked() const noexcept {
     return checkpoint_slot_positions_.size();
+}
+
+int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
+    int total_pin_count = 0;
+
+    for (const Cnr3CacheSlot& slot : slots_) {
+        if (slot.pin_count < 0) {
+            return -1;
+        }
+
+        if (slot.pin_count > (std::numeric_limits<int>::max() - total_pin_count)) {
+            return -1;
+        }
+
+        total_pin_count += slot.pin_count;
+    }
+
+    return total_pin_count;
 }
 
 Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
@@ -307,6 +360,111 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     }
 
     *out_acquired_frame = acquired_frame;
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+    int frame_number,
+    Cnr3CacheSlotPinToken& out_pin_token
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (cnr3_cache_slot_pin_token_is_valid(out_pin_token)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const auto frame_index_it = frame_index_.find(frame_number);
+
+    if (frame_index_it == frame_index_.end()) {
+        return Cnr3Status::not_found;
+    }
+
+    const std::size_t slot_position = frame_index_it->second;
+
+    if (slot_position >= slots_.size()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheSlot& slot = slots_[slot_position];
+
+    if (!cnr3_cache_slot_is_indexable(slot)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.frame_number != frame_number) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.pin_count == std::numeric_limits<int>::max()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    ++slot.pin_count;
+
+    out_pin_token.slot_id = slot.slot_id;
+    out_pin_token.frame_number = slot.frame_number;
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::unpin_frame_locked(
+    Cnr3CacheSlotPinToken& pin_token
+) {
+    if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const auto frame_index_it = frame_index_.find(pin_token.frame_number);
+
+    if (frame_index_it == frame_index_.end()) {
+        return Cnr3Status::lifecycle_violation;
+    }
+
+    const std::size_t slot_position = frame_index_it->second;
+
+    if (slot_position >= slots_.size()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheSlot& slot = slots_[slot_position];
+
+    if (!cnr3_cache_slot_is_indexable(slot)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.frame_number != pin_token.frame_number) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.slot_id.value != pin_token.slot_id.value) {
+        return Cnr3Status::lifecycle_violation;
+    }
+
+    if (slot.pin_count <= 0) {
+        return Cnr3Status::lifecycle_violation;
+    }
+
+    --slot.pin_count;
+    cnr3_cache_slot_pin_token_reset(pin_token);
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
 
     return Cnr3Status::ok;
 }
@@ -437,10 +595,12 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
     storing one owned, non-checkpoint output frame as a slot/index unit.
     
     CMS07-C.5 introduced immediate lookup/addref for caller-owned lookup
-    results without introducing slot pins. CMS07-C.6 introduces explicit
+    results without introducing slot pins. CMS07-C.6 introduced explicit
     clear/teardown detach: cached slots are detached under cache_mutex_, then
     retained frame references are released outside the lock by Cnr3OwnedFrameRef
-    destruction.
+    destruction. CMS07-C.7 introduces balanced slot pin/unpin mechanics without
+    introducing lookup-pin reservation, prune, checkpoint promotion, recovery,
+    or getFrame wiring.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

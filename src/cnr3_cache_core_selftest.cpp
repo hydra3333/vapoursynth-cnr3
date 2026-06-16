@@ -705,13 +705,97 @@ Cnr3Status cnr3_cache_core_selftest_clear_teardown_releases_cached_frames_once()
     return Cnr3Status::ok;
 }
 
-/*
-    CMS07-C.6A cache-core selftest placeholder.
+Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+    using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
-    The executable selftests in this phase are the empty-model check, the isolated
+    struct Cnr3CacheCoreSelftestEntry {
+        const char* name = nullptr;
+        Cnr3CacheCoreSelftestFunction function = nullptr;
+    };
+
+    const Cnr3CacheCoreSelftestEntry selftests[] = {
+        {
+            "empty_model",
+            cnr3_cache_core_selftest_empty_model
+        },
+        {
+            "slot_id_source",
+            cnr3_cache_core_selftest_slot_id_source
+        },
+        {
+            "store_rejects_empty_owned_frame",
+            cnr3_cache_core_selftest_store_rejects_empty_owned_frame
+        },
+        {
+            "store_success_and_duplicate",
+            cnr3_cache_core_selftest_store_success_and_duplicate
+        },
+        {
+            "lookup_addref_hit_and_miss",
+            cnr3_cache_core_selftest_lookup_addref_hit_and_miss
+        },
+        {
+            "clear_teardown_releases_cached_frames_once",
+            cnr3_cache_core_selftest_clear_teardown_releases_cached_frames_once
+        }
+    };
+
+    Cnr3CacheCoreSelftestRunResult result{};
+
+    for (const Cnr3CacheCoreSelftestEntry& selftest : selftests) {
+        ++result.total_count;
+
+        if (selftest.name == nullptr || selftest.function == nullptr) {
+            ++result.failed_count;
+
+            if (result.first_failed_test_name == nullptr) {
+                result.first_failed_test_name = "invalid_selftest_entry";
+                result.first_failed_status = Cnr3Status::invariant_violation;
+            }
+
+            continue;
+        }
+
+        const Cnr3Status status = selftest.function();
+
+        if (cnr3_status_is_ok(status)) {
+            ++result.passed_count;
+            continue;
+        }
+
+        ++result.failed_count;
+
+        if (result.first_failed_test_name == nullptr) {
+            result.first_failed_test_name = selftest.name;
+            result.first_failed_status = status;
+        }
+    }
+
+    return result;
+}
+
+bool cnr3_cache_core_selftest_run_result_passed(
+    const Cnr3CacheCoreSelftestRunResult& result
+) noexcept {
+    return
+        result.total_count > 0 &&
+        result.failed_count == 0 &&
+        result.passed_count == result.total_count &&
+        result.first_failed_test_name == nullptr &&
+        cnr3_status_is_ok(result.first_failed_status);
+}
+
+/*
+    CMS07-C.6B cache-core selftest placeholder.
+
+    The compiled selftests in this phase are the empty-model check, the isolated
     slot-ID source check, the empty-owned-frame store rejection check, the
     successful-store/duplicate-store check, the lookup-addref hit/miss check, and
     the clear/teardown release-count check above.
+
+    CMS07-C.6B adds a permanent selftest runner that can execute all of those
+    checks when called. CMS07-C.6C will add the separate console executable that
+    actually calls the runner and reports the stderr-only summary.
 
     Future selftests must verify ownership and lifecycle properties before
     behaviour is trusted. In particular, tests must prove that:

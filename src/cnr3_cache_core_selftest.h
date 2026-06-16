@@ -84,3 +84,32 @@
     exactly once through the synthetic VSAPI freeFrame stub.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_clear_teardown_releases_cached_frames_once() noexcept;
+
+/*
+    Permanent cache-core selftest runner result.
+
+    This is test infrastructure, not production diagnostics. It is intentionally
+    independent of the later C.14 D-SUM counters so C.14A can still prove that
+    production diagnostic counters are observe-only.
+*/
+struct Cnr3CacheCoreSelftestRunResult {
+    int total_count = 0;
+    int passed_count = 0;
+    int failed_count = 0;
+    const char* first_failed_test_name = nullptr;
+    Cnr3Status first_failed_status = Cnr3Status::ok;
+};
+
+/*
+    Run all cache-core selftests currently implemented.
+
+    The runner records all pass/fail counts and preserves the first failing
+    selftest name/status for the C.6C console harness. This function performs
+    no printing and does not depend on plugin registration or VapourSynth
+    getFrame scheduling.
+*/
+[[nodiscard]] Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept;
+
+[[nodiscard]] bool cnr3_cache_core_selftest_run_result_passed(
+    const Cnr3CacheCoreSelftestRunResult& result
+) noexcept;

@@ -2,6 +2,9 @@
 
 #include "cnr3_cache_core.h"
 
+#include <type_traits>
+#include <utility>
+
 namespace {
 
     struct Cnr3CacheCoreSelftestVsApiState {
@@ -62,6 +65,57 @@ namespace {
 
         return vsapi;
     }
+
+    template <typename CacheType, typename = void>
+    struct Cnr3CacheCoreSelftestHasPublicPinFrame : std::false_type {};
+
+    template <typename CacheType>
+    struct Cnr3CacheCoreSelftestHasPublicPinFrame<
+        CacheType,
+        std::void_t<decltype(
+            std::declval<CacheType&>().pin_frame(
+                0,
+                std::declval<Cnr3CacheSlotPinToken&>()
+            )
+        )>
+    > : std::true_type {};
+
+    template <typename CacheType, typename = void>
+    struct Cnr3CacheCoreSelftestHasPublicLookupFrameAndPin : std::false_type {};
+
+    template <typename CacheType>
+    struct Cnr3CacheCoreSelftestHasPublicLookupFrameAndPin<
+        CacheType,
+        std::void_t<decltype(
+            std::declval<CacheType&>().lookup_frame_and_pin(
+                0,
+                std::declval<Cnr3CacheSlotPinToken&>()
+            )
+        )>
+    > : std::true_type {};
+
+    static_assert(
+        !Cnr3CacheCoreSelftestHasPublicPinFrame<Cnr3OutputCacheCore>::value,
+        "Cnr3OutputCacheCore must not expose public pin_frame(); AS paths must pin and record atomically."
+        );
+
+    static_assert(
+        !Cnr3CacheCoreSelftestHasPublicLookupFrameAndPin<Cnr3OutputCacheCore>::value,
+        "Cnr3OutputCacheCore must not expose public lookup_frame_and_pin(); AS1 must use lookup_frame_and_record_pin()."
+        );
+
+    static_assert(
+        std::is_same_v<
+            decltype(
+                std::declval<Cnr3OutputCacheCore&>().lookup_frame_and_record_pin(
+                    0,
+                    std::declval<Cnr3CachePinList&>()
+                )
+            ),
+            Cnr3Status
+        >,
+        "lookup_frame_and_record_pin() must not expose a caller-owned pin token."
+        );
 
 } // namespace
 
@@ -717,6 +771,7 @@ Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept {
     {
         VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
         Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
 
         Cnr3OwnedFrameRef cached_owned_frame{};
 
@@ -736,31 +791,27 @@ Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept {
             return Cnr3Status::invariant_violation;
         }
 
-        Cnr3CacheSlotPinToken missing_pin{};
-
-        if (cache.pin_frame(2, missing_pin) != Cnr3Status::not_found) {
+        if (cache.lookup_frame_and_record_pin(2, pin_list) != Cnr3Status::not_found) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (cnr3_cache_slot_pin_token_is_valid(missing_pin)) {
+        if (!pin_list.empty() || pin_list.pin_count() != 0U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        Cnr3CacheSlotPinToken first_pin{};
-
-        if (cache.pin_frame(1, first_pin) != Cnr3Status::ok) {
+        if (cache.total_pin_count() != 0) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (!cnr3_cache_slot_pin_token_is_valid(first_pin)) {
+        if (cache.lookup_frame_and_record_pin(1, pin_list) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (first_pin.frame_number != 1) {
+        if (pin_list.empty() || pin_list.pin_count() != 1U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -770,41 +821,12 @@ Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept {
             return Cnr3Status::invariant_violation;
         }
 
-        if (vsapi_state.add_frame_ref_count != 0) {
+        if (cache.lookup_frame_and_record_pin(1, pin_list) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (vsapi_state.free_frame_count != 0) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        Cnr3CacheSlotPinToken second_pin{};
-
-        if (cache.pin_frame(1, second_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (!cnr3_cache_slot_pin_token_is_valid(second_pin)) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (second_pin.slot_id.value != first_pin.slot_id.value) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.total_pin_count() != 2) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        Cnr3CacheSlotPinToken already_valid_pin = first_pin;
-
-        if (cache.pin_frame(1, already_valid_pin) != Cnr3Status::invalid_argument) {
+        if (pin_list.pin_count() != 2U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -819,70 +841,22 @@ Cnr3Status cnr3_cache_core_selftest_slot_pin_unpin_lifecycle() noexcept {
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.slot_count() != 1U) {
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.index_count() != 1U) {
+        if (!pin_list.empty() || pin_list.pin_count() != 0U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.total_pin_count() != 2) {
+        if (cache.total_pin_count() != 0) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.unpin_frame(first_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cnr3_cache_slot_pin_token_is_valid(first_pin)) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.total_pin_count() != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.unpin_frame(first_pin) != Cnr3Status::invalid_argument) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.total_pin_count() != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        Cnr3CacheSlotPinToken mismatched_pin = second_pin;
-        mismatched_pin.slot_id.value += 1U;
-
-        if (cache.unpin_frame(mismatched_pin) != Cnr3Status::lifecycle_violation) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (!cnr3_cache_slot_pin_token_is_valid(mismatched_pin)) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.total_pin_count() != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.unpin_frame(second_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cnr3_cache_slot_pin_token_is_valid(second_pin)) {
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -955,6 +929,7 @@ Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept 
     {
         VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
         Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
 
         Cnr3OwnedFrameRef cached_owned_frame{};
 
@@ -974,17 +949,15 @@ Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept 
             return Cnr3Status::invariant_violation;
         }
 
-        Cnr3CacheSlotPinToken missing_pin{};
-
         if (
-            cache.lookup_frame_and_pin(2, missing_pin) !=
+            cache.lookup_frame_and_record_pin(2, pin_list) !=
             Cnr3Status::not_found
             ) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (cnr3_cache_slot_pin_token_is_valid(missing_pin)) {
+        if (!pin_list.empty() || pin_list.pin_count() != 0U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -994,57 +967,15 @@ Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept 
             return Cnr3Status::invariant_violation;
         }
 
-        if (vsapi_state.add_frame_ref_count != 0) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (vsapi_state.free_frame_count != 0) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        Cnr3CacheSlotPinToken reserved_pin{};
-
         if (
-            cache.lookup_frame_and_pin(1, reserved_pin) !=
+            cache.lookup_frame_and_record_pin(1, pin_list) !=
             Cnr3Status::ok
             ) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
-        if (!cnr3_cache_slot_pin_token_is_valid(reserved_pin)) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (reserved_pin.frame_number != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.total_pin_count() != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (vsapi_state.add_frame_ref_count != 0) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (vsapi_state.free_frame_count != 0) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        Cnr3CacheSlotPinToken already_valid_pin = reserved_pin;
-
-        if (
-            cache.lookup_frame_and_pin(1, already_valid_pin) !=
-            Cnr3Status::invalid_argument
-            ) {
+        if (pin_list.pin_count() != 1U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -1059,32 +990,17 @@ Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept 
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.slot_count() != 1U) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.index_count() != 1U) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.total_pin_count() != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cache.unpin_frame(reserved_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cnr3_cache_slot_pin_token_is_valid(reserved_pin)) {
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
 
         if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.pin_count() != 0U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -1104,22 +1020,7 @@ Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept 
             return Cnr3Status::invariant_violation;
         }
 
-        if (!cache.empty()) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
         if (vsapi_state.free_frame_count != 1) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (vsapi_state.last_freed_frame != cached_frame) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (!cache.cache_state_invariants_hold()) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -1194,24 +1095,7 @@ Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept
             return Cnr3Status::invariant_violation;
         }
 
-        Cnr3CacheSlotPinToken first_pin{};
-
-        if (cache.lookup_frame_and_pin(1, first_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (!cnr3_cache_slot_pin_token_is_valid(first_pin)) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (pin_list.record_pin(first_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cnr3_cache_slot_pin_token_is_valid(first_pin)) {
+        if (cache.lookup_frame_and_record_pin(1, pin_list) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -1231,19 +1115,7 @@ Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept
             return Cnr3Status::invariant_violation;
         }
 
-        Cnr3CacheSlotPinToken second_pin{};
-
-        if (cache.lookup_frame_and_pin(1, second_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (pin_list.record_pin(second_pin) != Cnr3Status::ok) {
-            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
-            return Cnr3Status::invariant_violation;
-        }
-
-        if (cnr3_cache_slot_pin_token_is_valid(second_pin)) {
+        if (cache.lookup_frame_and_record_pin(1, pin_list) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -1354,6 +1226,157 @@ Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_as1_lookup_pin_record_atomicity() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int cached_frame_storage = 1;
+
+    const VSFrame* cached_frame =
+        reinterpret_cast<const VSFrame*>(&cached_frame_storage);
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+
+        Cnr3OwnedFrameRef cached_owned_frame{};
+
+        if (
+            cached_owned_frame.reset_to_owned_frame(cached_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(1, std::move(cached_owned_frame)) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.lookup_frame_and_record_pin(2, pin_list) !=
+            Cnr3Status::not_found
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.pin_count() != 0U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.lookup_frame_and_record_pin(1, pin_list) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        /*
+            Structural AS1 proof: the only public cache operation used here is
+            the combined helper. The helper does not expose a caller-owned pin
+            token, so a caller cannot observe a state where cache.total_pin_count()
+            increased but pin_list.pin_count() did not also increase through the
+            same public operation.
+        */
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.pin_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::lifecycle_violation) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.pin_count() != 0U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (vsapi_state.add_frame_ref_count != 0) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.free_frame_count != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -1398,6 +1421,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "per_invocation_pin_list_lifecycle",
             cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle
+        },
+        {
+            "as1_lookup_pin_record_atomicity",
+            cnr3_cache_core_selftest_as1_lookup_pin_record_atomicity
         }
     };
 
@@ -1447,14 +1474,14 @@ bool cnr3_cache_core_selftest_run_result_passed(
 }
 
 /*
-    CMS07-D.1 cache-core selftest placeholder.
+    CMS07-D.3A cache-core selftest placeholder.
 
     The compiled selftests in this phase are the empty-model check, the isolated
     slot-ID source check, the empty-owned-frame store rejection check, the
     successful-store/duplicate-store check, the lookup-addref hit/miss check,
     the clear/teardown release-count check, the slot pin/unpin lifecycle check,
-    the lookup-pin reservation lifecycle check, and the per-invocation pin-list
-    lifecycle check above.
+    the lookup-pin reservation lifecycle check, the per-invocation pin-list
+    lifecycle check, and the AS1 lookup-pin-record atomicity check above.
 
     CMS07-C.6B added a permanent selftest runner. CMS07-C.6C added the separate
     console executable that calls the runner and reports the stderr-only summary.

@@ -182,6 +182,8 @@ struct Cnr3CacheSlot {
 */
 using Cnr3CacheFrameIndex = std::map<int, std::size_t>;
 
+class Cnr3CachePinList;
+
 /*
     CMS07 output cache core.
 
@@ -300,42 +302,28 @@ public:
     ) const;
 
     /*
-        Lock-owning lookup-pin reservation operation.
+        Lock-owning AS1 lookup-pin-record operation.
 
-        This is the future cache-core reservation boundary for reusing a cached
-        frame later in the same activation. It finds the frame-number index
-        entry and increments the matching slot pin count while holding
-        cache_mutex_.
+        This is the CMS07-D.3A compliant AS1 primitive for cached-frame reuse.
+        It reserves pin-list capacity before acquiring cache_mutex_, then under
+        one cache-lock acquisition it finds the frame-number index entry,
+        validates the slot, increments the matching slot pin count, and records
+        the pin in pin_list without allocation.
 
         This operation does not call addFrameRef(), freeFrame(), or transfer a
-        VSFrame. It reserves slot liveness only. The caller must later release
-        the returned token with unpin_frame().
+        VSFrame. It reserves slot liveness only.
     */
-    [[nodiscard]] Cnr3Status lookup_frame_and_pin(
+    [[nodiscard]] Cnr3Status lookup_frame_and_record_pin(
         int frame_number,
-        Cnr3CacheSlotPinToken& out_pin_token
-    );
-
-    /*
-        Lock-owning slot pin operation.
-
-        This reserves cache-slot liveness for a future cache-core operation. It
-        does not acquire, release, or transfer any VSFrame reference.
-
-        out_pin_token must be invalid on entry. On success, it records the
-        frame number and slot ID that must later be supplied to unpin_frame().
-        On miss, no pin is acquired and out_pin_token remains invalid.
-    */
-    [[nodiscard]] Cnr3Status pin_frame(
-        int frame_number,
-        Cnr3CacheSlotPinToken& out_pin_token
+        Cnr3CachePinList& pin_list
     );
 
     /*
         Lock-owning slot unpin operation.
 
-        The token must have been returned by pin_frame(). On success, the slot
-        pin count is decremented and the token is invalidated.
+        The token must have been recorded by a cache-core AS helper and later
+        supplied by Cnr3CachePinList::discharge_all(). On success, the slot pin
+        count is decremented and the token is invalidated.
 
         A token mismatch is a lifecycle violation because decrementing the wrong
         slot would break cache liveness accounting.
@@ -414,8 +402,8 @@ private:
         public wrapper adopts that acquired reference into Cnr3OwnedFrameRef
         after the lock scope exits.
 
-        This helper does not pin the slot. Lookup-pin reservation is handled
-        by lookup_frame_and_pin_locked().
+        This helper does not pin the slot. AS1 lookup-pin-record reservation is
+        handled by lookup_frame_and_record_pin_locked().
     */
     [[nodiscard]] Cnr3Status lookup_frame_and_add_ref_locked(
         int frame_number,
@@ -424,18 +412,16 @@ private:
     ) const;
 
     /*
-        Lock-protected lookup-pin reservation helper.
+        Lock-protected AS1 lookup-pin-record helper.
 
         This helper assumes the caller already holds cache_mutex_. It must not
-        acquire cache_mutex_ itself.
-
-        It performs the C.8 reservation shape: frame-number lookup and
-        pin-count increment as one cache-locked operation. It does not call
-        VSAPI::addFrameRef(), VSAPI::freeFrame(), or move a Cnr3OwnedFrameRef.
+        acquire cache_mutex_ itself. pin_list must have enough pre-reserved
+        storage for one more token before this helper is called. The in-lock
+        record operation must not allocate.
     */
-    [[nodiscard]] Cnr3Status lookup_frame_and_pin_locked(
+    [[nodiscard]] Cnr3Status lookup_frame_and_record_pin_locked(
         int frame_number,
-        Cnr3CacheSlotPinToken& out_pin_token
+        Cnr3CachePinList& pin_list
     );
 
     /*
@@ -546,12 +532,27 @@ public:
     [[nodiscard]] std::size_t pin_count() const noexcept;
 
     /*
+        Pre-reserve storage for additional pin records.
+
+        This operation may allocate and must be called before entering a CMS07
+        AS cache-lock scope. The AS1 combined helper relies on this to make the
+        in-lock append bounded, deterministic, and allocation-free.
+    */
+    [[nodiscard]] Cnr3Status reserve_for_additional_pins(
+        std::size_t additional_pin_count
+    );
+
+    /*
         Record one already-acquired slot pin.
 
         pin_token must be valid on entry. On success, this function stores its
         own copy and resets pin_token so the caller no longer owns that pin
         token. If storage allocation fails, pin_token remains valid and the
         caller remains responsible for releasing it.
+
+        This separate call is not AS1/AS2 compliant when paired with a cache
+        pin operation. Use Cnr3OutputCacheCore::lookup_frame_and_record_pin()
+        for AS1 cached-frame reuse.
     */
     [[nodiscard]] Cnr3Status record_pin(
         Cnr3CacheSlotPinToken& pin_token
@@ -569,5 +570,19 @@ public:
     );
 
 private:
+    friend class Cnr3OutputCacheCore;
+
+    /*
+        Record one pin into already-reserved storage.
+
+        This must not allocate. It exists so a cache-core AS helper can append
+        the pin-list record inside the same cache-lock acquisition as the slot
+        pin-count increment.
+    */
+    [[nodiscard]] Cnr3Status record_pin_without_allocation(
+        Cnr3CacheSlotPinToken& pin_token
+    ) noexcept;
+
     std::vector<Cnr3CacheSlotPinToken> pin_tokens_{};
+    std::size_t used_pin_count_ = 0;
 };

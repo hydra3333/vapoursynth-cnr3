@@ -163,38 +163,23 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     return Cnr3Status::ok;
 }
 
-Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_pin(
+Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
     int frame_number,
-    Cnr3CacheSlotPinToken& out_pin_token
+    Cnr3CachePinList& pin_list
 ) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
     }
 
-    if (cnr3_cache_slot_pin_token_is_valid(out_pin_token)) {
-        return Cnr3Status::invalid_argument;
+    const Cnr3Status reserve_status = pin_list.reserve_for_additional_pins(1U);
+
+    if (!cnr3_status_is_ok(reserve_status)) {
+        return reserve_status;
     }
 
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    return lookup_frame_and_pin_locked(frame_number, out_pin_token);
-}
-
-Cnr3Status Cnr3OutputCacheCore::pin_frame(
-    int frame_number,
-    Cnr3CacheSlotPinToken& out_pin_token
-) {
-    if (!cnr3_frame_number_is_valid(frame_number)) {
-        return Cnr3Status::invalid_argument;
-    }
-
-    if (cnr3_cache_slot_pin_token_is_valid(out_pin_token)) {
-        return Cnr3Status::invalid_argument;
-    }
-
-    const std::lock_guard<std::mutex> lock(cache_mutex_);
-
-    return pin_frame_locked(frame_number, out_pin_token);
+    return lookup_frame_and_record_pin_locked(frame_number, pin_list);
 }
 
 Cnr3Status Cnr3OutputCacheCore::unpin_frame(
@@ -381,11 +366,32 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     return Cnr3Status::ok;
 }
 
-Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_pin_locked(
+Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
     int frame_number,
-    Cnr3CacheSlotPinToken& out_pin_token
+    Cnr3CachePinList& pin_list
 ) {
-    return pin_frame_locked(frame_number, out_pin_token);
+    Cnr3CacheSlotPinToken pin_token{};
+
+    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token);
+
+    if (!cnr3_status_is_ok(pin_status)) {
+        return pin_status;
+    }
+
+    const Cnr3Status record_status =
+        pin_list.record_pin_without_allocation(pin_token);
+
+    if (!cnr3_status_is_ok(record_status)) {
+        const Cnr3Status unpin_status = unpin_frame_locked(pin_token);
+
+        if (!cnr3_status_is_ok(unpin_status)) {
+            return unpin_status;
+        }
+
+        return record_status;
+    }
+
+    return Cnr3Status::ok;
 }
 
 Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
@@ -613,13 +619,40 @@ bool Cnr3CachePinList::empty() const noexcept {
 std::size_t Cnr3CachePinList::pin_count() const noexcept {
     std::size_t valid_pin_count = 0;
 
-    for (const Cnr3CacheSlotPinToken& pin_token : pin_tokens_) {
-        if (cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+    for (std::size_t pin_index = 0; pin_index < used_pin_count_; ++pin_index) {
+        if (cnr3_cache_slot_pin_token_is_valid(pin_tokens_[pin_index])) {
             ++valid_pin_count;
         }
     }
 
     return valid_pin_count;
+}
+
+Cnr3Status Cnr3CachePinList::reserve_for_additional_pins(
+    std::size_t additional_pin_count
+) {
+    if (additional_pin_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    if (additional_pin_count > (pin_tokens_.max_size() - used_pin_count_)) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    const std::size_t required_slot_count = used_pin_count_ + additional_pin_count;
+
+    if (pin_tokens_.size() >= required_slot_count) {
+        return Cnr3Status::ok;
+    }
+
+    try {
+        pin_tokens_.resize(required_slot_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    return Cnr3Status::ok;
 }
 
 Cnr3Status Cnr3CachePinList::record_pin(
@@ -629,12 +662,28 @@ Cnr3Status Cnr3CachePinList::record_pin(
         return Cnr3Status::invalid_argument;
     }
 
-    try {
-        pin_tokens_.push_back(pin_token);
+    const Cnr3Status reserve_status = reserve_for_additional_pins(1U);
+
+    if (!cnr3_status_is_ok(reserve_status)) {
+        return reserve_status;
     }
-    catch (const std::bad_alloc&) {
-        return Cnr3Status::allocation_failed;
+
+    return record_pin_without_allocation(pin_token);
+}
+
+Cnr3Status Cnr3CachePinList::record_pin_without_allocation(
+    Cnr3CacheSlotPinToken& pin_token
+) noexcept {
+    if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+        return Cnr3Status::invalid_argument;
     }
+
+    if (used_pin_count_ >= pin_tokens_.size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    pin_tokens_[used_pin_count_] = pin_token;
+    ++used_pin_count_;
 
     cnr3_cache_slot_pin_token_reset(pin_token);
 
@@ -646,7 +695,9 @@ Cnr3Status Cnr3CachePinList::discharge_all(
 ) {
     Cnr3Status first_failure_status = Cnr3Status::ok;
 
-    for (Cnr3CacheSlotPinToken& pin_token : pin_tokens_) {
+    for (std::size_t pin_index = 0; pin_index < used_pin_count_; ++pin_index) {
+        Cnr3CacheSlotPinToken& pin_token = pin_tokens_[pin_index];
+
         if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
             continue;
         }
@@ -662,7 +713,11 @@ Cnr3Status Cnr3CachePinList::discharge_all(
     }
 
     if (cnr3_status_is_ok(first_failure_status)) {
-        pin_tokens_.clear();
+        for (std::size_t pin_index = 0; pin_index < used_pin_count_; ++pin_index) {
+            cnr3_cache_slot_pin_token_reset(pin_tokens_[pin_index]);
+        }
+
+        used_pin_count_ = 0U;
     }
 
     return first_failure_status;
@@ -678,7 +733,9 @@ Cnr3Status Cnr3CachePinList::discharge_all(
     immediate lookup/addref. CMS07-C.6 introduced clear/teardown detach.
     CMS07-C.7 introduced balanced slot pin/unpin mechanics. CMS07-C.8
     introduced explicit lookup-pin reservation. CMS07-D.1 introduced
-    per-invocation pin-list record/discharge.
+    per-invocation pin-list record/discharge. CMS07-D.2A aligned AS comments
+    with the CMS07 register. CMS07-D.3A introduced the AS1-compliant combined
+    lookup-pin-record helper.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.
@@ -700,9 +757,9 @@ Cnr3Status Cnr3CachePinList::discharge_all(
         critical section optional, smaller, splittable, reorderable, or movable.
 
         The protected operation is the whole cache-state decision, not merely
-        the frame-reference bump. A future find-and-pin operation, for example,
-        is a single cache-lock operation because the find and the add-ref/pin
-        record must not be separated by a prune window.
+        the frame-reference bump. A find-and-pin-record operation, for example,
+        is a single cache-lock operation because the find, pin-count increment,
+        and pin-list record must not be separated by a prune window.
 
     Atomic-scope rule:
         CMS07 AS1-AS7 are designer-owned, mandatory, indivisible cache-lock

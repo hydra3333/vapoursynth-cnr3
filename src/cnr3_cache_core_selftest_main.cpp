@@ -71,15 +71,28 @@ namespace {
         cnr3_selftest_write_summary_line(message);
     }
 
-    Cnr3CacheCoreSelftestRunResult
-        cnr3_selftest_make_forced_failure_result() noexcept {
-        Cnr3CacheCoreSelftestRunResult result{};
+    Cnr3CacheCoreSelftestRunResult cnr3_selftest_make_forced_failure_result(
+        const Cnr3CacheCoreSelftestRunResult& natural_result
+    ) noexcept {
+        Cnr3CacheCoreSelftestRunResult result = natural_result;
 
-        result.total_count = 1;
-        result.passed_count = 0;
-        result.failed_count = 1;
-        result.first_failed_test_name = "forced_failure_for_harness_proof";
-        result.first_failed_status = Cnr3Status::invariant_violation;
+        if (result.total_count <= 0) {
+            result.total_count = 1;
+            result.passed_count = 0;
+            result.failed_count = 1;
+        }
+        else if (result.passed_count > 0) {
+            --result.passed_count;
+            ++result.failed_count;
+        }
+        else {
+            ++result.failed_count;
+        }
+
+        if (result.first_failed_test_name == nullptr) {
+            result.first_failed_test_name = "forced_failure_for_harness_proof";
+            result.first_failed_status = Cnr3Status::invariant_violation;
+        }
 
         return result;
     }
@@ -132,10 +145,13 @@ int main(int argc, char** argv) {
     const bool force_failure_proof =
         cnr3_selftest_argument_is_forced_failure_proof(argc, argv);
 
+    const Cnr3CacheCoreSelftestRunResult natural_result =
+        cnr3_cache_core_selftest_run_all();
+
     const Cnr3CacheCoreSelftestRunResult result =
         force_failure_proof ?
-        cnr3_selftest_make_forced_failure_result() :
-        cnr3_cache_core_selftest_run_all();
+        cnr3_selftest_make_forced_failure_result(natural_result) :
+        natural_result;
 
     cnr3_selftest_print_summary_to_stderr(result);
 

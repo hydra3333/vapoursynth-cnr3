@@ -98,9 +98,9 @@
 /*
     Run the CMS07-C.8 lookup-pin reservation selftest.
 
-    This verifies that lookup_frame_and_pin() performs hit/miss reservation
-    through the explicit lookup-pin boundary. It must acquire only a slot pin:
-    no addFrameRef(), freeFrame(), frame transfer, checkpoint, prune, recovery,
+    This verifies the lookup-pin reservation lifecycle through the AS1 combined
+    helper. A public lookup-pin-without-record helper must not be reintroduced.
+    No addFrameRef(), freeFrame(), frame transfer, checkpoint, prune, recovery,
     or getFrame behaviour is introduced.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_lookup_pin_reservation_lifecycle() noexcept;
@@ -115,6 +115,17 @@
     checkpoints, hot zones, recovery, or D-SUM production counters.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept;
+
+/*
+    Run the CMS07-D.3A AS1 lookup-pin-record atomicity selftest.
+
+    This verifies that the AS1 combined helper records a pin through the
+    cache-core operation without exposing a public caller-owned transient token
+    gap.
+    It does not introduce AS2 store/adopt/pin/record, checkpoints, prune,
+    recovery, getFrame wiring, or D-SUM production counters.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_lookup_pin_record_atomicity() noexcept;
 
 /*
     Permanent cache-core selftest runner result.

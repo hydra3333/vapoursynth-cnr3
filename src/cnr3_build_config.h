@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.6-cache-core-clear-teardown-detach";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-C.6A-cache-core-clear-teardown-selftest";
 
 /*
     Temporary proof scaffold convention.

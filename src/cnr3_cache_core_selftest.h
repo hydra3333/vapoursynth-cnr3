@@ -75,3 +75,12 @@
     introduce pinning, checkpoints, prune, recovery, or getFrame wiring.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept;
+
+/*
+    Run the CMS07-C.6A clear/teardown selftest.
+
+    This verifies that clear() detaches retained cached frames, leaves the
+    cache empty and invariant-clean, and releases each retained frame reference
+    exactly once through the synthetic VSAPI freeFrame stub.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_clear_teardown_releases_cached_frames_once() noexcept;

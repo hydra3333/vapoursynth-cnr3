@@ -422,6 +422,30 @@ public:
     [[nodiscard]] std::size_t hot_zone_count() const;
 
     /*
+        Lock-owning observer for hot-zone membership.
+
+        This is read-only hot-zone visibility for tests and later prune policy.
+        It does not decide eviction and does not make a frame live; consumer pins
+        remain the only active-frame liveness mechanism.
+    */
+    [[nodiscard]] bool frame_is_inside_hot_zone(
+        int frame_number
+    ) const;
+
+    /*
+        Lock-owning hot-zone observation update.
+
+        CMS07-G.3A proves only the slide/spawn part of the hot-zone model. This
+        records activity for frame_number by sliding the nearest active zone
+        within CNR3_CACHE_JUMP_THRESHOLD, or by spawning a new zone if capacity
+        permits. Merge, retirement/decay, prune use, and final AS1 integration
+        remain deferred.
+    */
+    [[nodiscard]] Cnr3Status record_hot_zone_observation(
+        int frame_number
+    );
+
+    /*
         Lock-owning diagnostic/test observer for active slot pins.
 
         Pins are cache-slot liveness reservations only. They are not frame
@@ -658,6 +682,9 @@ private:
     [[nodiscard]] std::size_t index_count_locked() const noexcept;
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
+    [[nodiscard]] bool frame_is_inside_hot_zone_locked(
+        int frame_number
+    ) const noexcept;
     [[nodiscard]] int total_pin_count_locked() const noexcept;
 
     /*
@@ -674,6 +701,18 @@ private:
         planning, pruning, or pixel validation.
     */
     [[nodiscard]] bool cache_state_invariants_hold_locked() const noexcept;
+
+    /*
+        Lock-protected hot-zone helpers.
+
+        These helpers assume the caller already holds cache_mutex_. They must
+        not acquire cache_mutex_ themselves. They update only hot-zone policy
+        hints and must not pin, unpin, store, remove, prune, recover, request
+        source frames, or touch pixel data.
+    */
+    [[nodiscard]] Cnr3Status record_hot_zone_observation_locked(
+        int frame_number
+    );
 
     /*
         Lock-protected store helpers.

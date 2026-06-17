@@ -1984,6 +1984,159 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_data_model() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept {
+    Cnr3OutputCacheCore cache{};
+
+    if (
+        cache.record_hot_zone_observation(CNR3_INVALID_FRAME_NUMBER) !=
+        Cnr3Status::invalid_argument
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(100)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 1U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(50)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(100)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(110)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(49)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(111)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(120) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 1U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(50)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(70)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(130)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(131)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(200) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 2U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(150)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(210)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.cache_state_invariants_hold()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(260) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 2U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(150)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(210)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(270)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(500) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(700) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(900) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != CNR3_CACHE_MAX_HOT_ZONES) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(1100) != Cnr3Status::capacity_exceeded) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != CNR3_CACHE_MAX_HOT_ZONES) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.cache_state_invariants_hold()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.clear() != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.empty()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -3415,6 +3568,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
             cnr3_cache_core_selftest_hot_zone_data_model
         },
         {
+            "hot_zone_slide_spawn_lifecycle",
+            cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle
+        },
+        {
             "lookup_addref_hit_and_miss",
             cnr3_cache_core_selftest_lookup_addref_hit_and_miss
         },
@@ -3486,16 +3643,18 @@ bool cnr3_cache_core_selftest_run_result_passed(
 }
 
 /*
-    CMS07-G.1A cache-core selftest/audit note.
+    CMS07-G.3A cache-core selftest/audit note.
 
     The current isolated selftest suite proves cache-core data structure,
-    ownership, pin, checkpoint, remove/detach, and policy-constant boundaries
-    before those mechanisms are connected to VapourSynth getFrame scheduling.
+    ownership, pin, checkpoint, remove/detach, policy-constant boundaries, and
+    initial hot-zone slide/spawn behaviour before those mechanisms are connected
+    to VapourSynth getFrame scheduling.
 
-    CMS07-G.1A adds only cache policy constants and coherence checks. It does
-    not introduce active-ceiling calculation, hot-zone state, prune distance
-    ordering, recovery planning, AS2 store/adopt/pin/record/checkpoint logic,
-    source lifecycle handling, pixel behaviour, or D-SUM production counters.
+    CMS07-G.3A adds only hot-zone observation slide/spawn behaviour. It does not
+    introduce hot-zone merge, retirement/decay transition, active-ceiling
+    calculation, prune distance ordering, recovery planning, AS2
+    store/adopt/pin/record/checkpoint logic, source lifecycle handling, pixel
+    behaviour, or D-SUM production counters.
 
     Future selftests must continue to verify ownership and lifecycle properties
     before behaviour is trusted. In particular, tests must prove that:

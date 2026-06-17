@@ -150,6 +150,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_data_model() noexcept;
 
 /*
+    Run the CMS07-G.3A hot-zone slide/spawn selftest.
+
+    This verifies only the first hot-zone update behaviour: slide the nearest
+    active zone within the jump threshold, or spawn a new zone when no active
+    zone is close enough and capacity permits. It does not merge, retire, apply
+    zones to prune policy, perform recovery, or connect to VapourSynth getFrame
+    scheduling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

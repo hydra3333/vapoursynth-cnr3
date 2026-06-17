@@ -133,6 +133,30 @@ std::size_t Cnr3OutputCacheCore::hot_zone_count() const {
     return hot_zone_count_locked();
 }
 
+bool Cnr3OutputCacheCore::frame_is_inside_hot_zone(
+    int frame_number
+) const {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return false;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return frame_is_inside_hot_zone_locked(frame_number);
+}
+
+Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation(
+    int frame_number
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return record_hot_zone_observation_locked(frame_number);
+}
+
 int Cnr3OutputCacheCore::total_pin_count() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
@@ -484,6 +508,29 @@ std::size_t Cnr3OutputCacheCore::hot_zone_count_locked() const noexcept {
     return hot_zones_.size();
 }
 
+bool Cnr3OutputCacheCore::frame_is_inside_hot_zone_locked(
+    int frame_number
+) const noexcept {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return false;
+    }
+
+    for (const Cnr3CacheHotZone& hot_zone : hot_zones_) {
+        if (!hot_zone.is_active) {
+            continue;
+        }
+
+        if (
+            frame_number >= hot_zone.low_frame &&
+            frame_number <= hot_zone.high_frame
+            ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
     int total_pin_count = 0;
 
@@ -500,6 +547,95 @@ int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
     }
 
     return total_pin_count;
+}
+
+Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation_locked(
+    int frame_number
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (frame_number >
+        (std::numeric_limits<int>::max() - CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS)
+        ) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const int observed_low_frame =
+        (frame_number > CNR3_CACHE_HOT_ZONE_BACK_RADIUS) ?
+        (frame_number - CNR3_CACHE_HOT_ZONE_BACK_RADIUS) :
+        0;
+    const int observed_high_frame =
+        frame_number + CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS;
+
+    std::size_t best_zone_position = hot_zones_.size();
+    int best_distance = std::numeric_limits<int>::max();
+
+    for (std::size_t zone_position = 0U;
+        zone_position < hot_zones_.size();
+        ++zone_position
+        ) {
+        const Cnr3CacheHotZone& hot_zone = hot_zones_[zone_position];
+
+        if (!hot_zone.is_active) {
+            continue;
+        }
+
+        int distance = 0;
+
+        if (frame_number < hot_zone.low_frame) {
+            distance = hot_zone.low_frame - frame_number;
+        }
+        else if (frame_number > hot_zone.high_frame) {
+            distance = frame_number - hot_zone.high_frame;
+        }
+
+        if (
+            distance <= CNR3_CACHE_JUMP_THRESHOLD &&
+            distance < best_distance
+            ) {
+            best_distance = distance;
+            best_zone_position = zone_position;
+        }
+    }
+
+    if (best_zone_position < hot_zones_.size()) {
+        Cnr3CacheHotZone& hot_zone = hot_zones_[best_zone_position];
+
+        hot_zone.is_active = true;
+        hot_zone.low_frame = observed_low_frame;
+        hot_zone.high_frame = observed_high_frame;
+        hot_zone.last_observed_frame = frame_number;
+    }
+    else {
+        if (hot_zones_.size() >= CNR3_CACHE_MAX_HOT_ZONES) {
+            return Cnr3Status::capacity_exceeded;
+        }
+
+        Cnr3CacheHotZone hot_zone{};
+        hot_zone.is_active = true;
+        hot_zone.low_frame = observed_low_frame;
+        hot_zone.high_frame = observed_high_frame;
+        hot_zone.last_observed_frame = frame_number;
+
+        try {
+            hot_zones_.push_back(hot_zone);
+        }
+        catch (const std::bad_alloc&) {
+            return Cnr3Status::allocation_failed;
+        }
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
 }
 
 Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
@@ -1385,8 +1521,11 @@ Cnr3Status Cnr3CachePinList::discharge_all(
     as satisfied by the D.3A combined helper; no second lookup-pin-record helper
     is required. CMS07-F.1A introduced the central single-slot remove helper.
     CMS07-F.2A introduced a bounded selected-detach proof for the AS5 batch
-    shape. CMS07-F.3A introduces a narrow unpinned non-checkpoint selection
-    proof; final prune candidate selection remains deferred.
+    shape. CMS07-F.3A introduced a narrow unpinned non-checkpoint selection
+    proof. CMS07-F.4A introduced a checkpoint retention-boundary proof.
+    CMS07-G.1A introduced cache policy constants. CMS07-G.2A introduced the
+    hot-zone data model. CMS07-G.3A introduces hot-zone slide/spawn update
+    behaviour; merge, retirement, and final prune-policy use remain deferred.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

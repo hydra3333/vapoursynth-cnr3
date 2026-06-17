@@ -735,7 +735,10 @@ Cnr3Status Cnr3CachePinList::discharge_all(
     introduced explicit lookup-pin reservation. CMS07-D.1 introduced
     per-invocation pin-list record/discharge. CMS07-D.2A aligned AS comments
     with the CMS07 register. CMS07-D.3A introduced the AS1-compliant combined
-    lookup-pin-record helper.
+    lookup-pin-record helper. CMS07-E.1A strengthened the isolated store helper
+    proof. CMS07-E.2A reconciled the original E.2 lookup-pin-record obligation
+    as satisfied by the D.3A combined helper; no second lookup-pin-record helper
+    is required.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

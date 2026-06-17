@@ -1507,14 +1507,21 @@ bool cnr3_cache_core_selftest_run_result_passed(
 }
 
 /*
-    CMS07-D.3A cache-core selftest placeholder.
+    CMS07-E.2A cache-core selftest/audit note.
 
-    The compiled selftests in this phase are the empty-model check, the isolated
-    slot-ID source check, the empty-owned-frame store rejection check, the
-    successful-store/duplicate-store check, the lookup-addref hit/miss check,
-    the clear/teardown release-count check, the slot pin/unpin lifecycle check,
-    the lookup-pin reservation lifecycle check, the per-invocation pin-list
-    lifecycle check, and the AS1 lookup-pin-record atomicity check above.
+    The compiled selftests in this phase remain the empty-model check, the
+    isolated slot-ID source check, the empty-owned-frame store rejection check,
+    the successful-store/duplicate-store check, the lookup-addref hit/miss
+    check, the clear/teardown release-count check, the slot pin/unpin lifecycle
+    check, the lookup-pin reservation lifecycle check, the per-invocation
+    pin-list lifecycle check, and the AS1 lookup-pin-record atomicity check
+    above.
+
+    CMS07-E.2A adds no second lookup-pin-record selftest because D.3A already
+    made lookup_frame_and_record_pin() the single AS1 public primitive and
+    added structural compile-time checks against reintroducing the gapped
+    lookup-pin-without-record public API. E.2A reconciles the original E.2
+    obligation to that existing proof instead of duplicating the helper.
 
     CMS07-C.6B added a permanent selftest runner. CMS07-C.6C added the separate
     console executable that calls the runner and reports the stderr-only summary.

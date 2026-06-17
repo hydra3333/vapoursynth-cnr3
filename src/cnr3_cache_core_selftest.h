@@ -121,11 +121,12 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept;
 
 /*
-    Run the CMS07-D.3A AS1 lookup-pin-record atomicity selftest.
+    Run the CMS07-D.3A / CMS07-E.2A AS1 lookup-pin-record atomicity selftest.
 
     This verifies that the AS1 combined helper records a pin through the
     cache-core operation without exposing a public caller-owned transient token
-    gap.
+    gap. CMS07-E.2A reconciles the original E.2 lookup-pin-record helper
+    obligation to this existing combined helper and proof.
     It does not introduce AS2 store/adopt/pin/record, checkpoints, prune,
     recovery, getFrame wiring, or D-SUM production counters.
 */

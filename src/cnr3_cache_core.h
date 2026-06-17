@@ -309,14 +309,18 @@ public:
     /*
         Lock-owning AS1 lookup-pin-record operation.
 
-        This is the CMS07-D.3A compliant AS1 primitive for cached-frame reuse.
-        It reserves pin-list capacity before acquiring cache_mutex_, then under
-        one cache-lock acquisition it finds the frame-number index entry,
-        validates the slot, increments the matching slot pin count, and records
-        the pin in pin_list without allocation.
+        This is the CMS07-D.3A compliant AS1 primitive for cached-frame reuse
+        and the CMS07-E.2A reconciled implementation of the original E.2
+        lookup-pin-record helper obligation. It reserves pin-list capacity
+        before acquiring cache_mutex_, then under one cache-lock acquisition it
+        finds the frame-number index entry, validates the slot, increments the
+        matching slot pin count, and records the pin in pin_list without
+        allocation.
 
         This operation does not call addFrameRef(), freeFrame(), or transfer a
-        VSFrame. It reserves slot liveness only.
+        VSFrame. It reserves slot liveness only. Do not add a second public
+        lookup-pin-record helper unless a later CMS update changes this AS1
+        boundary.
     */
     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin(
         int frame_number,
@@ -423,6 +427,9 @@ private:
         acquire cache_mutex_ itself. pin_list must have enough pre-reserved
         storage for one more token before this helper is called. The in-lock
         record operation must not allocate.
+
+        CMS07-E.2A confirms this helper is the single AS1 lookup-pin-record
+        primitive. It is not a staging half for another public lookup-pin API.
     */
     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin_locked(
         int frame_number,

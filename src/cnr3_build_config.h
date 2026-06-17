@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-E.1A-store-helper-first-in-best-dressed-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-E.2A-lookup-pin-record-helper-reconciliation";
 
 /*
     Temporary proof scaffold convention.

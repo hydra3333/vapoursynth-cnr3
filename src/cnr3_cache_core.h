@@ -366,6 +366,27 @@ public:
     );
 
     /*
+        Lock-owning bounded checkpoint retention-boundary selection/detach
+        operation.
+
+        CMS07-F.4A proves the checkpoint side of the future AS5 predicate before
+        hot-zone exclusion and distance ordering exist. The helper detaches only
+        unpinned checkpoint slots above retain_checkpoint_count, never detaches
+        frame 0, and releases detached frame references only after cache_mutex_
+        is unlocked.
+
+        This is still not final checkpoint-retention prune policy. It deliberately
+        does not evaluate hot-zone protection, greatest-distance ordering, active
+        ceiling pressure, or recovery state. Future AS5 prune code must extend
+        this shape to the complete CMS07 eviction predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_checkpoints_above_retain_count_bounded(
+        std::size_t retain_checkpoint_count,
+        std::size_t max_remove_count,
+        std::size_t& out_removed_count
+    );
+
+    /*
         Lock-owning immediate lookup/addref operation.
 
         This operation is for immediate returned-frame ownership only. It does
@@ -544,6 +565,26 @@ private:
         narrow F.3A safety proof, not the final CMS07 prune predicate.
     */
     [[nodiscard]] Cnr3Status remove_unpinned_noncheckpoint_frames_bounded_locked(
+        std::size_t max_remove_count,
+        std::vector<Cnr3CacheSlot>& detached_slots,
+        std::size_t& out_removed_count
+    );
+
+    /*
+        Lock-protected bounded checkpoint retention-boundary selection/detach
+        helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. detached_slots must have enough reserved
+        capacity before entry so the in-lock detach loop does not allocate.
+
+        This helper selects only checkpoint slots with pin_count == 0, frame
+        number other than 0, and checkpoint_count above retain_checkpoint_count.
+        It is a narrow F.4A safety proof, not the final CMS07 checkpoint prune
+        predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_checkpoints_above_retain_count_bounded_locked(
+        std::size_t retain_checkpoint_count,
         std::size_t max_remove_count,
         std::vector<Cnr3CacheSlot>& detached_slots,
         std::size_t& out_removed_count

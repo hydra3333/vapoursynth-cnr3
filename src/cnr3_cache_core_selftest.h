@@ -120,6 +120,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_unpinned_noncheckpoint_selection_lifecycle() noexcept;
 
 /*
+    Run the CMS07-F.4A checkpoint retention-boundary selection selftest.
+
+    This verifies that the checkpoint-side bounded selection helper detaches
+    only unpinned checkpoint slots above a caller-provided retain floor, never
+    removes frame 0, never removes pinned checkpoints, never removes
+    non-checkpoints, and releases detached frame references after the cache lock
+    exits. It does not introduce hot-zone exclusion, distance ordering, active
+    ceiling policy, recovery, getFrame wiring, or D-SUM production counters.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_checkpoint_retention_boundary_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

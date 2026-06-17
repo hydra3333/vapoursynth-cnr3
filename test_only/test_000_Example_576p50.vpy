@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, List
 import vapoursynth as vs
 
 core = vs.core
@@ -107,7 +107,7 @@ def _process_progressive_or_interlaced(
     # DoubleWeave produces pairs of frames:
     #   even index = clean weave of same-parity neighbours  <- keep these
     #   odd  index = dirty weave of adjacent-parity fields  <- discard these
-    # tff must match the original source so top/bottom plane assignment is correct.
+    # tff match the original source so top/bottom plane assignment is correct.
     rewoven = core.std.DoubleWeave(reinterleaved, tff=tff)
     # Discard the dirty odd-indexed overlap frames, keeping only the clean
     # even-indexed weaves.  Output is back to original resolution and framerate.
@@ -210,6 +210,10 @@ def reweave_fields(
 #       result = reweave_fields(tag, first, second)
 ######################################################################################
 
+######################################################################################
+# BUBBLING LOGIC
+######################################################################################
+
 def make_bubbling_test_clip(clip: vs.VideoNode, zone_size: int, clip_size: int) -> vs.VideoNode:
     """
     Generates a test clip of an exact size where frames bubble out of order 
@@ -219,13 +223,12 @@ def make_bubbling_test_clip(clip: vs.VideoNode, zone_size: int, clip_size: int) 
     :param clip_size: The exact total number of frames for the output test clip.
     """
     core = vs.core
-    #
     # 1. Slice the source clip to the requested total clip size
     trimmed_clip = clip[:clip_size]
     # 2. Build the out-of-order pattern array
     pattern = []
-    # Process full window zones
     num_zones = clip_size // zone_size
+    # Process full window zones
     for z in range(num_zones):
         base_idx = z * zone_size
         left = 0
@@ -239,39 +242,90 @@ def make_bubbling_test_clip(clip: vs.VideoNode, zone_size: int, clip_size: int) 
                 pattern.append(base_idx + right)
             left += 1
             right -= 1
-    # 3. Append any remaining trailing frames linearly so nothing is missed
+    # 3. Append any remaining trailing frames linearly
     leftover_start = num_zones * zone_size
     for idx in range(leftover_start, clip_size):
         pattern.append(idx)
-    # 4. Apply the exact mapping sequence over the entire trimmed length
+    # 4. Apply the exact mapping sequence
     return core.std.SelectEvery(trimmed_clip, cycle=clip_size, offsets=pattern)
+
+def create_bouncing_test_clip(
+    base_clip: vs.VideoNode, 
+    bounce_frames: List[int], 
+    segment_len: int, 
+    zone_size: int, 
+    do_bubble: bool
+) -> vs.VideoNode:
+    """
+    Abstracts the bubbling logic to handle multiple jump points (bounces).
+    It takes segments from specified start frames and joins them.
+    """
+    segments = []
+    
+    # Ensure we have at least one starting point
+    if not bounce_frames:
+        bounce_frames = [0]
+        
+    for start in bounce_frames:
+        # 1. Extract the segment from the base clip
+        # Ensure we don't exceed the source clip length
+        end_pos = min(start + segment_len, base_clip.num_frames)
+        seg = base_clip[start:end_pos]
+        
+        actual_seg_len = seg.num_frames
+        
+        # 2. Apply bubbling if requested
+        if do_bubble and actual_seg_len > 0:
+            seg = make_bubbling_test_clip(seg, zone_size=zone_size, clip_size=actual_seg_len)
+            
+        segments.append(seg)
+        
+    # 3. Splice all segments together into one long test clip
+    return core.std.Splice(segments)
+
 
 # --------------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------------
 
 # --- START Define bubbling out-of-order clip parameters ---
-THREADS_ZONE = 5     # Simulates X concurrent out-of-order frame worker requests
-TEST_CLIP_LEN = 20   # The output clip will be exactly Y frames long
-SIMULATE_OUT_OF_ORDER = True
+THREADS_ZONE = 5                                            # Simulates X concurrent out-of-order frame worker requests
+BOUNCE_CLIP_SIZE = 200                                      # Size (length) of each segment
+SEGMENT_BOUNCE_TO_START_FRAMES = [0, 3000, 1000, 2000]      # Points to jump to in the source file
+SIMULATE_OUT_OF_ORDER = True                                # Set to False if you want sequential-frames-only within segments
+
+# Cross-check whether we want just one segment of frames regardless of whether they are sequential or out of order
+try:
+    bounce_list = SEGMENT_BOUNCE_TO_START_FRAMES
+except NameError:
+    bounce_list = [0]
+
+# Calculate total clip length based on the number of bounces and the segment size
+TEST_CLIP_LEN = len(bounce_list) * BOUNCE_CLIP_SIZE  # The output clip will be exactly Y frames long
 # --- END Define bubbling out-of-order clip parameters ---
 
-# FIRSTLY, CHECK IF PROGRESSIVE or INTERLACED AND RETURN A TAG AND SPLIT FIELDS IF NEED BE
+# Check if PROGRESSIVE or INTERLACED and return a tag and split the fields if need be
 tag, first, second = split_fields(clip)
 
-# SECONDLY, DEPENDING ON THE RETURN TAG, PROCESS THE VIDEO AS PROGRESSIVE OR AS INTERLACED, BUGGLING OR NOT
-blend_value = 1
+# Depending on the return tag, process the video as PROGRESSIVE or as INTERLACED
 if tag == "P":  # original clip was PROGRESSIVE
-    clip_denoised_base = core.cnr3.CNR3(first, blend=blend_value)
+    clip_denoised_base = core.cnr3.CNR3(first)
 else:           # original clip was INTERLACED
-    first_denoised_base  = core.cnr3.CNR3(first, blend=blend_value)
-    second_denoised_base = core.cnr3.CNR3(second, blend=blend_value)
+    first_denoised_base  = core.cnr3.CNR3(first)
+    second_denoised_base = core.cnr3.CNR3(second)
     clip_denoised_base = reweave_fields(tag, first_denoised_base, second_denoised_base)
-#    
-if SIMULATE_OUT_OF_ORDER:
-    clip_denoised = make_bubbling_test_clip(clip_denoised_base, zone_size=THREADS_ZONE, clip_size=TEST_CLIP_LEN)
-else:
-    clip_denoised = clip_denoised_base[:TEST_CLIP_LEN]
-#
-#stacked_comparison = core.std.StackHorizontal([ clip, clip_denoised,])
-#stacked_comparison.set_output()
+
+# Create the final clip from the segments and bubbling.
+# Function create_bouncing_test_clip handles:
+#   - "bouncing" (extracting segments based on starting frame numbers)
+#   - "bubbling" (reordering frames within those segments)
+clip_denoised = create_bouncing_test_clip(
+    clip_denoised_base, 
+    bounce_frames=bounce_list, 
+    segment_len=BOUNCE_CLIP_SIZE, 
+    zone_size=THREADS_ZONE, 
+    do_bubble=SIMULATE_OUT_OF_ORDER
+)
+
+# Output the final bubbled or non-bubbled clip
+# Size of the final output clip will be TEST_CLIP_LEN frames.
 clip_denoised.set_output()

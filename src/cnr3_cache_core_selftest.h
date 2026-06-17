@@ -141,6 +141,15 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept;
 
 /*
+    Run the CMS07-G.2A hot-zone data-model selftest.
+
+    This verifies only the hot-zone storage shape and invariants. It does not
+    slide, spawn, merge, retire, apply zones to prune policy, perform recovery,
+    or connect to VapourSynth getFrame scheduling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_data_model() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

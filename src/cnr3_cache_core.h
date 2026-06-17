@@ -328,6 +328,31 @@ struct Cnr3CacheSlot {
 ) noexcept;
 
 /*
+    Hot-zone data model.
+
+    CMS07-G.2A introduces only the hot-zone storage shape and invariants. It
+    does not slide, spawn, merge, retire, or apply zones to prune policy.
+
+    A live hot zone is a prune-policy hint for anticipated or recently observed
+    access, not a correctness/liveness guarantee. Consumer pins remain the only
+    active-frame liveness mechanism.
+*/
+struct Cnr3CacheHotZone {
+    bool is_active = false;
+    int low_frame = CNR3_INVALID_FRAME_NUMBER;
+    int high_frame = CNR3_INVALID_FRAME_NUMBER;
+    int last_observed_frame = CNR3_INVALID_FRAME_NUMBER;
+};
+
+[[nodiscard]] bool cnr3_cache_hot_zone_is_valid(
+    const Cnr3CacheHotZone& hot_zone
+) noexcept;
+
+[[nodiscard]] bool cnr3_cache_hot_zone_model_invariants_hold(
+    const std::vector<Cnr3CacheHotZone>& hot_zones
+) noexcept;
+
+/*
     Ordered frame-number index.
 
     The value is the vector position of the slot in Cnr3OutputCacheCore::slots_.
@@ -394,6 +419,7 @@ public:
     [[nodiscard]] std::size_t slot_count() const;
     [[nodiscard]] std::size_t index_count() const;
     [[nodiscard]] std::size_t checkpoint_count() const;
+    [[nodiscard]] std::size_t hot_zone_count() const;
 
     /*
         Lock-owning diagnostic/test observer for active slot pins.
@@ -631,6 +657,7 @@ private:
     [[nodiscard]] std::size_t slot_count_locked() const noexcept;
     [[nodiscard]] std::size_t index_count_locked() const noexcept;
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
+    [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
     [[nodiscard]] int total_pin_count_locked() const noexcept;
 
     /*
@@ -640,8 +667,9 @@ private:
         acquire cache_mutex_ itself.
 
         The invariant checked here is structural only. It verifies that the
-        slot vector, frame index, checkpoint-position list, live slot metadata,
-        and basic pin counts are mutually consistent. It does not perform
+        slot vector, frame index, checkpoint-position list, hot-zone model, live
+        slot metadata, and basic pin counts are mutually consistent. It does not
+        perform
         VapourSynth reference-count checks, ownership accounting, recovery
         planning, pruning, or pixel validation.
     */
@@ -859,6 +887,7 @@ private:
     std::vector<Cnr3CacheSlot> slots_{};
     Cnr3CacheFrameIndex frame_index_{};
     std::vector<std::size_t> checkpoint_slot_positions_{};
+    std::vector<Cnr3CacheHotZone> hot_zones_{};
     Cnr3CacheSlotIdSource slot_id_source_{};
 };
 

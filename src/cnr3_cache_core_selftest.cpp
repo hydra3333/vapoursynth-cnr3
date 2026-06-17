@@ -4,6 +4,7 @@
 
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -135,6 +136,10 @@ Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept {
     }
 
     if (cache.checkpoint_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 0U) {
         return Cnr3Status::invariant_violation;
     }
 
@@ -1885,6 +1890,100 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_hot_zone_data_model() noexcept {
+    const Cnr3OutputCacheCore cache{};
+
+    if (cache.hot_zone_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.cache_state_invariants_hold()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const Cnr3CacheHotZone inactive_zone{};
+
+    if (!cnr3_cache_hot_zone_is_valid(inactive_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone malformed_inactive_zone{};
+    malformed_inactive_zone.low_frame = 0;
+
+    if (cnr3_cache_hot_zone_is_valid(malformed_inactive_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone active_zone{};
+    active_zone.is_active = true;
+    active_zone.low_frame = 10;
+    active_zone.high_frame = 20;
+    active_zone.last_observed_frame = 15;
+
+    if (!cnr3_cache_hot_zone_is_valid(active_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone reversed_zone = active_zone;
+    reversed_zone.low_frame = 20;
+    reversed_zone.high_frame = 10;
+
+    if (cnr3_cache_hot_zone_is_valid(reversed_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone low_observation_zone = active_zone;
+    low_observation_zone.last_observed_frame = 9;
+
+    if (cnr3_cache_hot_zone_is_valid(low_observation_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone high_observation_zone = active_zone;
+    high_observation_zone.last_observed_frame = 21;
+
+    if (cnr3_cache_hot_zone_is_valid(high_observation_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone invalid_low_zone = active_zone;
+    invalid_low_zone.low_frame = CNR3_INVALID_FRAME_NUMBER;
+
+    if (cnr3_cache_hot_zone_is_valid(invalid_low_zone)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    std::vector<Cnr3CacheHotZone> hot_zones{};
+
+    if (!cnr3_cache_hot_zone_model_invariants_hold(hot_zones)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    for (std::size_t zone_index = 0;
+        zone_index < CNR3_CACHE_MAX_HOT_ZONES;
+        ++zone_index
+        ) {
+        Cnr3CacheHotZone zone{};
+        zone.is_active = true;
+        zone.low_frame = static_cast<int>(zone_index * 100U);
+        zone.high_frame = zone.low_frame + CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
+        zone.last_observed_frame = zone.low_frame;
+        hot_zones.push_back(zone);
+    }
+
+    if (!cnr3_cache_hot_zone_model_invariants_hold(hot_zones)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    hot_zones.push_back(active_zone);
+
+    if (cnr3_cache_hot_zone_model_invariants_hold(hot_zones)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -3310,6 +3409,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "cache_policy_constants",
             cnr3_cache_core_selftest_cache_policy_constants
+        },
+        {
+            "hot_zone_data_model",
+            cnr3_cache_core_selftest_hot_zone_data_model
         },
         {
             "lookup_addref_hit_and_miss",

@@ -50,6 +50,59 @@ bool cnr3_cache_slot_is_indexable(
         slot.frame.has_frame();
 }
 
+bool cnr3_cache_hot_zone_is_valid(
+    const Cnr3CacheHotZone& hot_zone
+) noexcept {
+    if (!hot_zone.is_active) {
+        return
+            hot_zone.low_frame == CNR3_INVALID_FRAME_NUMBER &&
+            hot_zone.high_frame == CNR3_INVALID_FRAME_NUMBER &&
+            hot_zone.last_observed_frame == CNR3_INVALID_FRAME_NUMBER;
+    }
+
+    if (!cnr3_frame_number_is_valid(hot_zone.low_frame)) {
+        return false;
+    }
+
+    if (!cnr3_frame_number_is_valid(hot_zone.high_frame)) {
+        return false;
+    }
+
+    if (!cnr3_frame_number_is_valid(hot_zone.last_observed_frame)) {
+        return false;
+    }
+
+    if (hot_zone.low_frame > hot_zone.high_frame) {
+        return false;
+    }
+
+    if (hot_zone.last_observed_frame < hot_zone.low_frame) {
+        return false;
+    }
+
+    if (hot_zone.last_observed_frame > hot_zone.high_frame) {
+        return false;
+    }
+
+    return true;
+}
+
+bool cnr3_cache_hot_zone_model_invariants_hold(
+    const std::vector<Cnr3CacheHotZone>& hot_zones
+) noexcept {
+    if (hot_zones.size() > CNR3_CACHE_MAX_HOT_ZONES) {
+        return false;
+    }
+
+    for (const Cnr3CacheHotZone& hot_zone : hot_zones) {
+        if (!cnr3_cache_hot_zone_is_valid(hot_zone)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool Cnr3OutputCacheCore::empty() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
@@ -72,6 +125,12 @@ std::size_t Cnr3OutputCacheCore::checkpoint_count() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
     return checkpoint_count_locked();
+}
+
+std::size_t Cnr3OutputCacheCore::hot_zone_count() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return hot_zone_count_locked();
 }
 
 int Cnr3OutputCacheCore::total_pin_count() const {
@@ -405,7 +464,8 @@ Cnr3Status Cnr3OutputCacheCore::clear() {
 bool Cnr3OutputCacheCore::empty_locked() const noexcept {
     return slots_.empty() &&
         frame_index_.empty() &&
-        checkpoint_slot_positions_.empty();
+        checkpoint_slot_positions_.empty() &&
+        hot_zones_.empty();
 }
 
 std::size_t Cnr3OutputCacheCore::slot_count_locked() const noexcept {
@@ -418,6 +478,10 @@ std::size_t Cnr3OutputCacheCore::index_count_locked() const noexcept {
 
 std::size_t Cnr3OutputCacheCore::checkpoint_count_locked() const noexcept {
     return checkpoint_slot_positions_.size();
+}
+
+std::size_t Cnr3OutputCacheCore::hot_zone_count_locked() const noexcept {
+    return hot_zones_.size();
 }
 
 int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
@@ -1068,6 +1132,7 @@ Cnr3Status Cnr3OutputCacheCore::clear_locked(
     detached_slots.swap(slots_);
     frame_index_.clear();
     checkpoint_slot_positions_.clear();
+    hot_zones_.clear();
 
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
@@ -1077,6 +1142,10 @@ Cnr3Status Cnr3OutputCacheCore::clear_locked(
 }
 
 bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+    if (!cnr3_cache_hot_zone_model_invariants_hold(hot_zones_)) {
+        return false;
+    }
+
     for (const auto& frame_index_entry : frame_index_) {
         const int frame_number = frame_index_entry.first;
         const std::size_t slot_position = frame_index_entry.second;

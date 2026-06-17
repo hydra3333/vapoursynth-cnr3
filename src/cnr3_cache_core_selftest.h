@@ -132,6 +132,15 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_checkpoint_retention_boundary_lifecycle() noexcept;
 
 /*
+    Run the CMS07-G.1A cache policy constants selftest.
+
+    This verifies the CMS07.1 cache policy numbers and coherence relationships
+    without adding active-ceiling calculation, hot-zone state, prune ordering,
+    recovery, AS2, getFrame wiring, or D-SUM production counters.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

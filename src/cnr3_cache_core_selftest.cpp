@@ -1758,6 +1758,133 @@ Cnr3Status cnr3_cache_core_selftest_unpinned_noncheckpoint_selection_lifecycle()
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+    if (CNR3_CACHE_BYTE_BUDGET_BYTES != 1073741824ULL) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES != 150U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES != 1000U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR != 11U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR != 10U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_CHECKPOINT_INTERVAL != 10) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_CHECKPOINT_MIN_RETAIN != 10U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_CHECKPOINT_MAX_RETAIN != 48U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS != 10) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_HOT_ZONE_BACK_RADIUS != 50) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS !=
+        CNR3_CACHE_HOT_ZONE_BACK_RADIUS
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_MAX_HOT_ZONES != 5U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_JUMP_THRESHOLD !=
+        (CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS +
+         CNR3_CACHE_HOT_ZONE_BACK_RADIUS +
+         1)
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_JUMP_THRESHOLD != 61) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_HOT_ZONE_DECAY_MARGIN != 20) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS != 8U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR == 0U ||
+        CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR <=
+        CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_HOT_ZONE_BACK_RADIUS !=
+        (5 * CNR3_CACHE_CHECKPOINT_INTERVAL)
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES <
+        (2U * CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE)
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE != 348U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_CHECKPOINT_MAX_RETAIN <
+        CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE != 25U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS >
+        CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        CNR3_CACHE_HOT_ZONE_DECAY_MARGIN >
+        CNR3_CACHE_HOT_ZONE_BACK_RADIUS
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -3181,6 +3308,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
             cnr3_cache_core_selftest_checkpoint_retention_boundary_lifecycle
         },
         {
+            "cache_policy_constants",
+            cnr3_cache_core_selftest_cache_policy_constants
+        },
+        {
             "lookup_addref_hit_and_miss",
             cnr3_cache_core_selftest_lookup_addref_hit_and_miss
         },
@@ -3252,27 +3383,19 @@ bool cnr3_cache_core_selftest_run_result_passed(
 }
 
 /*
-    CMS07-E.2A cache-core selftest/audit note.
+    CMS07-G.1A cache-core selftest/audit note.
 
-    The compiled selftests in this phase remain the empty-model check, the
-    isolated slot-ID source check, the empty-owned-frame store rejection check,
-    the successful-store/duplicate-store check, the lookup-addref hit/miss
-    check, the clear/teardown release-count check, the slot pin/unpin lifecycle
-    check, the lookup-pin reservation lifecycle check, the per-invocation
-    pin-list lifecycle check, and the AS1 lookup-pin-record atomicity check
-    above.
+    The current isolated selftest suite proves cache-core data structure,
+    ownership, pin, checkpoint, remove/detach, and policy-constant boundaries
+    before those mechanisms are connected to VapourSynth getFrame scheduling.
 
-    CMS07-E.2A adds no second lookup-pin-record selftest because D.3A already
-    made lookup_frame_and_record_pin() the single AS1 public primitive and
-    added structural compile-time checks against reintroducing the gapped
-    lookup-pin-without-record public API. E.2A reconciles the original E.2
-    obligation to that existing proof instead of duplicating the helper.
+    CMS07-G.1A adds only cache policy constants and coherence checks. It does
+    not introduce active-ceiling calculation, hot-zone state, prune distance
+    ordering, recovery planning, AS2 store/adopt/pin/record/checkpoint logic,
+    source lifecycle handling, pixel behaviour, or D-SUM production counters.
 
-    CMS07-C.6B added a permanent selftest runner. CMS07-C.6C added the separate
-    console executable that calls the runner and reports the stderr-only summary.
-
-    Future selftests must verify ownership and lifecycle properties before
-    behaviour is trusted. In particular, tests must prove that:
+    Future selftests must continue to verify ownership and lifecycle properties
+    before behaviour is trusted. In particular, tests must prove that:
         - pin/unpin operations balance;
         - lookup-reference acquire/release/transfer operations balance;
         - first-in-best-dressed store behaviour preserves the first winner;

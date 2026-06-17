@@ -51,6 +51,164 @@
 */
 
 /*
+    CMS07 cache policy constants.
+
+    CMS07-G.1A defines the policy numbers and their coherence relationships
+    only. These constants do not by themselves implement active-ceiling
+    calculation, hot-zone state, prune candidate ordering, recovery, AS2, or
+    VapourSynth getFrame wiring.
+*/
+
+/*
+    The active cache ceiling is derived later from this nominal byte budget and
+    the actual output frame byte size, then clamped to the hard min/max below.
+*/
+inline constexpr std::uint64_t CNR3_CACHE_BYTE_BUDGET_BYTES =
+    1024ULL * 1024ULL * 1024ULL;
+
+/*
+    Active-ceiling clamp bounds.
+
+    CR4 active_ceiling >= ~2 x max-protected set, where max-protected ~=
+    MAX_HOT_ZONES x (BACK_RADIUS + FORWARD_RADIUS) + checkpoint pool ~=
+    5 x 60 + 48 = ~348; 1000 >> 348. If pruning can never reach target,
+    this rule is violated.
+*/
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;
+
+/*
+    Non-checkpoint prune hysteresis factor, represented as an exact rational to
+    avoid introducing floating-point policy into cache-core integer accounting.
+*/
+inline constexpr std::size_t CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR = 11U;
+inline constexpr std::size_t CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR = 10U;
+
+/*
+    Checkpoint establishment and retention. Grid checkpoints are every interval
+    frames plus frame 0; cut checkpoints add irregular density on top.
+
+    CR5 CHECKPOINT_MAX_RETAIN >= MAX_HOT_ZONES x
+    (BACK_RADIUS / INTERVAL) = 25 grid checkpoints, treated as a density FLOOR
+    because cuts add irregular checkpoints on top. MAX_RETAIN raised 32 -> 48:
+    25 grid floor + ~23 headroom for scene-cut checkpoints within the
+    ~300-frame protected span. Content-dependent starting value; if cut-heavy
+    material keeps the pool pinned at 48 with prune unable to reduce, raise it.
+    MIN_RETAIN unchanged at 10.
+*/
+inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;
+
+/*
+    Hot-zone radii.
+
+    CR2 BACK_RADIUS >= bounded recovery search window B; ideally = B
+    (currently both 50). AND B must exceed the effective settling length of the
+    recursive chroma blend, so the floor-approximation fresh-start in Section
+    9.5 is invisible at N. If B were shrunk for memory, confirm it still
+    exceeds the blend settling length, or the approximate start would show at
+    the output.
+
+    CR3 BACK_RADIUS ~= 5 x CHECKPOINT_INTERVAL; a zone covers about five grid
+    anchors. 50 = 5 x 10.
+*/
+inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;
+inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;
+inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
+    CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
+
+/*
+    Hot-zone count. MAX_HOT_ZONES scales with concurrent distinct access
+    regions, not thread count.
+*/
+inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;
+
+/*
+    CR1 JUMP_THRESHOLD is DERIVED = FORWARD_RADIUS + BACK_RADIUS + 1; never set
+    independently.
+*/
+inline constexpr int CNR3_CACHE_JUMP_THRESHOLD =
+    CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS +
+    CNR3_CACHE_HOT_ZONE_BACK_RADIUS +
+    1;
+
+/*
+    decay_margin bound: FORWARD_RADIUS <= decay_margin <= BACK_RADIUS
+    (10 <= 20 <= 50); far below active_ceiling.
+*/
+inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;
+
+/*
+    Bounded-prune victim cap. This bounds one AS5 decide/detach pass; the later
+    full prune policy decides when and which candidates to offer.
+*/
+inline constexpr std::size_t CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS = 8U;
+
+inline constexpr std::size_t CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE =
+    CNR3_CACHE_MAX_HOT_ZONES *
+    static_cast<std::size_t>(
+        CNR3_CACHE_HOT_ZONE_BACK_RADIUS +
+        CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS
+    ) +
+    CNR3_CACHE_CHECKPOINT_MAX_RETAIN;
+
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE =
+    CNR3_CACHE_MAX_HOT_ZONES *
+    static_cast<std::size_t>(
+        CNR3_CACHE_HOT_ZONE_BACK_RADIUS /
+        CNR3_CACHE_CHECKPOINT_INTERVAL
+    );
+
+static_assert(CNR3_CACHE_BYTE_BUDGET_BYTES == 1073741824ULL);
+static_assert(CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES > 0U);
+static_assert(
+    CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES <=
+    CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES
+    );
+static_assert(CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR != 0U);
+static_assert(
+    CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR >
+    CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR
+    );
+static_assert(CNR3_CACHE_CHECKPOINT_INTERVAL > 0);
+static_assert(
+    CNR3_CACHE_CHECKPOINT_MIN_RETAIN <=
+    CNR3_CACHE_CHECKPOINT_MAX_RETAIN
+    );
+static_assert(
+    CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS <=
+    CNR3_CACHE_HOT_ZONE_BACK_RADIUS
+    );
+static_assert(
+    CNR3_CACHE_HOT_ZONE_BACK_RADIUS ==
+    (5 * CNR3_CACHE_CHECKPOINT_INTERVAL)
+    );
+static_assert(
+    CNR3_CACHE_JUMP_THRESHOLD ==
+    (CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS +
+     CNR3_CACHE_HOT_ZONE_BACK_RADIUS +
+     1)
+    );
+static_assert(
+    CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES >=
+    (2U * CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE)
+    );
+static_assert(
+    CNR3_CACHE_CHECKPOINT_MAX_RETAIN >=
+    CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE
+    );
+static_assert(
+    CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS <=
+    CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+    );
+static_assert(
+    CNR3_CACHE_HOT_ZONE_DECAY_MARGIN <=
+    CNR3_CACHE_HOT_ZONE_BACK_RADIUS
+    );
+static_assert(CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS > 0U);
+
+/*
     Stable slot identifiers are introduced as a named type now so future
     diagnostics and selftests can distinguish slot identity from frame number
     and vector position.

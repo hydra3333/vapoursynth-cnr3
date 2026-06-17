@@ -12,6 +12,11 @@ static_assert(
     );
 
 static_assert(
+    std::is_nothrow_move_assignable_v<Cnr3CacheSlot>,
+    "Cnr3CacheSlot must be nothrow move-assignable for cache slot removal."
+    );
+
+static_assert(
     std::is_nothrow_move_assignable_v<Cnr3OwnedFrameRef>,
     "Cnr3OwnedFrameRef must be nothrow move-assignable for cache slot adoption."
     );
@@ -130,6 +135,29 @@ Cnr3Status Cnr3OutputCacheCore::store_checkpoint_owned_frame(
         const std::lock_guard<std::mutex> lock(cache_mutex_);
 
         status = store_checkpoint_owned_frame_locked(frame_number, frame);
+    }
+
+    return status;
+}
+
+Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame(
+    int frame_number
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    Cnr3CacheSlot detached_slot{};
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so the detached slot releases its owned
+        frame after cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = remove_unpinned_frame_locked(frame_number, detached_slot);
     }
 
     return status;
@@ -398,6 +426,114 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
     if (is_checkpoint) {
         checkpoint_slot_positions_.push_back(slot_position);
     }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame_locked(
+    int frame_number,
+    Cnr3CacheSlot& detached_slot
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (
+        cnr3_cache_slot_has_frame(detached_slot) ||
+        cnr3_cache_slot_id_is_valid(detached_slot.slot_id) ||
+        cnr3_frame_number_is_valid(detached_slot.frame_number) ||
+        detached_slot.is_checkpoint ||
+        detached_slot.pin_count != 0
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const auto frame_index_it = frame_index_.find(frame_number);
+
+    if (frame_index_it == frame_index_.end()) {
+        return Cnr3Status::not_found;
+    }
+
+    const std::size_t slot_position = frame_index_it->second;
+
+    if (slot_position >= slots_.size()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheSlot& slot = slots_[slot_position];
+
+    if (!cnr3_cache_slot_is_indexable(slot)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.frame_number != frame_number) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (slot.pin_count != 0) {
+        return Cnr3Status::lifecycle_violation;
+    }
+
+    const bool removed_checkpoint = slot.is_checkpoint;
+    const std::size_t last_slot_position = slots_.size() - 1U;
+
+    bool removed_checkpoint_position = false;
+
+    if (removed_checkpoint) {
+        for (std::size_t checkpoint_index = 0;
+            checkpoint_index < checkpoint_slot_positions_.size();
+            ++checkpoint_index
+            ) {
+            if (checkpoint_slot_positions_[checkpoint_index] == slot_position) {
+                checkpoint_slot_positions_[checkpoint_index] =
+                    checkpoint_slot_positions_.back();
+                checkpoint_slot_positions_.pop_back();
+                removed_checkpoint_position = true;
+                break;
+            }
+        }
+
+        if (!removed_checkpoint_position) {
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    frame_index_.erase(frame_index_it);
+    detached_slot = std::move(slots_[slot_position]);
+
+    if (slot_position != last_slot_position) {
+        Cnr3CacheSlot& moved_slot = slots_[last_slot_position];
+
+        if (!cnr3_cache_slot_is_indexable(moved_slot)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        const int moved_frame_number = moved_slot.frame_number;
+        auto moved_frame_index_it = frame_index_.find(moved_frame_number);
+
+        if (moved_frame_index_it == frame_index_.end()) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        slots_[slot_position] = std::move(moved_slot);
+        moved_frame_index_it->second = slot_position;
+
+        for (std::size_t& checkpoint_slot_position : checkpoint_slot_positions_) {
+            if (checkpoint_slot_position == last_slot_position) {
+                checkpoint_slot_position = slot_position;
+            }
+        }
+    }
+
+    slots_.pop_back();
 
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
@@ -695,9 +831,36 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
         }
     }
 
-    for (const std::size_t checkpoint_slot_position : checkpoint_slot_positions_) {
+    std::size_t checkpoint_slot_count = 0;
+
+    for (std::size_t slot_position = 0; slot_position < slots_.size(); ++slot_position) {
+        if (slots_[slot_position].is_checkpoint) {
+            ++checkpoint_slot_count;
+        }
+    }
+
+    if (checkpoint_slot_count != checkpoint_slot_positions_.size()) {
+        return false;
+    }
+
+    for (std::size_t checkpoint_index = 0;
+        checkpoint_index < checkpoint_slot_positions_.size();
+        ++checkpoint_index
+        ) {
+        const std::size_t checkpoint_slot_position =
+            checkpoint_slot_positions_[checkpoint_index];
+
         if (checkpoint_slot_position >= slots_.size()) {
             return false;
+        }
+
+        for (std::size_t compare_index = checkpoint_index + 1U;
+            compare_index < checkpoint_slot_positions_.size();
+            ++compare_index
+            ) {
+            if (checkpoint_slot_positions_[compare_index] == checkpoint_slot_position) {
+                return false;
+            }
         }
 
         const Cnr3CacheSlot& slot = slots_[checkpoint_slot_position];

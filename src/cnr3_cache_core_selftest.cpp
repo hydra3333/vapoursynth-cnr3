@@ -766,6 +766,334 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int first_frame_storage = 1;
+    int middle_frame_storage = 2;
+    int checkpoint_last_frame_storage = 3;
+    int pinned_frame_storage = 4;
+
+    const VSFrame* first_frame =
+        reinterpret_cast<const VSFrame*>(&first_frame_storage);
+    const VSFrame* middle_frame =
+        reinterpret_cast<const VSFrame*>(&middle_frame_storage);
+    const VSFrame* checkpoint_last_frame =
+        reinterpret_cast<const VSFrame*>(&checkpoint_last_frame_storage);
+    const VSFrame* pinned_frame =
+        reinterpret_cast<const VSFrame*>(&pinned_frame_storage);
+
+    vsapi_state.tracked_release_frames[0] = first_frame;
+    vsapi_state.tracked_release_frames[1] = middle_frame;
+    vsapi_state.tracked_release_frames[2] = checkpoint_last_frame;
+    vsapi_state.tracked_release_frames[3] = pinned_frame;
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        if (cache.remove_unpinned_frame(-1) != Cnr3Status::invalid_argument) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.remove_unpinned_frame(99) != Cnr3Status::not_found) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3OwnedFrameRef first_owned_frame{};
+        Cnr3OwnedFrameRef middle_owned_frame{};
+        Cnr3OwnedFrameRef checkpoint_last_owned_frame{};
+
+        if (
+            first_owned_frame.reset_to_owned_frame(first_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            middle_owned_frame.reset_to_owned_frame(middle_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            checkpoint_last_owned_frame.reset_to_owned_frame(
+                checkpoint_last_frame,
+                &vsapi
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(
+                1,
+                std::move(first_owned_frame)
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(
+                2,
+                std::move(middle_owned_frame)
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_checkpoint_owned_frame(
+                3,
+                std::move(checkpoint_last_owned_frame)
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != 3U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.index_count() != 3U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.checkpoint_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.remove_unpinned_frame(2) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[1] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != 2U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.index_count() != 2U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.checkpoint_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3OwnedFrameRef moved_checkpoint_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                3,
+                &vsapi,
+                moved_checkpoint_lookup
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (moved_checkpoint_lookup.get() != checkpoint_last_frame) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        moved_checkpoint_lookup.reset();
+
+        if (vsapi_state.tracked_release_counts[2] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.remove_unpinned_frame(3) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[2] != 2) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.checkpoint_count() != 0U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3OwnedFrameRef missing_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(3, &vsapi, missing_lookup) !=
+            Cnr3Status::not_found
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (missing_lookup.has_frame()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+        Cnr3OwnedFrameRef pinned_owned_frame{};
+
+        if (
+            pinned_owned_frame.reset_to_owned_frame(pinned_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(
+                4,
+                std::move(pinned_owned_frame)
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.lookup_frame_and_record_pin(4, pin_list) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.remove_unpinned_frame(4) != Cnr3Status::lifecycle_violation) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[3] != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.remove_unpinned_frame(4) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[3] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (vsapi_state.free_frame_count != 5) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.add_frame_ref_count != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[0] != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[1] != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[2] != 2) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[3] != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -1812,6 +2140,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "checkpoint_store_flag_lifecycle",
             cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle
+        },
+        {
+            "central_remove_helper_lifecycle",
+            cnr3_cache_core_selftest_central_remove_helper_lifecycle
         },
         {
             "lookup_addref_hit_and_miss",

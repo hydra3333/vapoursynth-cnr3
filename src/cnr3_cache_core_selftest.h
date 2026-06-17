@@ -79,10 +79,22 @@
     detach an unpinned checkpoint, and that duplicate stores apply monotonic
     checkpoint classification: checkpoint-eligible duplicates promote an
     existing non-checkpoint slot, while non-checkpoint duplicates never demote an
-    existing checkpoint. It does not introduce AS2 store/adopt/pin/record,
+    existing checkpoint. Per-frame release counts make loser leaks and
+    double-frees fail the proof. It does not introduce AS2 store/adopt/pin/record,
     prune, recovery, or getFrame behaviour.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept;
+
+/*
+    Run the CMS07-F.1A central remove helper selftest.
+
+    This verifies that the central remove helper rejects pinned slots, detaches
+    unpinned slots from the frame index and checkpoint-position list, updates
+    compacted slot positions, and releases detached frames outside the cache
+    lock. It does not introduce prune policy, hot zones, recovery, AS2, or
+    getFrame behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept;
 
 /*
     Run the CMS07-C.5A lookup/addref selftest.

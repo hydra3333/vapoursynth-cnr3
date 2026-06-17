@@ -294,9 +294,10 @@ public:
         acquisition.
 
         On duplicate, first-in-best-dressed still preserves the existing frame
-        data. If the existing slot is not yet a checkpoint, this operation
-        promotes only its checkpoint flag and records it in the checkpoint index
-        inside the same cache-lock acquisition. It never overwrites frame data.
+        data. Under the CMS07.1 monotonic checkpoint rule, if the existing slot
+        is not yet a checkpoint, this operation promotes only its checkpoint
+        flag and records it in the checkpoint index inside the same cache-lock
+        acquisition. It never overwrites frame data.
 
         Checkpoint status is an eviction-protection classification only. It is
         not a slot pin, does not increment pin_count, does not addFrameRef(),
@@ -307,6 +308,23 @@ public:
     [[nodiscard]] Cnr3Status store_checkpoint_owned_frame(
         int frame_number,
         Cnr3OwnedFrameRef frame
+    );
+
+    /*
+        Lock-owning central single-slot remove operation.
+
+        This is the CMS07-F.1A low-level detach primitive for future prune and
+        teardown policy. It removes one unpinned slot from the frame index,
+        checkpoint-position list, and slot vector inside one cache-lock
+        acquisition, then releases the detached frame after cache_mutex_ is
+        unlocked.
+
+        This helper enforces the no-pinned-frame rule, but it does not decide
+        prune eligibility. Future prune code must evaluate the full CMS07
+        eviction predicate before calling the locked remove helper.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_frame(
+        int frame_number
     );
 
     /*
@@ -440,6 +458,22 @@ private:
         int frame_number,
         Cnr3OwnedFrameRef& frame,
         bool is_checkpoint
+    );
+
+    /*
+        Lock-protected central single-slot remove helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. The slot must be unpinned. The detached
+        slot is moved into detached_slot so its owned frame reference can be
+        released after cache_mutex_ is unlocked.
+
+        This helper is policy-free: future prune code must select candidates by
+        the composite eviction predicate before calling it.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_frame_locked(
+        int frame_number,
+        Cnr3CacheSlot& detached_slot
     );
 
     /*

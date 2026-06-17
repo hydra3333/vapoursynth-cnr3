@@ -268,9 +268,11 @@ public:
         the CMS07 rule that slow frame release work is not performed inside the
         cache atomic scope.
 
-        Duplicate frame numbers preserve first-in-best-dressed behaviour: the
-        existing cache slot remains authoritative and the rejected incoming
-        frame is released by the caller-side wrapper after the lock scope exits.
+        Duplicate frame numbers preserve first-in-best-dressed frame data: the
+        existing cache slot's pixels remain authoritative and the rejected
+        incoming frame is released by the caller-side wrapper after the lock
+        scope exits. A duplicate non-checkpoint store never clears an existing
+        checkpoint flag.
 
         This is an isolated store primitive, not the complete AS2
         store-and-pin-record operation. Future AS2 consumer code must use a
@@ -286,10 +288,15 @@ public:
         Lock-owning checkpoint store operation.
 
         This is the CMS07-E.3A isolated checkpoint-store primitive. It has the
-        same ownership and duplicate-store rules as store_noncheckpoint_owned_frame(),
-        but successful insertion sets the cache slot checkpoint flag and records
-        the slot position in the checkpoint-position list inside the same
-        cache-lock acquisition.
+        same ownership rules as store_noncheckpoint_owned_frame(), but successful
+        insertion sets the cache slot checkpoint flag and records the slot
+        position in the checkpoint-position list inside the same cache-lock
+        acquisition.
+
+        On duplicate, first-in-best-dressed still preserves the existing frame
+        data. If the existing slot is not yet a checkpoint, this operation
+        promotes only its checkpoint flag and records it in the checkpoint index
+        inside the same cache-lock acquisition. It never overwrites frame data.
 
         Checkpoint status is an eviction-protection classification only. It is
         not a slot pin, does not increment pin_count, does not addFrameRef(),
@@ -415,9 +422,9 @@ private:
         rejected paths, frame remains owned by the public wrapper so it can be
         released after cache_mutex_ is unlocked.
 
-        Checkpoint insertion updates the slot flag and checkpoint-position list
-        inside the same lock-protected insertion operation. Checkpoint status is
-        not a pin and must not change pin_count.
+        Checkpoint insertion or duplicate-store promotion updates the slot flag
+        and checkpoint-position list inside the same lock-protected store
+        operation. Checkpoint status is not a pin and must not change pin_count.
     */
     [[nodiscard]] Cnr3Status store_noncheckpoint_owned_frame_locked(
         int frame_number,

@@ -305,7 +305,50 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
         return Cnr3Status::invariant_violation;
     }
 
-    if (frame_index_.find(frame_number) != frame_index_.end()) {
+    const auto existing_frame_index_it = frame_index_.find(frame_number);
+
+    if (existing_frame_index_it != frame_index_.end()) {
+        const std::size_t existing_slot_position = existing_frame_index_it->second;
+
+        if (existing_slot_position >= slots_.size()) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheSlot& existing_slot = slots_[existing_slot_position];
+
+        if (!cnr3_cache_slot_is_indexable(existing_slot)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (existing_slot.frame_number != frame_number) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (is_checkpoint && !existing_slot.is_checkpoint) {
+            if (
+                checkpoint_slot_positions_.size() >=
+                checkpoint_slot_positions_.max_size()
+                ) {
+                return Cnr3Status::capacity_exceeded;
+            }
+
+            try {
+                checkpoint_slot_positions_.reserve(
+                    checkpoint_slot_positions_.size() + 1U
+                );
+            }
+            catch (const std::bad_alloc&) {
+                return Cnr3Status::allocation_failed;
+            }
+
+            existing_slot.is_checkpoint = true;
+            checkpoint_slot_positions_.push_back(existing_slot_position);
+
+            if (!cache_state_invariants_hold_locked()) {
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
         return Cnr3Status::duplicate;
     }
 

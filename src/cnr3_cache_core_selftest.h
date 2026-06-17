@@ -76,9 +76,11 @@
 
     This verifies that checkpoint store sets checkpoint classification during
     the store operation, that checkpoint status is not a pin, that clear can
-    detach an unpinned checkpoint, and that duplicate stores do not promote or
-    demote an existing slot's checkpoint classification. It does not introduce
-    AS2 store/adopt/pin/record, prune, recovery, or getFrame behaviour.
+    detach an unpinned checkpoint, and that duplicate stores apply monotonic
+    checkpoint classification: checkpoint-eligible duplicates promote an
+    existing non-checkpoint slot, while non-checkpoint duplicates never demote an
+    existing checkpoint. It does not introduce AS2 store/adopt/pin/record,
+    prune, recovery, or getFrame behaviour.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept;
 

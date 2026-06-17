@@ -505,7 +505,7 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept {
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.checkpoint_count() != 0U) {
+        if (cache.checkpoint_count() != 1U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -516,6 +516,43 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept {
         }
 
         if (vsapi_state.tracked_release_counts[0] != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[1] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3OwnedFrameRef promoted_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(1, &vsapi, promoted_lookup) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (promoted_lookup.get() != noncheckpoint_winner_frame) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        promoted_lookup.reset();
+
+        if (promoted_lookup.has_frame()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 1) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -545,13 +582,13 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept {
             return Cnr3Status::invariant_violation;
         }
 
-        if (vsapi_state.tracked_release_counts[0] != 1) {
+        if (vsapi_state.tracked_release_counts[0] != 2) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
     }
 
-    if (vsapi_state.free_frame_count != 2) {
+    if (vsapi_state.free_frame_count != 3) {
         g_cnr3_cache_core_selftest_vsapi_state = nullptr;
         return Cnr3Status::invariant_violation;
     }
@@ -699,12 +736,12 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept {
         }
     }
 
-    if (vsapi_state.free_frame_count != 4) {
+    if (vsapi_state.free_frame_count != 5) {
         g_cnr3_cache_core_selftest_vsapi_state = nullptr;
         return Cnr3Status::invariant_violation;
     }
 
-    if (vsapi_state.tracked_release_counts[0] != 1) {
+    if (vsapi_state.tracked_release_counts[0] != 2) {
         g_cnr3_cache_core_selftest_vsapi_state = nullptr;
         return Cnr3Status::invariant_violation;
     }

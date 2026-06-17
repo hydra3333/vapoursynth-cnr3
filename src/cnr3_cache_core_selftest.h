@@ -72,6 +72,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept;
 
 /*
+    Run the CMS07-E.3A checkpoint-store flag lifecycle selftest.
+
+    This verifies that checkpoint store sets checkpoint classification during
+    the store operation, that checkpoint status is not a pin, that clear can
+    detach an unpinned checkpoint, and that duplicate stores do not promote or
+    demote an existing slot's checkpoint classification. It does not introduce
+    AS2 store/adopt/pin/record, prune, recovery, or getFrame behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

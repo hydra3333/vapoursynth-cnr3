@@ -108,6 +108,33 @@ Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame(
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::store_checkpoint_owned_frame(
+    int frame_number,
+    Cnr3OwnedFrameRef frame
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so a rejected owned frame is released after
+        cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = store_checkpoint_owned_frame_locked(frame_number, frame);
+    }
+
+    return status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     int frame_number,
     const VSAPI* vsapi,
@@ -251,6 +278,21 @@ Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
     int frame_number,
     Cnr3OwnedFrameRef& frame
 ) {
+    return store_owned_frame_locked(frame_number, frame, false);
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_checkpoint_owned_frame_locked(
+    int frame_number,
+    Cnr3OwnedFrameRef& frame
+) {
+    return store_owned_frame_locked(frame_number, frame, true);
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
+    int frame_number,
+    Cnr3OwnedFrameRef& frame,
+    bool is_checkpoint
+) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
     }
@@ -273,8 +315,21 @@ Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
         return Cnr3Status::capacity_exceeded;
     }
 
+    if (
+        is_checkpoint &&
+        checkpoint_slot_positions_.size() >= checkpoint_slot_positions_.max_size()
+        ) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
     try {
         slots_.reserve(slot_position + 1U);
+
+        if (is_checkpoint) {
+            checkpoint_slot_positions_.reserve(
+                checkpoint_slot_positions_.size() + 1U
+            );
+        }
 
         const auto insert_result = frame_index_.emplace(frame_number, slot_position);
 
@@ -292,10 +347,14 @@ Cnr3Status Cnr3OutputCacheCore::store_noncheckpoint_owned_frame_locked(
     slot.slot_id = slot_id_source_.allocate();
     slot.frame_number = frame_number;
     slot.frame = std::move(frame);
-    slot.is_checkpoint = false;
+    slot.is_checkpoint = is_checkpoint;
     slot.pin_count = 0;
 
     slots_.push_back(std::move(slot));
+
+    if (is_checkpoint) {
+        checkpoint_slot_positions_.push_back(slot_position);
+    }
 
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;

@@ -283,6 +283,26 @@ public:
     );
 
     /*
+        Lock-owning checkpoint store operation.
+
+        This is the CMS07-E.3A isolated checkpoint-store primitive. It has the
+        same ownership and duplicate-store rules as store_noncheckpoint_owned_frame(),
+        but successful insertion sets the cache slot checkpoint flag and records
+        the slot position in the checkpoint-position list inside the same
+        cache-lock acquisition.
+
+        Checkpoint status is an eviction-protection classification only. It is
+        not a slot pin, does not increment pin_count, does not addFrameRef(),
+        and does not reserve consumer liveness. Future AS2 consumer code must
+        still use a combined AS2 helper for store/adopt, pin, pin-list record,
+        and checkpoint establishment.
+    */
+    [[nodiscard]] Cnr3Status store_checkpoint_owned_frame(
+        int frame_number,
+        Cnr3OwnedFrameRef frame
+    );
+
+    /*
         Lock-owning immediate lookup/addref operation.
 
         This operation is for immediate returned-frame ownership only. It does
@@ -386,18 +406,33 @@ private:
     [[nodiscard]] bool cache_state_invariants_hold_locked() const noexcept;
 
     /*
-        Lock-protected non-checkpoint store helper.
+        Lock-protected store helpers.
 
-        This helper assumes the caller already holds cache_mutex_. It must not
-        acquire cache_mutex_ itself.
+        These helpers assume the caller already holds cache_mutex_. They must
+        not acquire cache_mutex_ themselves.
 
-        The helper may move from frame only on successful insertion. On rejected
-        paths, frame remains owned by the public wrapper so it can be released
-        after cache_mutex_ is unlocked.
+        A store helper may move from frame only on successful insertion. On
+        rejected paths, frame remains owned by the public wrapper so it can be
+        released after cache_mutex_ is unlocked.
+
+        Checkpoint insertion updates the slot flag and checkpoint-position list
+        inside the same lock-protected insertion operation. Checkpoint status is
+        not a pin and must not change pin_count.
     */
     [[nodiscard]] Cnr3Status store_noncheckpoint_owned_frame_locked(
         int frame_number,
         Cnr3OwnedFrameRef& frame
+    );
+
+    [[nodiscard]] Cnr3Status store_checkpoint_owned_frame_locked(
+        int frame_number,
+        Cnr3OwnedFrameRef& frame
+    );
+
+    [[nodiscard]] Cnr3Status store_owned_frame_locked(
+        int frame_number,
+        Cnr3OwnedFrameRef& frame,
+        bool is_checkpoint
     );
 
     /*

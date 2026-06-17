@@ -157,6 +157,18 @@ Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation(
     return record_hot_zone_observation_locked(frame_number);
 }
 
+Cnr3Status Cnr3OutputCacheCore::retire_decay_eligible_hot_zones(
+    int current_frame
+) {
+    if (!cnr3_frame_number_is_valid(current_frame)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return retire_decay_eligible_hot_zones_locked(current_frame);
+}
+
 int Cnr3OutputCacheCore::total_pin_count() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
@@ -531,6 +543,33 @@ bool Cnr3OutputCacheCore::frame_is_inside_hot_zone_locked(
     return false;
 }
 
+bool Cnr3OutputCacheCore::hot_zone_has_pinned_frame_in_range_locked(
+    const Cnr3CacheHotZone& hot_zone
+) const noexcept {
+    if (!cnr3_cache_hot_zone_is_valid(hot_zone) || !hot_zone.is_active) {
+        return false;
+    }
+
+    for (const Cnr3CacheSlot& slot : slots_) {
+        if (!cnr3_cache_slot_has_frame(slot)) {
+            continue;
+        }
+
+        if (slot.pin_count <= 0) {
+            continue;
+        }
+
+        if (
+            slot.frame_number >= hot_zone.low_frame &&
+            slot.frame_number <= hot_zone.high_frame
+            ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
     int total_pin_count = 0;
 
@@ -718,6 +757,48 @@ Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation_locked(
         catch (const std::bad_alloc&) {
             return Cnr3Status::allocation_failed;
         }
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::retire_decay_eligible_hot_zones_locked(
+    int current_frame
+) {
+    if (!cnr3_frame_number_is_valid(current_frame)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    for (std::size_t zone_position = 0U; zone_position < hot_zones_.size();) {
+        const Cnr3CacheHotZone& hot_zone = hot_zones_[zone_position];
+
+        if (!hot_zone.is_active) {
+            hot_zones_.erase(hot_zones_.begin() + zone_position);
+            continue;
+        }
+
+        const bool decay_margin_elapsed =
+            current_frame >= hot_zone.last_observed_frame &&
+            (current_frame - hot_zone.last_observed_frame) >=
+            CNR3_CACHE_HOT_ZONE_DECAY_MARGIN;
+
+        if (
+            decay_margin_elapsed &&
+            !hot_zone_has_pinned_frame_in_range_locked(hot_zone)
+            ) {
+            hot_zones_.erase(hot_zones_.begin() + zone_position);
+            continue;
+        }
+
+        ++zone_position;
     }
 
     if (!cache_state_invariants_hold_locked()) {

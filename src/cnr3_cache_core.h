@@ -448,6 +448,19 @@ public:
     );
 
     /*
+        Lock-owning hot-zone retirement update.
+
+        CMS07-G.5A proves only the decay/retirement predicate. A hot zone may
+        be retired once CNR3_CACHE_HOT_ZONE_DECAY_MARGIN frames have elapsed
+        since its last observation and no currently pinned cache slot lies in
+        the zone range. Checkpoints do not keep a hot zone alive. This does not
+        apply zones to prune policy or remove cache slots.
+    */
+    [[nodiscard]] Cnr3Status retire_decay_eligible_hot_zones(
+        int current_frame
+    );
+
+    /*
         Lock-owning diagnostic/test observer for active slot pins.
 
         Pins are cache-slot liveness reservations only. They are not frame
@@ -687,6 +700,9 @@ private:
     [[nodiscard]] bool frame_is_inside_hot_zone_locked(
         int frame_number
     ) const noexcept;
+    [[nodiscard]] bool hot_zone_has_pinned_frame_in_range_locked(
+        const Cnr3CacheHotZone& hot_zone
+    ) const noexcept;
     [[nodiscard]] int total_pin_count_locked() const noexcept;
 
     /*
@@ -716,6 +732,10 @@ private:
 
     [[nodiscard]] Cnr3Status record_hot_zone_observation_locked(
         int frame_number
+    );
+
+    [[nodiscard]] Cnr3Status retire_decay_eligible_hot_zones_locked(
+        int current_frame
     );
 
     /*

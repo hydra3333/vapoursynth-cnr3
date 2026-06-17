@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-G.4A-hot-zone-capacity-merge-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-G.5A-hot-zone-retirement-decay-proof";
 
 /*
     Temporary proof scaffold convention.

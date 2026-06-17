@@ -2243,6 +2243,264 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_hot_zone_retirement_decay_lifecycle() noexcept {
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (
+            cache.retire_decay_eligible_hot_zones(CNR3_INVALID_FRAME_NUMBER) !=
+            Cnr3Status::invalid_argument
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 0U) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.retire_decay_eligible_hot_zones(99) != Cnr3Status::ok) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 1U) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.retire_decay_eligible_hot_zones(
+                100 + CNR3_CACHE_HOT_ZONE_DECAY_MARGIN - 1
+            ) != Cnr3Status::ok
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 1U) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.retire_decay_eligible_hot_zones(
+                100 + CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+            ) != Cnr3Status::ok
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 0U) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.frame_is_inside_hot_zone(100)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+        g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+        int pinned_frame_storage = 1;
+
+        const VSFrame* pinned_frame =
+            reinterpret_cast<const VSFrame*>(&pinned_frame_storage);
+
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+        Cnr3OwnedFrameRef pinned_owned_frame{};
+
+        if (
+            pinned_owned_frame.reset_to_owned_frame(pinned_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(90, std::move(pinned_owned_frame)) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.lookup_frame_and_record_pin(90, pin_list) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.retire_decay_eligible_hot_zones(
+                100 + CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.frame_is_inside_hot_zone(100)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.retire_decay_eligible_hot_zones(
+                100 + CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 0U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+    }
+
+    {
+        Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+        g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+        int checkpoint_frame_storage = 2;
+
+        const VSFrame* checkpoint_frame =
+            reinterpret_cast<const VSFrame*>(&checkpoint_frame_storage);
+
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3OwnedFrameRef checkpoint_owned_frame{};
+
+        if (
+            checkpoint_owned_frame.reset_to_owned_frame(checkpoint_frame, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_checkpoint_owned_frame(90, std::move(checkpoint_owned_frame)) !=
+            Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.retire_decay_eligible_hot_zones(
+                100 + CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.hot_zone_count() != 0U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.checkpoint_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.frame_is_inside_hot_zone(100)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+    }
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_lookup_addref_hit_and_miss() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -3680,6 +3938,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "hot_zone_capacity_merge_lifecycle",
             cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle
+        },
+        {
+            "hot_zone_retirement_decay_lifecycle",
+            cnr3_cache_core_selftest_hot_zone_retirement_decay_lifecycle
         },
         {
             "lookup_addref_hit_and_miss",

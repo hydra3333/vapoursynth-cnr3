@@ -172,6 +172,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept;
 
 /*
+    Run the CMS07-G.5A hot-zone retirement/decay selftest.
+
+    This verifies only the hot-zone retirement predicate: decay margin elapsed
+    since the last observation and no pinned cache slot inside the zone range.
+    It does not apply zones to prune policy, remove cache slots, perform
+    recovery, or connect to VapourSynth getFrame scheduling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_retirement_decay_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

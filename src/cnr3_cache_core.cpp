@@ -549,6 +549,87 @@ int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
     return total_pin_count;
 }
 
+Cnr3Status Cnr3OutputCacheCore::merge_closest_active_hot_zones_locked() {
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (hot_zones_.size() < 2U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    std::size_t first_merge_position = hot_zones_.size();
+    std::size_t second_merge_position = hot_zones_.size();
+    int best_distance = std::numeric_limits<int>::max();
+
+    for (std::size_t first_position = 0U;
+        first_position < hot_zones_.size();
+        ++first_position
+        ) {
+        const Cnr3CacheHotZone& first_zone = hot_zones_[first_position];
+
+        if (!first_zone.is_active) {
+            continue;
+        }
+
+        for (std::size_t second_position = first_position + 1U;
+            second_position < hot_zones_.size();
+            ++second_position
+            ) {
+            const Cnr3CacheHotZone& second_zone = hot_zones_[second_position];
+
+            if (!second_zone.is_active) {
+                continue;
+            }
+
+            int distance = 0;
+
+            if (first_zone.high_frame < second_zone.low_frame) {
+                distance = second_zone.low_frame - first_zone.high_frame;
+            }
+            else if (second_zone.high_frame < first_zone.low_frame) {
+                distance = first_zone.low_frame - second_zone.high_frame;
+            }
+
+            if (distance < best_distance) {
+                best_distance = distance;
+                first_merge_position = first_position;
+                second_merge_position = second_position;
+            }
+        }
+    }
+
+    if (
+        first_merge_position >= hot_zones_.size() ||
+        second_merge_position >= hot_zones_.size()
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheHotZone& first_zone = hot_zones_[first_merge_position];
+    const Cnr3CacheHotZone& second_zone = hot_zones_[second_merge_position];
+
+    if (second_zone.low_frame < first_zone.low_frame) {
+        first_zone.low_frame = second_zone.low_frame;
+    }
+
+    if (second_zone.high_frame > first_zone.high_frame) {
+        first_zone.high_frame = second_zone.high_frame;
+    }
+
+    if (second_zone.last_observed_frame > first_zone.last_observed_frame) {
+        first_zone.last_observed_frame = second_zone.last_observed_frame;
+    }
+
+    hot_zones_.erase(hot_zones_.begin() + second_merge_position);
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation_locked(
     int frame_number
 ) {
@@ -613,6 +694,14 @@ Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation_locked(
         hot_zone.last_observed_frame = frame_number;
     }
     else {
+        if (hot_zones_.size() >= CNR3_CACHE_MAX_HOT_ZONES) {
+            const Cnr3Status merge_status = merge_closest_active_hot_zones_locked();
+
+            if (!cnr3_status_is_ok(merge_status)) {
+                return merge_status;
+            }
+        }
+
         if (hot_zones_.size() >= CNR3_CACHE_MAX_HOT_ZONES) {
             return Cnr3Status::capacity_exceeded;
         }

@@ -2110,14 +2110,6 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept {
         return Cnr3Status::invariant_violation;
     }
 
-    if (cache.record_hot_zone_observation(1100) != Cnr3Status::capacity_exceeded) {
-        return Cnr3Status::invariant_violation;
-    }
-
-    if (cache.hot_zone_count() != CNR3_CACHE_MAX_HOT_ZONES) {
-        return Cnr3Status::invariant_violation;
-    }
-
     if (!cache.cache_state_invariants_hold()) {
         return Cnr3Status::invariant_violation;
     }
@@ -2131,6 +2123,120 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept {
     }
 
     if (!cache.empty()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept {
+    Cnr3OutputCacheCore cache{};
+
+    const int observations[CNR3_CACHE_MAX_HOT_ZONES] = {
+        100,
+        300,
+        600,
+        1000,
+        1500
+    };
+
+    for (std::size_t observation_index = 0U;
+        observation_index < CNR3_CACHE_MAX_HOT_ZONES;
+        ++observation_index
+        ) {
+        if (
+            cache.record_hot_zone_observation(observations[observation_index]) !=
+            Cnr3Status::ok
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (cache.hot_zone_count() != CNR3_CACHE_MAX_HOT_ZONES) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(180)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(2450)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(2500) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != CNR3_CACHE_MAX_HOT_ZONES) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(50)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(180)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(310)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(600)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(1000)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(1500)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(2450)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(2500)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(2510)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(2449)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(2511)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(2550) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != CNR3_CACHE_MAX_HOT_ZONES) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.frame_is_inside_hot_zone(2450)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(2500)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.frame_is_inside_hot_zone(2560)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.cache_state_invariants_hold()) {
         return Cnr3Status::invariant_violation;
     }
 
@@ -3570,6 +3676,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "hot_zone_slide_spawn_lifecycle",
             cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle
+        },
+        {
+            "hot_zone_capacity_merge_lifecycle",
+            cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle
         },
         {
             "lookup_addref_hit_and_miss",

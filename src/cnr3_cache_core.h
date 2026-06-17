@@ -435,11 +435,13 @@ public:
     /*
         Lock-owning hot-zone observation update.
 
-        CMS07-G.3A proves only the slide/spawn part of the hot-zone model. This
-        records activity for frame_number by sliding the nearest active zone
-        within CNR3_CACHE_JUMP_THRESHOLD, or by spawning a new zone if capacity
-        permits. Merge, retirement/decay, prune use, and final AS1 integration
-        remain deferred.
+        CMS07-G.3A/G.4A proves the slide/spawn/merge part of the hot-zone
+        model. This records activity for frame_number by sliding the nearest
+        active zone within CNR3_CACHE_JUMP_THRESHOLD, by spawning a new zone
+        when capacity permits, or by conservatively merging the two closest
+        active zones before spawning when the hot-zone vector is full.
+        Retirement/decay, prune use, and final AS1 integration remain
+        deferred.
     */
     [[nodiscard]] Cnr3Status record_hot_zone_observation(
         int frame_number
@@ -710,6 +712,8 @@ private:
         hints and must not pin, unpin, store, remove, prune, recover, request
         source frames, or touch pixel data.
     */
+    [[nodiscard]] Cnr3Status merge_closest_active_hot_zones_locked();
+
     [[nodiscard]] Cnr3Status record_hot_zone_observation_locked(
         int frame_number
     );

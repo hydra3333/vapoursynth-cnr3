@@ -161,6 +161,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept;
 
 /*
+    Run the CMS07-G.4A hot-zone capacity-merge selftest.
+
+    This verifies only the full-capacity merge fallback: when a distant
+    observation arrives and all hot-zone slots are active, the two closest
+    existing zones merge conservatively and the new observation spawns a zone in
+    the freed slot. It does not retire, apply zones to prune policy, perform
+    recovery, or connect to VapourSynth getFrame scheduling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

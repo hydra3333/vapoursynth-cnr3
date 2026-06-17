@@ -97,6 +97,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept;
 
 /*
+    Run the CMS07-F.2A bounded selected-detach selftest.
+
+    This verifies that a bounded batch detach removes at most the configured
+    number of already-selected unpinned candidates in one lock-owning operation,
+    releases detached frames after the lock, preserves pinned slots, and keeps
+    index/checkpoint invariants clean. It proves the AS5 batch-detach shape
+    without adding final prune policy, hot zones, recovery, AS2, or getFrame
+    behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_bounded_selected_detach_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

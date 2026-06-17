@@ -163,6 +163,56 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame(
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::remove_selected_unpinned_frames_bounded(
+    const std::vector<int>& candidate_frame_numbers,
+    std::size_t max_remove_count,
+    std::size_t& out_removed_count
+) {
+    out_removed_count = 0U;
+
+    if (max_remove_count == 0U || candidate_frame_numbers.empty()) {
+        return Cnr3Status::ok;
+    }
+
+    for (const int frame_number : candidate_frame_numbers) {
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return Cnr3Status::invalid_argument;
+        }
+    }
+
+    std::vector<Cnr3CacheSlot> detached_slots{};
+
+    if (max_remove_count > detached_slots.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        detached_slots.reserve(max_remove_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so the detached slots release their owned
+        frames after cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = remove_selected_unpinned_frames_bounded_locked(
+            candidate_frame_numbers,
+            max_remove_count,
+            detached_slots,
+            out_removed_count
+        );
+    }
+
+    return status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     int frame_number,
     const VSAPI* vsapi,
@@ -534,6 +584,54 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame_locked(
     }
 
     slots_.pop_back();
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::remove_selected_unpinned_frames_bounded_locked(
+    const std::vector<int>& candidate_frame_numbers,
+    std::size_t max_remove_count,
+    std::vector<Cnr3CacheSlot>& detached_slots,
+    std::size_t& out_removed_count
+) {
+    out_removed_count = 0U;
+
+    if (max_remove_count == 0U || candidate_frame_numbers.empty()) {
+        return Cnr3Status::ok;
+    }
+
+    if (detached_slots.capacity() < max_remove_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    for (const int frame_number : candidate_frame_numbers) {
+        if (out_removed_count >= max_remove_count) {
+            break;
+        }
+
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return Cnr3Status::invalid_argument;
+        }
+
+        Cnr3CacheSlot detached_slot{};
+        const Cnr3Status remove_status =
+            remove_unpinned_frame_locked(frame_number, detached_slot);
+
+        if (!cnr3_status_is_ok(remove_status)) {
+            return remove_status;
+        }
+
+        detached_slots.push_back(std::move(detached_slot));
+        ++out_removed_count;
+    }
 
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
@@ -1003,7 +1101,9 @@ Cnr3Status Cnr3CachePinList::discharge_all(
     lookup-pin-record helper. CMS07-E.1A strengthened the isolated store helper
     proof. CMS07-E.2A reconciled the original E.2 lookup-pin-record obligation
     as satisfied by the D.3A combined helper; no second lookup-pin-record helper
-    is required.
+    is required. CMS07-F.1A introduced the central single-slot remove helper.
+    CMS07-F.2A introduces a bounded selected-detach proof for the AS5 batch
+    shape; final prune candidate selection remains deferred.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

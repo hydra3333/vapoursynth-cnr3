@@ -328,6 +328,26 @@ public:
     );
 
     /*
+        Lock-owning bounded selected-detach operation.
+
+        CMS07-F.2A proves the AS5 detach shape before final prune policy is
+        available. The caller supplies already-selected candidate frame numbers
+        and max_remove_count bounds the work done during one cache-lock
+        acquisition. Detached slots release their owned frame references after
+        cache_mutex_ is unlocked.
+
+        This is not final prune policy. It does not evaluate hot-zone distance,
+        checkpoint-retention limits, active ceiling pressure, or recovery state.
+        Future AS5 prune code must perform candidate selection and detach under
+        the same cache-lock scope using the complete CMS07 eviction predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_selected_unpinned_frames_bounded(
+        const std::vector<int>& candidate_frame_numbers,
+        std::size_t max_remove_count,
+        std::size_t& out_removed_count
+    );
+
+    /*
         Lock-owning immediate lookup/addref operation.
 
         This operation is for immediate returned-frame ownership only. It does
@@ -474,6 +494,24 @@ private:
     [[nodiscard]] Cnr3Status remove_unpinned_frame_locked(
         int frame_number,
         Cnr3CacheSlot& detached_slot
+    );
+
+    /*
+        Lock-protected bounded selected-detach helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. detached_slots must have enough reserved
+        capacity before entry so the in-lock detach loop does not allocate.
+
+        The helper mechanically removes up to max_remove_count candidates by
+        calling the central single-slot remove helper. It is policy-free and is
+        not the final AS5 candidate-selection predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_selected_unpinned_frames_bounded_locked(
+        const std::vector<int>& candidate_frame_numbers,
+        std::size_t max_remove_count,
+        std::vector<Cnr3CacheSlot>& detached_slots,
+        std::size_t& out_removed_count
     );
 
     /*

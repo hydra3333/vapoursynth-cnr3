@@ -182,6 +182,15 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_retirement_decay_lifecycle() noexcept;
 
 /*
+    Run the CMS07-G.6A D-SUM-11 hot-zone counter model selftest.
+
+    This proves counter updates for create, slide, merge, decay, expiry, zone
+    count sampling, protected-range sampling, and the currently deferred prune
+    rejection field. It does not format or print the D-SUM-11 summary.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

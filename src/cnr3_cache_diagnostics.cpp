@@ -1,10 +1,10 @@
 #include "cnr3_cache_diagnostics.h"
 
 /*
-    CMS07-B.2.4 cache diagnostics placeholder.
+    CMS07-G.6A cache diagnostics counter-model translation unit.
 
-    Cache-specific diagnostics will be added here only when the corresponding
-    cache data structures and D-SUM ownership points exist.
-
-    Generic stderr output is implemented in cnr3_diagnostics.cpp.
+    The current D-SUM-11 hot-zone counter helpers are inline in the header so
+    cache-core observation points can remain cheap and allocation-free. This
+    file remains reserved for later cache-specific summary formatting and
+    stderr emission, which must occur outside all cache locks.
 */

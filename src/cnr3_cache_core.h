@@ -6,6 +6,7 @@
 #include <mutex>
 #include <vector>
 
+#include "cnr3_cache_diagnostics.h"
 #include "cnr3_common.h"
 #include "cnr3_owned_frame_ref.h"
 
@@ -420,6 +421,7 @@ public:
     [[nodiscard]] std::size_t index_count() const;
     [[nodiscard]] std::size_t checkpoint_count() const;
     [[nodiscard]] std::size_t hot_zone_count() const;
+    [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats() const;
 
     /*
         Lock-owning observer for hot-zone membership.
@@ -697,6 +699,7 @@ private:
     [[nodiscard]] std::size_t index_count_locked() const noexcept;
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
+    [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats_locked() const noexcept;
     [[nodiscard]] bool frame_is_inside_hot_zone_locked(
         int frame_number
     ) const noexcept;
@@ -737,6 +740,21 @@ private:
     [[nodiscard]] Cnr3Status retire_decay_eligible_hot_zones_locked(
         int current_frame
     );
+
+    /*
+        Lock-protected D-SUM-11 hot-zone counter helpers.
+
+        These helpers assume the caller already holds cache_mutex_. They must
+        not acquire cache_mutex_ themselves. They update only diagnostic
+        counters and must not format, print, allocate, affect control flow, or
+        change cache behaviour.
+    */
+    void observe_hot_zone_create_locked() noexcept;
+    void observe_hot_zone_slide_locked() noexcept;
+    void observe_hot_zone_merge_locked() noexcept;
+    void observe_hot_zone_decay_locked() noexcept;
+    void observe_hot_zone_expiry_locked() noexcept;
+    void observe_hot_zone_state_sample_locked() noexcept;
 
     /*
         Lock-protected store helpers.
@@ -951,6 +969,7 @@ private:
     Cnr3CacheFrameIndex frame_index_{};
     std::vector<std::size_t> checkpoint_slot_positions_{};
     std::vector<Cnr3CacheHotZone> hot_zones_{};
+    Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
     Cnr3CacheSlotIdSource slot_id_source_{};
 };
 

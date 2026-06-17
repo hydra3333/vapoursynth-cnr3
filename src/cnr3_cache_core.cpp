@@ -133,6 +133,12 @@ std::size_t Cnr3OutputCacheCore::hot_zone_count() const {
     return hot_zone_count_locked();
 }
 
+Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return hot_zone_diagnostic_stats_locked();
+}
+
 bool Cnr3OutputCacheCore::frame_is_inside_hot_zone(
     int frame_number
 ) const {
@@ -520,6 +526,10 @@ std::size_t Cnr3OutputCacheCore::hot_zone_count_locked() const noexcept {
     return hot_zones_.size();
 }
 
+Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats_locked() const noexcept {
+    return hot_zone_diag_stats_;
+}
+
 bool Cnr3OutputCacheCore::frame_is_inside_hot_zone_locked(
     int frame_number
 ) const noexcept {
@@ -586,6 +596,65 @@ int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
     }
 
     return total_pin_count;
+}
+
+void Cnr3OutputCacheCore::observe_hot_zone_create_locked() noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_create(hot_zone_diag_stats_);
+    observe_hot_zone_state_sample_locked();
+#endif
+}
+
+void Cnr3OutputCacheCore::observe_hot_zone_slide_locked() noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_slide(hot_zone_diag_stats_);
+    observe_hot_zone_state_sample_locked();
+#endif
+}
+
+void Cnr3OutputCacheCore::observe_hot_zone_merge_locked() noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_merge(hot_zone_diag_stats_);
+    observe_hot_zone_state_sample_locked();
+#endif
+}
+
+void Cnr3OutputCacheCore::observe_hot_zone_decay_locked() noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_decay(hot_zone_diag_stats_);
+    observe_hot_zone_state_sample_locked();
+#endif
+}
+
+void Cnr3OutputCacheCore::observe_hot_zone_expiry_locked() noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_expiry(hot_zone_diag_stats_);
+    observe_hot_zone_state_sample_locked();
+#endif
+}
+
+void Cnr3OutputCacheCore::observe_hot_zone_state_sample_locked() noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_zone_count_sample(
+        hot_zone_diag_stats_,
+        hot_zones_.size()
+    );
+
+    for (const Cnr3CacheHotZone& hot_zone : hot_zones_) {
+        if (!hot_zone.is_active) {
+            continue;
+        }
+
+        if (hot_zone.high_frame < hot_zone.low_frame) {
+            continue;
+        }
+
+        cnr3_cache_hot_zone_diagnostic_observe_protected_range_sample(
+            hot_zone_diag_stats_,
+            hot_zone.high_frame - hot_zone.low_frame + 1
+        );
+    }
+#endif
 }
 
 Cnr3Status Cnr3OutputCacheCore::merge_closest_active_hot_zones_locked() {
@@ -661,6 +730,7 @@ Cnr3Status Cnr3OutputCacheCore::merge_closest_active_hot_zones_locked() {
     }
 
     hot_zones_.erase(hot_zones_.begin() + second_merge_position);
+    observe_hot_zone_merge_locked();
 
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
@@ -731,6 +801,7 @@ Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation_locked(
         hot_zone.low_frame = observed_low_frame;
         hot_zone.high_frame = observed_high_frame;
         hot_zone.last_observed_frame = frame_number;
+        observe_hot_zone_slide_locked();
     }
     else {
         if (hot_zones_.size() >= CNR3_CACHE_MAX_HOT_ZONES) {
@@ -757,6 +828,8 @@ Cnr3Status Cnr3OutputCacheCore::record_hot_zone_observation_locked(
         catch (const std::bad_alloc&) {
             return Cnr3Status::allocation_failed;
         }
+
+        observe_hot_zone_create_locked();
     }
 
     if (!cache_state_invariants_hold_locked()) {
@@ -790,11 +863,16 @@ Cnr3Status Cnr3OutputCacheCore::retire_decay_eligible_hot_zones_locked(
             (current_frame - hot_zone.last_observed_frame) >=
             CNR3_CACHE_HOT_ZONE_DECAY_MARGIN;
 
+        if (decay_margin_elapsed) {
+            observe_hot_zone_decay_locked();
+        }
+
         if (
             decay_margin_elapsed &&
             !hot_zone_has_pinned_frame_in_range_locked(hot_zone)
             ) {
             hot_zones_.erase(hot_zones_.begin() + zone_position);
+            observe_hot_zone_expiry_locked();
             continue;
         }
 

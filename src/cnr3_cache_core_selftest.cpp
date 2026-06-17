@@ -3878,6 +3878,166 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_retention_boundary_lifecycle() no
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept {
+#if !defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    return Cnr3Status::ok;
+#else
+    Cnr3OutputCacheCore cache{};
+
+    Cnr3CacheHotZoneDiagnosticStats stats = cache.hot_zone_diagnostic_stats();
+
+    if (stats.hot_zone_updates != 0U || stats.zones_created != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (stats.have_zone_count_sample || stats.have_protected_range_sample) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    stats = cache.hot_zone_diagnostic_stats();
+
+    if (
+        stats.hot_zone_updates != 1U ||
+        stats.zones_created != 1U ||
+        stats.zones_slid != 0U ||
+        stats.zones_merged != 0U ||
+        stats.zones_decayed != 0U ||
+        stats.zones_expired != 0U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        !stats.have_zone_count_sample ||
+        stats.zone_count_min != 1U ||
+        stats.zone_count_max != 1U ||
+        stats.zone_count_sum != 1U ||
+        stats.zone_count_samples != 1U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        !stats.have_protected_range_sample ||
+        stats.protected_range_min != 61 ||
+        stats.protected_range_max != 61
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(120) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    stats = cache.hot_zone_diagnostic_stats();
+
+    if (
+        stats.hot_zone_updates != 2U ||
+        stats.zones_created != 1U ||
+        stats.zones_slid != 1U ||
+        stats.zone_count_min != 1U ||
+        stats.zone_count_max != 1U ||
+        stats.zone_count_sum != 2U ||
+        stats.zone_count_samples != 2U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const int observations[CNR3_CACHE_MAX_HOT_ZONES - 1U] = {
+        300,
+        600,
+        1000,
+        1500
+    };
+
+    for (std::size_t observation_index = 0U;
+        observation_index < (CNR3_CACHE_MAX_HOT_ZONES - 1U);
+        ++observation_index
+        ) {
+        if (
+            cache.record_hot_zone_observation(observations[observation_index]) !=
+            Cnr3Status::ok
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    stats = cache.hot_zone_diagnostic_stats();
+
+    if (
+        stats.hot_zone_updates != 6U ||
+        stats.zones_created != 5U ||
+        stats.zones_slid != 1U ||
+        stats.zones_merged != 0U ||
+        stats.zone_count_max != CNR3_CACHE_MAX_HOT_ZONES ||
+        stats.zone_count_samples != 6U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.record_hot_zone_observation(2500) != Cnr3Status::ok) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    stats = cache.hot_zone_diagnostic_stats();
+
+    if (
+        stats.hot_zone_updates != 8U ||
+        stats.zones_created != 6U ||
+        stats.zones_slid != 1U ||
+        stats.zones_merged != 1U ||
+        stats.zone_count_min != 1U ||
+        stats.zone_count_max != CNR3_CACHE_MAX_HOT_ZONES ||
+        stats.zone_count_samples != 8U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (stats.protected_range_max < stats.protected_range_min) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.retire_decay_eligible_hot_zones(
+            2500 + CNR3_CACHE_HOT_ZONE_DECAY_MARGIN
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    stats = cache.hot_zone_diagnostic_stats();
+
+    if (
+        stats.zones_decayed != 5U ||
+        stats.zones_expired != 5U ||
+        stats.hot_zone_updates != 18U ||
+        stats.zone_count_min != 0U ||
+        stats.zone_count_max != CNR3_CACHE_MAX_HOT_ZONES ||
+        stats.zone_count_samples != 18U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.hot_zone_count() != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (stats.frames_rejected_from_prune_due_to_hot_zone != 0U) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.cache_state_invariants_hold()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+#endif
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -3942,6 +4102,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "hot_zone_retirement_decay_lifecycle",
             cnr3_cache_core_selftest_hot_zone_retirement_decay_lifecycle
+        },
+        {
+            "hot_zone_dsum11_counter_model",
+            cnr3_cache_core_selftest_hot_zone_dsum11_counter_model
         },
         {
             "lookup_addref_hit_and_miss",

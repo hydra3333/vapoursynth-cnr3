@@ -228,6 +228,9 @@ Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept {
     const VSFrame* duplicate_frame =
         reinterpret_cast<const VSFrame*>(&duplicate_frame_storage);
 
+    vsapi_state.tracked_release_frames[0] = first_frame;
+    vsapi_state.tracked_release_frames[1] = duplicate_frame;
+
     {
         VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
         Cnr3OutputCacheCore cache{};
@@ -261,6 +264,16 @@ Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept {
         }
 
         if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[1] != 0) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -323,6 +336,16 @@ Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept {
             return Cnr3Status::invariant_violation;
         }
 
+        if (vsapi_state.tracked_release_counts[0] != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[1] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
         if (cache.slot_count() != 1U) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
@@ -345,6 +368,16 @@ Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept {
     }
 
     if (vsapi_state.free_frame_count != 2) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[0] != 1) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[1] != 1) {
         g_cnr3_cache_core_selftest_vsapi_state = nullptr;
         return Cnr3Status::invariant_violation;
     }

@@ -271,6 +271,11 @@ public:
         Duplicate frame numbers preserve first-in-best-dressed behaviour: the
         existing cache slot remains authoritative and the rejected incoming
         frame is released by the caller-side wrapper after the lock scope exits.
+
+        This is an isolated store primitive, not the complete AS2
+        store-and-pin-record operation. Future AS2 consumer code must use a
+        combined AS2 helper that performs store/adopt, pin, pin-list record, and
+        checkpoint establishment inside one per-hole cache-lock scope.
     */
     [[nodiscard]] Cnr3Status store_noncheckpoint_owned_frame(
         int frame_number,

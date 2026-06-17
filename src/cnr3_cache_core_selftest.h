@@ -60,10 +60,14 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_rejects_empty_owned_frame() noexcept;
 
 /*
-    Run the CMS07-C.4A successful-store and duplicate-store selftest.
+    Run the CMS07-C.4A / CMS07-E.1A successful-store and duplicate-store
+    selftest.
 
     This uses a synthetic VSAPI freeFrame stub and fake opaque VSFrame pointers.
-    It does not allocate real VapourSynth frames and does not call addFrameRef().
+    It proves first-in-best-dressed store behaviour and duplicate-loser release
+    with per-frame release counters, so a leaked or double-freed loser fails the
+    test. It does not allocate real VapourSynth frames, call addFrameRef(), or
+    introduce AS2 store-and-pin-record behaviour.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_store_success_and_duplicate() noexcept;
 

@@ -109,6 +109,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_bounded_selected_detach_lifecycle() noexcept;
 
 /*
+    Run the CMS07-F.3A unpinned non-checkpoint selection/detach selftest.
+
+    This verifies that the narrow AS5 candidate-selection layer detaches only
+    unpinned non-checkpoint slots, bounds one lock-owning pass, leaves pinned
+    and checkpoint slots cached, and releases detached frames after the lock. It
+    does not add final prune policy, hot zones, recovery, AS2, or getFrame
+    behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_unpinned_noncheckpoint_selection_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

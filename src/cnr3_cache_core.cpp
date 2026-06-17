@@ -213,6 +213,48 @@ Cnr3Status Cnr3OutputCacheCore::remove_selected_unpinned_frames_bounded(
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::remove_unpinned_noncheckpoint_frames_bounded(
+    std::size_t max_remove_count,
+    std::size_t& out_removed_count
+) {
+    out_removed_count = 0U;
+
+    if (max_remove_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    std::vector<Cnr3CacheSlot> detached_slots{};
+
+    if (max_remove_count > detached_slots.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        detached_slots.reserve(max_remove_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so the detached slots release their owned
+        frames after cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = remove_unpinned_noncheckpoint_frames_bounded_locked(
+            max_remove_count,
+            detached_slots,
+            out_removed_count
+        );
+    }
+
+    return status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     int frame_number,
     const VSAPI* vsapi,
@@ -631,6 +673,65 @@ Cnr3Status Cnr3OutputCacheCore::remove_selected_unpinned_frames_bounded_locked(
 
         detached_slots.push_back(std::move(detached_slot));
         ++out_removed_count;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::remove_unpinned_noncheckpoint_frames_bounded_locked(
+    std::size_t max_remove_count,
+    std::vector<Cnr3CacheSlot>& detached_slots,
+    std::size_t& out_removed_count
+) {
+    out_removed_count = 0U;
+
+    if (max_remove_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    if (detached_slots.capacity() < max_remove_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    std::size_t slot_position = 0U;
+
+    while (slot_position < slots_.size() && out_removed_count < max_remove_count) {
+        const Cnr3CacheSlot& slot = slots_[slot_position];
+
+        if (!cnr3_cache_slot_is_indexable(slot)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (slot.pin_count != 0 || slot.is_checkpoint) {
+            ++slot_position;
+            continue;
+        }
+
+        const int frame_number = slot.frame_number;
+        Cnr3CacheSlot detached_slot{};
+        const Cnr3Status remove_status =
+            remove_unpinned_frame_locked(frame_number, detached_slot);
+
+        if (!cnr3_status_is_ok(remove_status)) {
+            return remove_status;
+        }
+
+        detached_slots.push_back(std::move(detached_slot));
+        ++out_removed_count;
+
+        /*
+            Do not increment slot_position here. The central remove helper may
+            move the previous last slot into this position, and that moved slot
+            still needs to be evaluated by this bounded selection pass.
+        */
     }
 
     if (!cache_state_invariants_hold_locked()) {
@@ -1102,8 +1203,9 @@ Cnr3Status Cnr3CachePinList::discharge_all(
     proof. CMS07-E.2A reconciled the original E.2 lookup-pin-record obligation
     as satisfied by the D.3A combined helper; no second lookup-pin-record helper
     is required. CMS07-F.1A introduced the central single-slot remove helper.
-    CMS07-F.2A introduces a bounded selected-detach proof for the AS5 batch
-    shape; final prune candidate selection remains deferred.
+    CMS07-F.2A introduced a bounded selected-detach proof for the AS5 batch
+    shape. CMS07-F.3A introduces a narrow unpinned non-checkpoint selection
+    proof; final prune candidate selection remains deferred.
 
     The current public read-only observers acquire the mutex once at their outer
     boundary using RAII scoped guards.

@@ -348,6 +348,24 @@ public:
     );
 
     /*
+        Lock-owning bounded unpinned non-checkpoint selection/detach operation.
+
+        CMS07-F.3A proves the first narrow candidate-selection layer for AS5:
+        only unpinned non-checkpoint slots may be selected and detached. The
+        selection and detach happen under one cache-lock acquisition, and
+        detached frame references release only after cache_mutex_ is unlocked.
+
+        This is still not final prune policy. It deliberately does not evaluate
+        hot-zone distance, checkpoint-retention limits, active ceiling pressure,
+        or recovery state. Future AS5 prune code must extend this shape to the
+        complete CMS07 eviction predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_noncheckpoint_frames_bounded(
+        std::size_t max_remove_count,
+        std::size_t& out_removed_count
+    );
+
+    /*
         Lock-owning immediate lookup/addref operation.
 
         This operation is for immediate returned-frame ownership only. It does
@@ -509,6 +527,23 @@ private:
     */
     [[nodiscard]] Cnr3Status remove_selected_unpinned_frames_bounded_locked(
         const std::vector<int>& candidate_frame_numbers,
+        std::size_t max_remove_count,
+        std::vector<Cnr3CacheSlot>& detached_slots,
+        std::size_t& out_removed_count
+    );
+
+    /*
+        Lock-protected bounded unpinned non-checkpoint selection/detach helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. detached_slots must have enough reserved
+        capacity before entry so the in-lock detach loop does not allocate.
+
+        This helper selects only slots with pin_count == 0 and is_checkpoint ==
+        false, then detaches them through the central remove helper. It is a
+        narrow F.3A safety proof, not the final CMS07 prune predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_noncheckpoint_frames_bounded_locked(
         std::size_t max_remove_count,
         std::vector<Cnr3CacheSlot>& detached_slots,
         std::size_t& out_removed_count

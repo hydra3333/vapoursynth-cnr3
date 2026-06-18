@@ -223,6 +223,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexcept;
 
 /*
+    Run the CMS07-G.10A prune-trigger decision selftest.
+
+    This proves the CMS07 section 7.2 active-ceiling / overflow-factor trigger
+    arithmetic only. It verifies that pruning fires only past the overflow
+    threshold and targets active_ceiling, not the trigger threshold or empty.
+    It does not select victims, detach, free, or implement production AS5.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

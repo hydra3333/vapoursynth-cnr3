@@ -376,6 +376,38 @@ struct Cnr3PruneCandidateDistanceOrderEntry {
 }
 
 /*
+    Active-ceiling prune trigger decision.
+
+    CMS07-G.10A proves the section 7.2 trigger arithmetic only. The decision
+    tells a later AS5 phase whether a prune pass should run and how far the
+    cache should be reduced. It does not select victims, detach slots, release
+    frames, wire D-SUM counters, or perform production prune integration.
+*/
+struct Cnr3CachePruneTriggerDecision {
+    std::uint64_t frame_byte_count = 0U;
+    std::size_t active_ceiling_frame_count = 0U;
+    std::size_t overflow_trigger_frame_count = 0U;
+    std::size_t current_slot_count = 0U;
+    bool prune_is_required = false;
+    std::size_t target_slot_count_after_prune = 0U;
+    std::size_t target_remove_count = 0U;
+};
+
+/*
+    Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
+    trigger decision from a frame byte size and a current slot count.
+
+    The trigger fires only when current_slot_count is strictly greater than
+    active_ceiling * OVERFLOW_FACTOR. When it fires, the target is the active
+    ceiling, not the overflow trigger threshold and not an empty cache.
+*/
+[[nodiscard]] Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
+    std::uint64_t frame_byte_count,
+    std::size_t current_slot_count,
+    Cnr3CachePruneTriggerDecision& out_decision
+) noexcept;
+
+/*
     Ordered frame-number index.
 
     The value is the vector position of the slot in Cnr3OutputCacheCore::slots_.

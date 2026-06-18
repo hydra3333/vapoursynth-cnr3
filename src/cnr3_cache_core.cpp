@@ -176,6 +176,47 @@ bool cnr3_cache_hot_zone_model_invariants_hold(
     return true;
 }
 
+Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
+    std::uint64_t frame_byte_count,
+    std::size_t current_slot_count,
+    Cnr3CachePruneTriggerDecision& out_decision
+) noexcept {
+    out_decision = Cnr3CachePruneTriggerDecision{};
+
+    if (frame_byte_count == 0U) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    std::uint64_t raw_ceiling =
+        CNR3_CACHE_BYTE_BUDGET_BYTES / frame_byte_count;
+
+    if (raw_ceiling < CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES) {
+        raw_ceiling = CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES;
+    }
+
+    if (raw_ceiling > CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES) {
+        raw_ceiling = CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES;
+    }
+
+    const std::size_t active_ceiling = static_cast<std::size_t>(raw_ceiling);
+    const std::size_t overflow_trigger =
+        (active_ceiling * CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR) /
+        CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR;
+    const bool prune_is_required = current_slot_count > overflow_trigger;
+
+    out_decision.frame_byte_count = frame_byte_count;
+    out_decision.active_ceiling_frame_count = active_ceiling;
+    out_decision.overflow_trigger_frame_count = overflow_trigger;
+    out_decision.current_slot_count = current_slot_count;
+    out_decision.prune_is_required = prune_is_required;
+    out_decision.target_slot_count_after_prune =
+        prune_is_required ? active_ceiling : current_slot_count;
+    out_decision.target_remove_count =
+        prune_is_required ? (current_slot_count - active_ceiling) : 0U;
+
+    return Cnr3Status::ok;
+}
+
 bool Cnr3OutputCacheCore::empty() const {
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 

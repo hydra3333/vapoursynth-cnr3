@@ -5224,6 +5224,196 @@ Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexce
     return Cnr3Status::ok;
 }
 
+
+Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept {
+    Cnr3CachePruneTriggerDecision decision{};
+
+    if (
+        cnr3_calculate_cache_prune_trigger_decision(
+            0U,
+            0U,
+            decision
+        ) != Cnr3Status::invalid_argument
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        decision.frame_byte_count != 0U ||
+        decision.active_ceiling_frame_count != 0U ||
+        decision.overflow_trigger_frame_count != 0U ||
+        decision.current_slot_count != 0U ||
+        decision.prune_is_required ||
+        decision.target_slot_count_after_prune != 0U ||
+        decision.target_remove_count != 0U
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const auto expect_decision = [](
+        std::uint64_t frame_byte_count,
+        std::size_t current_slot_count,
+        std::size_t expected_active_ceiling,
+        std::size_t expected_trigger,
+        bool expected_prune_required,
+        std::size_t expected_target_after_prune,
+        std::size_t expected_remove_count
+    ) noexcept -> Cnr3Status {
+        Cnr3CachePruneTriggerDecision observed{};
+
+        const Cnr3Status status = cnr3_calculate_cache_prune_trigger_decision(
+            frame_byte_count,
+            current_slot_count,
+            observed
+        );
+
+        if (!cnr3_status_is_ok(status)) {
+            return status;
+        }
+
+        if (observed.frame_byte_count != frame_byte_count) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (observed.current_slot_count != current_slot_count) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (observed.active_ceiling_frame_count != expected_active_ceiling) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (observed.overflow_trigger_frame_count != expected_trigger) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (observed.prune_is_required != expected_prune_required) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (observed.target_slot_count_after_prune != expected_target_after_prune) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (observed.target_remove_count != expected_remove_count) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    const std::uint64_t one_mebibyte = 1024ULL * 1024ULL;
+    const std::uint64_t two_mebibytes = 2ULL * 1024ULL * 1024ULL;
+
+    if (
+        expect_decision(
+            one_mebibyte,
+            1100U,
+            1000U,
+            1100U,
+            false,
+            1100U,
+            0U
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        expect_decision(
+            one_mebibyte,
+            1101U,
+            1000U,
+            1100U,
+            true,
+            1000U,
+            101U
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        expect_decision(
+            two_mebibytes,
+            563U,
+            512U,
+            563U,
+            false,
+            563U,
+            0U
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        expect_decision(
+            two_mebibytes,
+            564U,
+            512U,
+            563U,
+            true,
+            512U,
+            52U
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        expect_decision(
+            CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL,
+            165U,
+            150U,
+            165U,
+            false,
+            165U,
+            0U
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        expect_decision(
+            CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL,
+            166U,
+            150U,
+            165U,
+            true,
+            150U,
+            16U
+        ) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "G.10A prune-trigger decision hysteresis scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    1 MiB frame -> active_ceiling 1000, trigger 1100"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    slot_count 1100 -> no prune; slot_count 1101 -> prune target 1000, remove 101"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    2 MiB frame -> active_ceiling 512, trigger 563"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    slot_count 563 -> no prune; slot_count 564 -> prune target 512, remove 52"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    oversize frame -> active_ceiling 150, trigger 165"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    slot_count 165 -> no prune; slot_count 166 -> prune target 150, remove 16"
+    );
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -5304,6 +5494,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "composite_prune_candidate_selection",
             cnr3_cache_core_selftest_composite_prune_candidate_selection
+        },
+        {
+            "prune_trigger_decision_hysteresis",
+            cnr3_cache_core_selftest_prune_trigger_decision_hysteresis
         },
         {
             "lookup_addref_hit_and_miss",

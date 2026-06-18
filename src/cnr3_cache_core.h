@@ -394,6 +394,25 @@ struct Cnr3CachePruneTriggerDecision {
 };
 
 /*
+    Bounded AS5 prune execution summary.
+
+    CMS07-G.11A reports what the AS5 decide/detach/free proof did without
+    exposing cache internals. It records the trigger decision, the externally
+    supplied bounded-remove cap, the effective bounded remove limit, how many
+    candidates were selected under the cache lock, and how many slots were
+    actually detached under that same lock. Detached frame references are
+    released after the lock is released by the public AS5 helper.
+*/
+struct Cnr3CachePruneExecutionSummary {
+    Cnr3CachePruneTriggerDecision trigger_decision{};
+    std::size_t retain_checkpoint_count = 0U;
+    std::size_t max_remove_count = 0U;
+    std::size_t bounded_remove_limit = 0U;
+    std::size_t selected_candidate_count = 0U;
+    std::size_t detached_count = 0U;
+};
+
+/*
     Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
     trigger decision from a frame byte size and a current slot count.
 
@@ -702,6 +721,27 @@ public:
     ) const;
 
     /*
+        Lock-owning bounded AS5 prune execution helper.
+
+        CMS07-G.11A composes the proven trigger decision and composite
+        selector into one bounded decide/detach pass: under the cache lock it
+        evaluates the section 7.2 trigger from the current slot count, selects
+        victims through the G.9A composite selector, and detaches selected slots
+        through the central remove helper. Detached frame references release
+        only after cache_mutex_ is unlocked.
+
+        This is still not full production getFrame integration. It does not
+        wire D-SUM-11 prune-rejection counters, perform recovery planning,
+        request or retrieve source frames, or touch pixel behaviour.
+    */
+    [[nodiscard]] Cnr3Status execute_bounded_prune_pass(
+        std::uint64_t frame_byte_count,
+        std::size_t retain_checkpoint_count,
+        std::size_t max_remove_count,
+        Cnr3CachePruneExecutionSummary& out_summary
+    );
+
+    /*
         Lock-owning bounded checkpoint retention-boundary selection/detach
         operation.
 
@@ -1005,6 +1045,26 @@ private:
         std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order,
         std::vector<Cnr3PruneCandidateDistanceOrderEntry>& checkpoint_candidate_order
     ) const;
+
+    /*
+        Lock-protected bounded AS5 prune execution helper.
+
+        This helper assumes the caller already holds cache_mutex_. All vectors
+        must have enough reserved capacity before entry so the in-lock
+        decide/select/detach pass does not allocate. Detached slots are moved
+        into detached_slots and must be released only after the public helper
+        exits the cache-lock scope.
+    */
+    [[nodiscard]] Cnr3Status execute_bounded_prune_pass_locked(
+        std::uint64_t frame_byte_count,
+        std::size_t retain_checkpoint_count,
+        std::size_t max_remove_count,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& checkpoint_candidate_order,
+        std::vector<int>& selected_frame_numbers,
+        std::vector<Cnr3CacheSlot>& detached_slots,
+        Cnr3CachePruneExecutionSummary& out_summary
+    );
 
     /*
         Lock-protected bounded checkpoint retention-boundary selection/detach

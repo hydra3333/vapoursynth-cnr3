@@ -582,6 +582,66 @@ Cnr3Status Cnr3OutputCacheCore::select_composite_prune_candidates_bounded(
     );
 }
 
+Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass(
+    std::uint64_t frame_byte_count,
+    std::size_t retain_checkpoint_count,
+    std::size_t max_remove_count,
+    Cnr3CachePruneExecutionSummary& out_summary
+) {
+    out_summary = Cnr3CachePruneExecutionSummary{};
+
+    if (frame_byte_count == 0U) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry> candidate_order{};
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry> checkpoint_candidate_order{};
+    std::vector<int> selected_frame_numbers{};
+    std::vector<Cnr3CacheSlot> detached_slots{};
+
+    if (
+        max_remove_count > candidate_order.max_size() ||
+        max_remove_count > checkpoint_candidate_order.max_size() ||
+        max_remove_count > selected_frame_numbers.max_size() ||
+        max_remove_count > detached_slots.max_size()
+        ) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        candidate_order.reserve(max_remove_count);
+        checkpoint_candidate_order.reserve(max_remove_count);
+        selected_frame_numbers.reserve(max_remove_count);
+        detached_slots.reserve(max_remove_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        Keep the lock scope nested so detached slots release their owned frame
+        references after cache_mutex_ is unlocked.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = execute_bounded_prune_pass_locked(
+            frame_byte_count,
+            retain_checkpoint_count,
+            max_remove_count,
+            candidate_order,
+            checkpoint_candidate_order,
+            selected_frame_numbers,
+            detached_slots,
+            out_summary
+        );
+    }
+
+    return status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded(
     std::size_t retain_checkpoint_count,
     std::size_t max_remove_count,
@@ -1719,6 +1779,108 @@ Cnr3Status Cnr3OutputCacheCore::select_composite_prune_candidates_bounded_locked
         out_candidate_order.end(),
         cnr3_prune_candidate_distance_order_before
     );
+
+    return Cnr3Status::ok;
+}
+
+
+Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
+    std::uint64_t frame_byte_count,
+    std::size_t retain_checkpoint_count,
+    std::size_t max_remove_count,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& checkpoint_candidate_order,
+    std::vector<int>& selected_frame_numbers,
+    std::vector<Cnr3CacheSlot>& detached_slots,
+    Cnr3CachePruneExecutionSummary& out_summary
+) {
+    out_summary = Cnr3CachePruneExecutionSummary{};
+    out_summary.retain_checkpoint_count = retain_checkpoint_count;
+    out_summary.max_remove_count = max_remove_count;
+
+    candidate_order.clear();
+    checkpoint_candidate_order.clear();
+    selected_frame_numbers.clear();
+    detached_slots.clear();
+
+    if (
+        candidate_order.capacity() < max_remove_count ||
+        checkpoint_candidate_order.capacity() < max_remove_count ||
+        selected_frame_numbers.capacity() < max_remove_count ||
+        detached_slots.capacity() < max_remove_count
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3Status status = cnr3_calculate_cache_prune_trigger_decision(
+        frame_byte_count,
+        slot_count_locked(),
+        out_summary.trigger_decision
+    );
+
+    if (!cnr3_status_is_ok(status)) {
+        return status;
+    }
+
+    if (!out_summary.trigger_decision.prune_is_required || max_remove_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    const std::size_t remove_limit = std::min(
+        out_summary.trigger_decision.target_remove_count,
+        max_remove_count
+    );
+
+    out_summary.bounded_remove_limit = remove_limit;
+
+    if (remove_limit == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    status = select_composite_prune_candidates_bounded_locked(
+        true,
+        retain_checkpoint_count,
+        remove_limit,
+        candidate_order,
+        checkpoint_candidate_order
+    );
+
+    if (!cnr3_status_is_ok(status)) {
+        return status;
+    }
+
+    out_summary.selected_candidate_count = candidate_order.size();
+
+    for (const Cnr3PruneCandidateDistanceOrderEntry& candidate : candidate_order) {
+        if (!cnr3_prune_candidate_distance_order_entry_is_valid(candidate)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        selected_frame_numbers.push_back(candidate.frame_number);
+    }
+
+    status = remove_selected_unpinned_frames_bounded_locked(
+        selected_frame_numbers,
+        remove_limit,
+        detached_slots,
+        out_summary.detached_count
+    );
+
+    if (!cnr3_status_is_ok(status)) {
+        return status;
+    }
+
+    if (out_summary.detached_count != out_summary.selected_candidate_count) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
 
     return Cnr3Status::ok;
 }

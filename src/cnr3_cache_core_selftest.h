@@ -233,6 +233,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept;
 
 /*
+    Run the CMS07-G.11A AS5 prune execution selftest.
+
+    This composes the proven trigger decision and composite candidate selector
+    into one bounded decide/detach/free pass. It verifies no-prune boundary
+    behaviour, bounded prune execution, selected victim release after the public
+    helper returns, survivor preservation, pin preservation, and cache invariant
+    cleanliness. It does not wire D-SUM counters, perform recovery, connect to
+    getFrame, or touch pixel behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

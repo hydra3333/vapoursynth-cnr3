@@ -191,6 +191,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept;
 
 /*
+    Run the CMS07-G.7A hot-zone prune-protection selection selftest.
+
+    This proves the hot-zone exclusion clause for future prune selection: the
+    bounded selector may detach only unpinned non-checkpoint slots outside every
+    active hot zone. It does not assemble the full CMS07 section 7.1 predicate,
+    apply greatest-distance ordering, implement the section 7.2 capacity
+    trigger, wire D-SUM prune counters, perform recovery, or connect to
+    VapourSynth getFrame scheduling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_prune_protection_selection_lifecycle() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

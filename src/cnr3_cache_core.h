@@ -591,6 +591,27 @@ public:
     );
 
     /*
+        Lock-owning bounded hot-zone-protected non-checkpoint selection/detach
+        operation.
+
+        CMS07-G.7A proves the hot-zone exclusion clause for future AS5 prune
+        selection: only unpinned non-checkpoint slots outside every active hot
+        zone may be selected and detached. The selection and detach happen under
+        one cache-lock acquisition, and detached frame references release only
+        after cache_mutex_ is unlocked.
+
+        This is still not final prune policy. It deliberately does not assemble
+        the full CMS07 section 7.1 predicate, apply greatest-hot-zone-distance
+        victim ordering, evaluate checkpoint-retention limits, trigger on active
+        ceiling / overflow-factor pressure, wire D-SUM prune counters, or
+        perform recovery/getFrame work.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_noncheckpoint_frames_outside_hot_zones_bounded(
+        std::size_t max_remove_count,
+        std::size_t& out_removed_count
+    );
+
+    /*
         Lock-owning bounded checkpoint retention-boundary selection/detach
         operation.
 
@@ -832,6 +853,24 @@ private:
         narrow F.3A safety proof, not the final CMS07 prune predicate.
     */
     [[nodiscard]] Cnr3Status remove_unpinned_noncheckpoint_frames_bounded_locked(
+        std::size_t max_remove_count,
+        std::vector<Cnr3CacheSlot>& detached_slots,
+        std::size_t& out_removed_count
+    );
+
+    /*
+        Lock-protected bounded hot-zone-protected non-checkpoint
+        selection/detach helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. detached_slots must have enough reserved
+        capacity before entry so the in-lock detach loop does not allocate.
+
+        This helper selects only slots with pin_count == 0, is_checkpoint ==
+        false, and frame_number outside every active hot zone. It proves the
+        hot-zone exclusion clause only, not the full CMS07 prune predicate.
+    */
+    [[nodiscard]] Cnr3Status remove_unpinned_noncheckpoint_frames_outside_hot_zones_bounded_locked(
         std::size_t max_remove_count,
         std::vector<Cnr3CacheSlot>& detached_slots,
         std::size_t& out_removed_count

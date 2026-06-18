@@ -364,6 +364,7 @@ struct Cnr3CacheHotZone {
 struct Cnr3PruneCandidateDistanceOrderEntry {
     int frame_number = CNR3_INVALID_FRAME_NUMBER;
     int nearest_hot_zone_distance = 0;
+    bool is_checkpoint = false;
 };
 
 [[nodiscard]] constexpr bool cnr3_prune_candidate_distance_order_entry_is_valid(
@@ -644,6 +645,26 @@ public:
         assemble the final CMS07 section 7.1 predicate.
     */
     [[nodiscard]] Cnr3Status select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded(
+        std::size_t max_select_count,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+    ) const;
+
+    /*
+        Lock-owning bounded composite prune-candidate selector.
+
+        CMS07-G.9A assembles the already-proven predicate clauses for
+        selection only: unpinned, outside every active hot zone, checkpoint
+        retention permitted for checkpoints, and externally-supplied capacity
+        permission for non-checkpoints. Victims are ordered by greatest distance
+        from the nearest active hot-zone boundary.
+
+        This helper does not compute the CMS07 section 7.2 active-ceiling /
+        overflow-factor trigger, detach slots, release frames, wire D-SUM
+        counters, or perform production AS5 prune integration.
+    */
+    [[nodiscard]] Cnr3Status select_composite_prune_candidates_bounded(
+        bool noncheckpoint_capacity_permits,
+        std::size_t retain_checkpoint_count,
         std::size_t max_select_count,
         std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
     ) const;
@@ -931,6 +952,26 @@ private:
     [[nodiscard]] Cnr3Status select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded_locked(
         std::size_t max_select_count,
         std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+    ) const;
+
+
+    /*
+        Lock-protected bounded composite prune-candidate selector.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. Both vectors must have enough reserved
+        capacity before entry so selection does not allocate while the cache
+        lock is held.
+
+        noncheckpoint_capacity_permits is supplied by the caller because
+        CMS07-G.9A does not implement the section 7.2 active-ceiling trigger.
+    */
+    [[nodiscard]] Cnr3Status select_composite_prune_candidates_bounded_locked(
+        bool noncheckpoint_capacity_permits,
+        std::size_t retain_checkpoint_count,
+        std::size_t max_select_count,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& checkpoint_candidate_order
     ) const;
 
     /*

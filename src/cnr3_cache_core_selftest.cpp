@@ -4670,6 +4670,360 @@ Cnr3Status cnr3_cache_core_selftest_prune_victim_distance_ordering() noexcept {
     return Cnr3Status::ok;
 }
 
+
+Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    struct FrameSpec {
+        int frame_number = CNR3_INVALID_FRAME_NUMBER;
+        bool is_checkpoint = false;
+        bool should_pin = false;
+    };
+
+    const FrameSpec frame_specs[] = {
+        { 0, true, false },
+        { 40, false, false },
+        { 60, false, false },
+        { 112, false, false },
+        { 200, false, false },
+        { 220, false, true },
+        { 249, true, false },
+        { 260, false, false },
+        { 265, true, false },
+        { 320, true, false },
+        { 400, false, false },
+        { 520, true, false }
+    };
+
+    const int expected_composite_frames[] = {
+        520,
+        400,
+        200,
+        40,
+        320,
+        112
+    };
+
+    const int expected_composite_distances[] = {
+        210,
+        90,
+        50,
+        10,
+        10,
+        2
+    };
+
+    const bool expected_composite_checkpoint_flags[] = {
+        true,
+        false,
+        false,
+        false,
+        true,
+        false
+    };
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+
+        const auto store_frame = [
+            &cache,
+            &vsapi
+        ](
+            int frame_number,
+            bool is_checkpoint,
+            const VSFrame* frame
+        ) noexcept -> Cnr3Status {
+            Cnr3OwnedFrameRef owned_frame{};
+
+            const Cnr3Status adopt_status =
+                owned_frame.reset_to_owned_frame(frame, &vsapi);
+
+            if (!cnr3_status_is_ok(adopt_status)) {
+                return adopt_status;
+            }
+
+            const Cnr3Status store_status =
+                is_checkpoint
+                ? cache.store_checkpoint_owned_frame(frame_number, std::move(owned_frame))
+                : cache.store_noncheckpoint_owned_frame(frame_number, std::move(owned_frame));
+
+            if (!cnr3_status_is_ok(store_status)) {
+                return store_status;
+            }
+
+            if (owned_frame.has_frame()) {
+                return Cnr3Status::ownership_violation;
+            }
+
+            return Cnr3Status::ok;
+        };
+
+        if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.record_hot_zone_observation(300) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        int frame_storage[static_cast<int>(sizeof(frame_specs) / sizeof(frame_specs[0]))] = {};
+
+        for (int index = 0; index < static_cast<int>(sizeof(frame_specs) / sizeof(frame_specs[0])); ++index) {
+            frame_storage[index] = index + 1;
+            const VSFrame* frame =
+                reinterpret_cast<const VSFrame*>(&frame_storage[index]);
+
+            if (
+                store_frame(
+                    frame_specs[index].frame_number,
+                    frame_specs[index].is_checkpoint,
+                    frame
+                ) != Cnr3Status::ok
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        if (cache.checkpoint_count() != 5U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.reserve_for_additional_pins(1U) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.lookup_frame_and_record_pin(220, pin_list) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> composite_order{};
+        composite_order.reserve(8U);
+
+        if (
+            cache.select_composite_prune_candidates_bounded(
+                true,
+                3U,
+                8U,
+                composite_order
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (composite_order.size() != 6U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (std::size_t index = 0U; index < composite_order.size(); ++index) {
+            if (composite_order[index].frame_number != expected_composite_frames[index]) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (
+                composite_order[index].nearest_hot_zone_distance !=
+                expected_composite_distances[index]
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (
+                composite_order[index].is_checkpoint !=
+                expected_composite_checkpoint_flags[index]
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        /*
+            Checkpoint 249 is outside hot zones, but the retention budget allows
+            only the two coldest checkpoint candidates. It must not outrank or
+            displace colder checkpoint candidates 520 and 320.
+        */
+        for (const Cnr3PruneCandidateDistanceOrderEntry& entry : composite_order) {
+            if (entry.frame_number == 249) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> checkpoint_only_order{};
+        checkpoint_only_order.reserve(8U);
+
+        if (
+            cache.select_composite_prune_candidates_bounded(
+                false,
+                3U,
+                8U,
+                checkpoint_only_order
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (checkpoint_only_order.size() != 2U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            checkpoint_only_order[0].frame_number != 520 ||
+            checkpoint_only_order[1].frame_number != 320
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> noncheckpoint_only_order{};
+        noncheckpoint_only_order.reserve(8U);
+
+        if (
+            cache.select_composite_prune_candidates_bounded(
+                true,
+                cache.checkpoint_count(),
+                8U,
+                noncheckpoint_only_order
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (noncheckpoint_only_order.size() != 4U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        const int expected_noncheckpoint_frames[] = {
+            400,
+            200,
+            40,
+            112
+        };
+
+        for (std::size_t index = 0U; index < noncheckpoint_only_order.size(); ++index) {
+            if (noncheckpoint_only_order[index].frame_number != expected_noncheckpoint_frames[index]) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (noncheckpoint_only_order[index].is_checkpoint) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> bounded_order{};
+        bounded_order.reserve(3U);
+
+        if (
+            cache.select_composite_prune_candidates_bounded(
+                true,
+                3U,
+                3U,
+                bounded_order
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (bounded_order.size() != 3U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (std::size_t index = 0U; index < bounded_order.size(); ++index) {
+            if (bounded_order[index].frame_number != expected_composite_frames[index]) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> no_capacity_order{};
+
+        if (
+            cache.select_composite_prune_candidates_bounded(
+                true,
+                3U,
+                1U,
+                no_capacity_order
+            ) != Cnr3Status::invalid_argument
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != (sizeof(frame_specs) / sizeof(frame_specs[0]))) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != static_cast<int>(sizeof(frame_specs) / sizeof(frame_specs[0]))) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (vsapi_state.free_frame_count != static_cast<int>(sizeof(frame_specs) / sizeof(frame_specs[0]))) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -4746,6 +5100,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "prune_victim_distance_ordering",
             cnr3_cache_core_selftest_prune_victim_distance_ordering
+        },
+        {
+            "composite_prune_candidate_selection",
+            cnr3_cache_core_selftest_composite_prune_candidate_selection
         },
         {
             "lookup_addref_hit_and_miss",

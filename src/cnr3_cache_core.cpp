@@ -54,6 +54,44 @@ namespace {
         return 0;
     }
 
+    [[nodiscard]] Cnr3Status cnr3_consider_prune_candidate_bounded(
+        Cnr3PruneCandidateDistanceOrderEntry candidate,
+        std::size_t max_select_count,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order
+    ) {
+        if (max_select_count == 0U) {
+            return Cnr3Status::ok;
+        }
+
+        if (candidate_order.capacity() < max_select_count) {
+            return Cnr3Status::invalid_argument;
+        }
+
+        if (!cnr3_prune_candidate_distance_order_entry_is_valid(candidate)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (candidate_order.size() < max_select_count) {
+            candidate_order.push_back(candidate);
+            return Cnr3Status::ok;
+        }
+
+        auto worst_selected = std::max_element(
+            candidate_order.begin(),
+            candidate_order.end(),
+            cnr3_prune_candidate_distance_order_before
+        );
+
+        if (
+            worst_selected != candidate_order.end() &&
+            cnr3_prune_candidate_distance_order_before(candidate, *worst_selected)
+            ) {
+            *worst_selected = candidate;
+        }
+
+        return Cnr3Status::ok;
+    }
+
 } // namespace
 
 Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
@@ -456,6 +494,50 @@ Cnr3Status Cnr3OutputCacheCore::select_unpinned_noncheckpoint_frames_outside_hot
     return select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded_locked(
         max_select_count,
         out_candidate_order
+    );
+}
+
+Cnr3Status Cnr3OutputCacheCore::select_composite_prune_candidates_bounded(
+    bool noncheckpoint_capacity_permits,
+    std::size_t retain_checkpoint_count,
+    std::size_t max_select_count,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+) const {
+    out_candidate_order.clear();
+
+    if (max_select_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    if (max_select_count > out_candidate_order.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    if (out_candidate_order.capacity() < max_select_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry> checkpoint_candidate_order{};
+
+    if (max_select_count > checkpoint_candidate_order.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        checkpoint_candidate_order.reserve(max_select_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return select_composite_prune_candidates_bounded_locked(
+        noncheckpoint_capacity_permits,
+        retain_checkpoint_count,
+        max_select_count,
+        out_candidate_order,
+        checkpoint_candidate_order
     );
 }
 
@@ -1480,6 +1562,114 @@ Cnr3Status Cnr3OutputCacheCore::select_unpinned_noncheckpoint_frames_outside_hot
             cnr3_prune_candidate_distance_order_before(candidate, *worst_selected)
             ) {
             *worst_selected = candidate;
+        }
+    }
+
+    std::sort(
+        out_candidate_order.begin(),
+        out_candidate_order.end(),
+        cnr3_prune_candidate_distance_order_before
+    );
+
+    return Cnr3Status::ok;
+}
+
+
+Cnr3Status Cnr3OutputCacheCore::select_composite_prune_candidates_bounded_locked(
+    bool noncheckpoint_capacity_permits,
+    std::size_t retain_checkpoint_count,
+    std::size_t max_select_count,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& checkpoint_candidate_order
+) const {
+    out_candidate_order.clear();
+    checkpoint_candidate_order.clear();
+
+    if (max_select_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    if (out_candidate_order.capacity() < max_select_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (checkpoint_candidate_order.capacity() < max_select_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const std::size_t checkpoint_count = checkpoint_count_locked();
+    const std::size_t checkpoint_select_budget =
+        (checkpoint_count > retain_checkpoint_count)
+        ? std::min(checkpoint_count - retain_checkpoint_count, max_select_count)
+        : 0U;
+
+    for (const Cnr3CacheSlot& slot : slots_) {
+        if (!cnr3_cache_slot_is_indexable(slot)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (slot.pin_count != 0 || frame_is_inside_hot_zone_locked(slot.frame_number)) {
+            continue;
+        }
+
+        if (slot.is_checkpoint) {
+            if (slot.frame_number == 0 || checkpoint_select_budget == 0U) {
+                continue;
+            }
+
+            const Cnr3PruneCandidateDistanceOrderEntry candidate{
+                slot.frame_number,
+                nearest_active_hot_zone_boundary_distance_locked(slot.frame_number),
+                true
+            };
+
+            const Cnr3Status consider_status = cnr3_consider_prune_candidate_bounded(
+                candidate,
+                checkpoint_select_budget,
+                checkpoint_candidate_order
+            );
+
+            if (!cnr3_status_is_ok(consider_status)) {
+                return consider_status;
+            }
+
+            continue;
+        }
+
+        if (!noncheckpoint_capacity_permits) {
+            continue;
+        }
+
+        const Cnr3PruneCandidateDistanceOrderEntry candidate{
+            slot.frame_number,
+            nearest_active_hot_zone_boundary_distance_locked(slot.frame_number),
+            false
+        };
+
+        const Cnr3Status consider_status = cnr3_consider_prune_candidate_bounded(
+            candidate,
+            max_select_count,
+            out_candidate_order
+        );
+
+        if (!cnr3_status_is_ok(consider_status)) {
+            return consider_status;
+        }
+    }
+
+    for (const Cnr3PruneCandidateDistanceOrderEntry& checkpoint_candidate : checkpoint_candidate_order) {
+        const Cnr3Status consider_status = cnr3_consider_prune_candidate_bounded(
+            checkpoint_candidate,
+            max_select_count,
+            out_candidate_order
+        );
+
+        if (!cnr3_status_is_ok(consider_status)) {
+            return consider_status;
         }
     }
 

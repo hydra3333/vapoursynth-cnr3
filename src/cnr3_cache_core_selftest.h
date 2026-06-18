@@ -213,6 +213,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_prune_victim_distance_ordering() noexcept;
 
 /*
+    Run the CMS07-G.9A composite prune-candidate selection selftest.
+
+    This proves selection-only assembly of the already-proven predicate clauses:
+    unpinned, outside every active hot zone, checkpoint-retention permitted for
+    checkpoints, and externally supplied capacity permission for non-checkpoints.
+    It does not detach, free, trigger pruning, or implement production AS5.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

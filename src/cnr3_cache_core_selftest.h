@@ -86,6 +86,19 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_checkpoint_store_flag_lifecycle() noexcept;
 
 /*
+    Run the CMS07-G.12A AS2 store-pin-record checkpoint atomicity selftest.
+
+    This verifies that the combined AS2 helper stores or adopts a frame, applies
+    monotonic checkpoint promotion, pins the resulting slot, and records the pin
+    in one public operation. It proves duplicate loser frames are released once,
+    first-in-best-dressed frame data survives duplicates, checkpoint-eligible
+    duplicates promote existing non-checkpoints, and non-checkpoint duplicates
+    never demote existing checkpoints. It does not add recovery, getFrame wiring,
+    source lifecycle handling, prune policy, or pixel behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as2_store_record_monotonic_checkpoint() noexcept;
+
+/*
     Run the CMS07-F.1A central remove helper selftest.
 
     This verifies that the central remove helper rejects pinned slots, detaches

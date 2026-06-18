@@ -413,6 +413,25 @@ struct Cnr3CachePruneExecutionSummary {
 };
 
 /*
+    Combined AS2 store/pin-record summary.
+
+    CMS07-G.12A reports the result of one store/adopt/pin/record/checkpoint
+    atomic. Duplicate stores preserve the first frame data; checkpoint-eligible
+    duplicates may only raise checkpoint state monotonically.
+*/
+struct Cnr3CacheAs2StoreRecordSummary {
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    bool requested_checkpoint = false;
+    bool inserted_new_slot = false;
+    bool duplicate_existing_slot = false;
+    bool checkpoint_promoted = false;
+    bool resulting_slot_is_checkpoint = false;
+    bool pin_recorded = false;
+    bool incoming_frame_consumed = false;
+    bool incoming_frame_rejected = false;
+};
+
+/*
     Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
     trigger decision from a frame byte size and a current slot count.
 
@@ -606,6 +625,34 @@ public:
     [[nodiscard]] Cnr3Status store_checkpoint_owned_frame(
         int frame_number,
         Cnr3OwnedFrameRef frame
+    );
+
+
+    /*
+        Lock-owning combined AS2 store/adopt/pin-record operation.
+
+        This is the CMS07-G.12A AS2 primitive for one computed output frame. The
+        caller supplies an owned frame reference and a per-invocation pin list.
+        The helper pre-reserves pin-list capacity before acquiring cache_mutex_,
+        then under one cache-lock acquisition it stores or adopts the existing
+        first-in-best-dressed winner, applies monotonic checkpoint promotion,
+        increments the slot pin count, and records the pin without allocation.
+
+        Duplicate stores never overwrite existing frame data. A checkpoint-
+        eligible duplicate may promote an existing non-checkpoint slot to
+        checkpoint; a non-checkpoint duplicate never demotes an existing
+        checkpoint. Rejected duplicate loser frames remain in the public wrapper
+        and are released only after cache_mutex_ is unlocked.
+
+        This helper does not request/retrieve source frames, compute pixels,
+        prune, recover, or wire D-SUM counters.
+    */
+    [[nodiscard]] Cnr3Status store_owned_frame_and_record_pin(
+        int frame_number,
+        Cnr3OwnedFrameRef frame,
+        bool is_checkpoint,
+        Cnr3CachePinList& pin_list,
+        Cnr3CacheAs2StoreRecordSummary& out_summary
     );
 
     /*
@@ -938,6 +985,22 @@ private:
         int frame_number,
         Cnr3OwnedFrameRef& frame,
         bool is_checkpoint
+    );
+
+
+    /*
+        Lock-protected combined AS2 store/adopt/pin-record helper.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. pin_list must have enough pre-reserved
+        storage for one more token before this helper is called.
+    */
+    [[nodiscard]] Cnr3Status store_owned_frame_and_record_pin_locked(
+        int frame_number,
+        Cnr3OwnedFrameRef& frame,
+        bool is_checkpoint,
+        Cnr3CachePinList& pin_list,
+        Cnr3CacheAs2StoreRecordSummary& out_summary
     );
 
     /*

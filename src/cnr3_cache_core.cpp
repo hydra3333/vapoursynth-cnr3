@@ -355,6 +355,56 @@ Cnr3Status Cnr3OutputCacheCore::store_checkpoint_owned_frame(
     return status;
 }
 
+
+Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin(
+    int frame_number,
+    Cnr3OwnedFrameRef frame,
+    bool is_checkpoint,
+    Cnr3CachePinList& pin_list,
+    Cnr3CacheAs2StoreRecordSummary& out_summary
+) {
+    out_summary = Cnr3CacheAs2StoreRecordSummary{};
+
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const Cnr3Status reserve_status = pin_list.reserve_for_additional_pins(1U);
+
+    if (!cnr3_status_is_ok(reserve_status)) {
+        return reserve_status;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    /*
+        frame is intentionally taken by value by this public helper. On a
+        first-in-best-dressed duplicate, the locked helper leaves the rejected
+        loser in this outer-scope parameter, so it releases after this nested
+        lock scope unlocks cache_mutex_. Do not change this to by-reference or
+        move the loser's lifetime inside the lock scope; either change would
+        free the loser frame while holding the cache lock, violating the
+        freeFrame-outside-lock rule.
+    */
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        status = store_owned_frame_and_record_pin_locked(
+            frame_number,
+            frame,
+            is_checkpoint,
+            pin_list,
+            out_summary
+        );
+    }
+
+    return status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame(
     int frame_number
 ) {
@@ -1321,6 +1371,144 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
     if (is_checkpoint) {
         checkpoint_slot_positions_.push_back(slot_position);
     }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+    int frame_number,
+    Cnr3OwnedFrameRef& frame,
+    bool is_checkpoint,
+    Cnr3CachePinList& pin_list,
+    Cnr3CacheAs2StoreRecordSummary& out_summary
+) {
+    out_summary = Cnr3CacheAs2StoreRecordSummary{};
+
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const auto existing_frame_index_it = frame_index_.find(frame_number);
+    const bool existing_slot_found =
+        existing_frame_index_it != frame_index_.end();
+    bool existing_slot_was_checkpoint = false;
+
+    if (existing_slot_found) {
+        const std::size_t existing_slot_position = existing_frame_index_it->second;
+
+        if (existing_slot_position >= slots_.size()) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        const Cnr3CacheSlot& existing_slot = slots_[existing_slot_position];
+
+        if (!cnr3_cache_slot_is_indexable(existing_slot)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (existing_slot.frame_number != frame_number) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        existing_slot_was_checkpoint = existing_slot.is_checkpoint;
+    }
+
+    const Cnr3Status store_status =
+        store_owned_frame_locked(frame_number, frame, is_checkpoint);
+
+    if (store_status == Cnr3Status::ok) {
+        out_summary.inserted_new_slot = true;
+        out_summary.incoming_frame_consumed = true;
+    }
+    else if (store_status == Cnr3Status::duplicate) {
+        out_summary.duplicate_existing_slot = true;
+        out_summary.incoming_frame_rejected = true;
+        out_summary.checkpoint_promoted =
+            is_checkpoint && !existing_slot_was_checkpoint;
+    }
+    else {
+        return store_status;
+    }
+
+    const auto frame_index_it = frame_index_.find(frame_number);
+
+    if (frame_index_it == frame_index_.end()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (frame_index_it->second >= slots_.size()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const Cnr3CacheSlot& stored_slot = slots_[frame_index_it->second];
+
+    if (!cnr3_cache_slot_is_indexable(stored_slot)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (stored_slot.frame_number != frame_number) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    /*
+        In the duplicate case the incoming frame is rejected, but the
+        first-in-best-dressed winner slot for frame_number exists. AS2 still
+        pins and records that winner because the caller asked to store-and-pin
+        frame N, and frame N is present. Every AS2 call yields one recorded pin
+        to discharge, including duplicate stores.
+    */
+    Cnr3CacheSlotPinToken pin_token{};
+    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token);
+
+    if (!cnr3_status_is_ok(pin_status)) {
+        return pin_status;
+    }
+
+    const Cnr3Status record_status =
+        pin_list.record_pin_without_allocation(pin_token);
+
+    if (!cnr3_status_is_ok(record_status)) {
+        const Cnr3Status unpin_status = unpin_frame_locked(pin_token);
+
+        if (!cnr3_status_is_ok(unpin_status)) {
+            return unpin_status;
+        }
+
+        return record_status;
+    }
+
+    const auto final_frame_index_it = frame_index_.find(frame_number);
+
+    if (final_frame_index_it == frame_index_.end()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (final_frame_index_it->second >= slots_.size()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const Cnr3CacheSlot& final_slot = slots_[final_frame_index_it->second];
+
+    if (!cnr3_cache_slot_is_indexable(final_slot)) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    out_summary.frame_number = frame_number;
+    out_summary.requested_checkpoint = is_checkpoint;
+    out_summary.resulting_slot_is_checkpoint = final_slot.is_checkpoint;
+    out_summary.pin_recorded = true;
 
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;

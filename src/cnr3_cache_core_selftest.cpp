@@ -5944,6 +5944,16 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
             return Cnr3Status::invariant_violation;
         }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+        Cnr3CacheHotZoneDiagnosticStats stats =
+            cache.hot_zone_diagnostic_stats();
+
+        if (stats.frames_rejected_from_prune_due_to_hot_zone != 0U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+#endif
+
         if (store_frame(165, true) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
@@ -5964,7 +5974,21 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.total_pin_count() != 1) {
+        const int hot_zone_pinned_frames[] = {55, 60, 65};
+
+        for (const int pinned_frame_number : hot_zone_pinned_frames) {
+            if (
+                cache.lookup_frame_and_record_pin(
+                    pinned_frame_number,
+                    pin_list
+                ) != Cnr3Status::ok
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        if (cache.total_pin_count() != 4) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -6033,7 +6057,7 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
             return Cnr3Status::invariant_violation;
         }
 
-        if (cache.total_pin_count() != 1) {
+        if (cache.total_pin_count() != 4) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
@@ -6062,6 +6086,30 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;
             return Cnr3Status::invariant_violation;
         }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+        constexpr std::uint64_t expected_hot_zone_prune_rejections = 58U;
+
+        static_assert(
+            expected_hot_zone_prune_rejections !=
+            static_cast<std::uint64_t>(
+                CNR3_CACHE_HOT_ZONE_BACK_RADIUS +
+                CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS +
+                1
+            ),
+            "G.13A must prove cached-state counting, not hot-zone width."
+        );
+
+        stats = cache.hot_zone_diagnostic_stats();
+
+        if (
+            stats.frames_rejected_from_prune_due_to_hot_zone !=
+            expected_hot_zone_prune_rejections
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+#endif
 
         Cnr3CachePruneExecutionSummary post_prune_summary{};
 
@@ -6092,11 +6140,26 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
             return Cnr3Status::invariant_violation;
         }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+        stats = cache.hot_zone_diagnostic_stats();
+
+        if (
+            stats.frames_rejected_from_prune_due_to_hot_zone !=
+            expected_hot_zone_prune_rejections
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+#endif
+
         cnr3_cache_core_selftest_trace_line(
             "G.11A AS5 prune execution decide/detach/free scenario"
         );
         cnr3_cache_core_selftest_trace_line(
             "    hot zone: [50-110]; frame 164 pinned; frame 0 retained checkpoint"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    hot-zone pins for D-SUM discrimination: 55, 60, 65"
         );
         cnr3_cache_core_selftest_trace_line(
             "    slot_count 165 -> no prune; slot_count 166 -> prune required"
@@ -6110,6 +6173,23 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
         cnr3_cache_core_selftest_trace_line(
             "    preserved: 164 pinned noncheckpoint, frame 0 retained checkpoint"
         );
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+        cnr3_cache_core_selftest_trace_line(
+            "G.13A D-SUM-11 hot-zone prune-rejection counter scenario"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    no-prune boundary leaves rejected-frame counter at 0"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    prune pass counts 58 cached, unpinned, prunable frames in hot zone [50-110]"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    test would fail if counter returned the 61-frame hot-zone width"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    idempotent post-prune pass does not increment counter again"
+        );
+#endif
 
         if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
             g_cnr3_cache_core_selftest_vsapi_state = nullptr;

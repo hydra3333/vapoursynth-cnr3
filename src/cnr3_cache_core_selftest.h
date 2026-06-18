@@ -198,8 +198,9 @@
     Run the CMS07-G.6A D-SUM-11 hot-zone counter model selftest.
 
     This proves counter updates for create, slide, merge, decay, expiry, zone
-    count sampling, protected-range sampling, and the currently deferred prune
-    rejection field. It does not format or print the D-SUM-11 summary.
+    count sampling, protected-range sampling, and the zero baseline for prune
+    rejection before AS5 prune execution. It does not format or print the
+    D-SUM-11 summary.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept;
 
@@ -251,9 +252,9 @@
     This composes the proven trigger decision and composite candidate selector
     into one bounded decide/detach/free pass. It verifies no-prune boundary
     behaviour, bounded prune execution, selected victim release after the public
-    helper returns, survivor preservation, pin preservation, and cache invariant
-    cleanliness. It does not wire D-SUM counters, perform recovery, connect to
-    getFrame, or touch pixel behaviour.
+    helper returns, survivor preservation, pin preservation, D-SUM-11 hot-zone
+    prune-rejection counter wiring, and cache invariant cleanliness. It does
+    not perform recovery, connect to getFrame, or touch pixel behaviour.
 */
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noexcept;
 

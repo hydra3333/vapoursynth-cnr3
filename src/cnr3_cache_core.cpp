@@ -1018,6 +1018,59 @@ void Cnr3OutputCacheCore::observe_hot_zone_state_sample_locked() noexcept {
 #endif
 }
 
+void Cnr3OutputCacheCore::observe_hot_zone_prune_rejections_locked(
+    std::size_t rejected_frame_count
+) noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(
+        hot_zone_diag_stats_,
+        static_cast<std::uint64_t>(rejected_frame_count)
+    );
+#else
+    (void)rejected_frame_count;
+#endif
+}
+
+std::size_t Cnr3OutputCacheCore::count_prune_candidates_rejected_by_hot_zone_locked(
+    bool noncheckpoint_capacity_permits,
+    std::size_t retain_checkpoint_count
+) const noexcept {
+    std::size_t rejected_frame_count = 0U;
+
+    const std::size_t checkpoint_count = checkpoint_count_locked();
+    const bool checkpoint_retention_permits =
+        checkpoint_count > retain_checkpoint_count;
+
+    for (const Cnr3CacheSlot& slot : slots_) {
+        if (!cnr3_cache_slot_is_indexable(slot)) {
+            continue;
+        }
+
+        if (slot.pin_count != 0) {
+            continue;
+        }
+
+        if (!frame_is_inside_hot_zone_locked(slot.frame_number)) {
+            continue;
+        }
+
+        if (slot.is_checkpoint) {
+            if (slot.frame_number == 0 || !checkpoint_retention_permits) {
+                continue;
+            }
+
+            ++rejected_frame_count;
+            continue;
+        }
+
+        if (noncheckpoint_capacity_permits) {
+            ++rejected_frame_count;
+        }
+    }
+
+    return rejected_frame_count;
+}
+
 Cnr3Status Cnr3OutputCacheCore::merge_closest_active_hot_zones_locked() {
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
@@ -2029,6 +2082,14 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
         return Cnr3Status::ok;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    const std::size_t hot_zone_prune_rejection_count =
+        count_prune_candidates_rejected_by_hot_zone_locked(
+            true,
+            retain_checkpoint_count
+        );
+#endif
+
     status = select_composite_prune_candidates_bounded_locked(
         true,
         retain_checkpoint_count,
@@ -2069,6 +2130,10 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
     if (!cache_state_invariants_hold_locked()) {
         return Cnr3Status::invariant_violation;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    observe_hot_zone_prune_rejections_locked(hot_zone_prune_rejection_count);
+#endif
 
     return Cnr3Status::ok;
 }

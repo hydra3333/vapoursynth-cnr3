@@ -68,6 +68,22 @@ inline void cnr3_cache_diag_saturating_increment(
     }
 }
 
+inline void cnr3_cache_diag_saturating_add(
+    std::uint64_t& value,
+    std::uint64_t increment
+) noexcept {
+    if (increment == 0U) {
+        return;
+    }
+
+    if (value <= (UINT64_MAX - increment)) {
+        value += increment;
+    }
+    else {
+        value = UINT64_MAX;
+    }
+}
+
 inline void cnr3_cache_hot_zone_diagnostic_observe_create(
     Cnr3CacheHotZoneDiagnosticStats& stats
 ) noexcept {
@@ -154,4 +170,14 @@ inline void cnr3_cache_hot_zone_diagnostic_observe_protected_range_sample(
     if (protected_range > stats.protected_range_max) {
         stats.protected_range_max = protected_range;
     }
+}
+
+inline void cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(
+    Cnr3CacheHotZoneDiagnosticStats& stats,
+    std::uint64_t rejected_frame_count
+) noexcept {
+    cnr3_cache_diag_saturating_add(
+        stats.frames_rejected_from_prune_due_to_hot_zone,
+        rejected_frame_count
+    );
 }

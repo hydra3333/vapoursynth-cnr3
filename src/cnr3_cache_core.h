@@ -956,6 +956,14 @@ private:
     void observe_hot_zone_decay_locked() noexcept;
     void observe_hot_zone_expiry_locked() noexcept;
     void observe_hot_zone_state_sample_locked() noexcept;
+    void observe_hot_zone_prune_rejections_locked(
+        std::size_t rejected_frame_count
+    ) noexcept;
+
+    [[nodiscard]] std::size_t count_prune_candidates_rejected_by_hot_zone_locked(
+        bool noncheckpoint_capacity_permits,
+        std::size_t retain_checkpoint_count
+    ) const noexcept;
 
     /*
         Lock-protected store helpers.

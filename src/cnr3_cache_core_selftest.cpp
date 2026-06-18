@@ -2,6 +2,9 @@
 
 #include "cnr3_cache_core.h"
 
+#include "cnr3_diagnostics.h"
+
+#include <cstdio>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -118,7 +121,60 @@ namespace {
         "lookup_frame_and_record_pin() must not expose a caller-owned pin token."
         );
 
+    bool g_cnr3_cache_core_selftest_verbose = false;
+
+    constexpr Cnr3InstanceId CNR3_SELFTEST_TRACE_INSTANCE_ID{};
+    constexpr const char* CNR3_SELFTEST_TRACE_COMPONENT = "cache_core_selftest_trace";
+
+    void cnr3_cache_core_selftest_trace_line(
+        const char* message
+    ) noexcept {
+        if (!g_cnr3_cache_core_selftest_verbose) {
+            return;
+        }
+
+        cnr3_diag_write_line(
+            CNR3_SELFTEST_TRACE_INSTANCE_ID,
+            Cnr3DiagnosticLevel::info,
+            CNR3_SELFTEST_TRACE_COMPONENT,
+            message,
+            Cnr3StderrFlushPolicy::no_flush
+        );
+    }
+
+    void cnr3_cache_core_selftest_trace_candidate_order(
+        const std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order
+    ) noexcept {
+        if (!g_cnr3_cache_core_selftest_verbose) {
+            return;
+        }
+
+        for (const Cnr3PruneCandidateDistanceOrderEntry& candidate : candidate_order) {
+            char message[160] = {};
+
+            const int written = std::snprintf(
+                message,
+                sizeof(message),
+                "    frame=%d nearest_zone_distance=%d",
+                candidate.frame_number,
+                candidate.nearest_hot_zone_distance
+            );
+
+            if (written < 0) {
+                cnr3_cache_core_selftest_trace_line("    formatting_error");
+                continue;
+            }
+
+            message[sizeof(message) - 1U] = '\0';
+            cnr3_cache_core_selftest_trace_line(message);
+        }
+    }
+
 } // namespace
+
+void cnr3_cache_core_selftest_set_verbose(bool verbose) noexcept {
+    g_cnr3_cache_core_selftest_verbose = verbose;
+}
 
 Cnr3Status cnr3_cache_core_selftest_empty_model() noexcept {
     const Cnr3OutputCacheCore cache{};
@@ -4363,6 +4419,257 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_prune_protection_selection_lifecycl
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_prune_victim_distance_ordering() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int frame_storage[6] = {};
+    const int frame_numbers[6] = {
+        40,
+        112,
+        200,
+        220,
+        249,
+        400
+    };
+
+    const int expected_frame_order[6] = {
+        400,
+        200,
+        220,
+        40,
+        112,
+        249
+    };
+
+    const int expected_distance_order[6] = {
+        90,
+        50,
+        30,
+        10,
+        2,
+        1
+    };
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        const auto store_noncheckpoint = [
+            &cache,
+            &vsapi
+        ](
+            int frame_number,
+            const VSFrame* frame
+        ) noexcept -> Cnr3Status {
+            Cnr3OwnedFrameRef owned_frame{};
+
+            const Cnr3Status adopt_status =
+                owned_frame.reset_to_owned_frame(frame, &vsapi);
+
+            if (!cnr3_status_is_ok(adopt_status)) {
+                return adopt_status;
+            }
+
+            const Cnr3Status store_status =
+                cache.store_noncheckpoint_owned_frame(
+                    frame_number,
+                    std::move(owned_frame)
+                );
+
+            if (!cnr3_status_is_ok(store_status)) {
+                return store_status;
+            }
+
+            if (owned_frame.has_frame()) {
+                return Cnr3Status::ownership_violation;
+            }
+
+            return Cnr3Status::ok;
+        };
+
+        if (cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.record_hot_zone_observation(300) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.frame_is_inside_hot_zone(50)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.frame_is_inside_hot_zone(250)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.frame_is_inside_hot_zone(249)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (int index = 0; index < 6; ++index) {
+            frame_storage[index] = index + 1;
+            const VSFrame* frame =
+                reinterpret_cast<const VSFrame*>(&frame_storage[index]);
+
+            if (
+                store_noncheckpoint(frame_numbers[index], frame) !=
+                Cnr3Status::ok
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> candidate_order{};
+        candidate_order.reserve(6U);
+
+        if (
+            cache.select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded(
+                6U,
+                candidate_order
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (candidate_order.size() != 6U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        cnr3_cache_core_selftest_trace_line(
+            "G.8A multi-zone prune-victim ordering scenario"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    active hot zones: [50-110], [250-310]"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    eligible cached frames: 40,112,200,220,249,400"
+        );
+        cnr3_cache_core_selftest_trace_line(
+            "    returned order and nearest-zone distances:"
+        );
+        cnr3_cache_core_selftest_trace_candidate_order(candidate_order);
+        cnr3_cache_core_selftest_trace_line(
+            "    expected: 400(90), 200(50), 220(30), 40(10), 112(2), 249(1)"
+        );
+
+        for (std::size_t index = 0U; index < candidate_order.size(); ++index) {
+            if (candidate_order[index].frame_number != expected_frame_order[index]) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (
+                candidate_order[index].nearest_hot_zone_distance !=
+                expected_distance_order[index]
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        /*
+            This is the key multi-zone correctness check: frame 249 is adjacent
+            to the second zone, even though it is far from the first zone. It
+            must therefore rank colder than the genuinely isolated frame 200.
+        */
+        if (candidate_order[1].frame_number != 200) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (candidate_order[5].frame_number != 249) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> bounded_order{};
+        bounded_order.reserve(3U);
+
+        if (
+            cache.select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded(
+                3U,
+                bounded_order
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (bounded_order.size() != 3U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (std::size_t index = 0U; index < bounded_order.size(); ++index) {
+            if (bounded_order[index].frame_number != expected_frame_order[index]) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> no_capacity_order{};
+
+        if (
+            cache.select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded(
+                1U,
+                no_capacity_order
+            ) != Cnr3Status::invalid_argument
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.slot_count() != 6U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.cache_state_invariants_hold()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.free_frame_count != 6) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (vsapi_state.free_frame_count != 6) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -4435,6 +4742,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "hot_zone_prune_protection_selection_lifecycle",
             cnr3_cache_core_selftest_hot_zone_prune_protection_selection_lifecycle
+        },
+        {
+            "prune_victim_distance_ordering",
+            cnr3_cache_core_selftest_prune_victim_distance_ordering
         },
         {
             "lookup_addref_hit_and_miss",

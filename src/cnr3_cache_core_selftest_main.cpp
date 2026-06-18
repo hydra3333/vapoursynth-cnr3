@@ -128,22 +128,43 @@ namespace {
         cnr3_diag_flush_stderr();
     }
 
-    bool cnr3_selftest_argument_is_forced_failure_proof(
+    bool cnr3_selftest_argument_is_present(
         int argc,
-        char** argv
+        char** argv,
+        const char* argument_to_find
     ) noexcept {
-        return
-            argc == 2 &&
-            argv != nullptr &&
-            argv[1] != nullptr &&
-            std::strcmp(argv[1], "--force-fail-for-harness-proof") == 0;
+        if (argv == nullptr || argument_to_find == nullptr) {
+            return false;
+        }
+
+        for (int argument_index = 1; argument_index < argc; ++argument_index) {
+            if (
+                argv[argument_index] != nullptr &&
+                std::strcmp(argv[argument_index], argument_to_find) == 0
+                ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 } // namespace
 
 int main(int argc, char** argv) {
-    const bool force_failure_proof =
-        cnr3_selftest_argument_is_forced_failure_proof(argc, argv);
+    const bool force_failure_proof = cnr3_selftest_argument_is_present(
+        argc,
+        argv,
+        "--force-fail-for-harness-proof"
+    );
+
+    const bool verbose = cnr3_selftest_argument_is_present(
+        argc,
+        argv,
+        "--verbose"
+    );
+
+    cnr3_cache_core_selftest_set_verbose(verbose);
 
     const Cnr3CacheCoreSelftestRunResult natural_result =
         cnr3_cache_core_selftest_run_all();

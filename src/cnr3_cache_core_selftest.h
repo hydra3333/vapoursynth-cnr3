@@ -203,6 +203,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_hot_zone_prune_protection_selection_lifecycle() noexcept;
 
 /*
+    Run the CMS07-G.8A prune-victim distance-ordering selftest.
+
+    This verifies ordering among already-eligible prune candidates by greatest
+    distance from the nearest active hot-zone boundary. It proves ordering only;
+    it does not detach slots, implement the full CMS07 section 7.1 predicate,
+    apply the section 7.2 trigger, or wire D-SUM counters.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_prune_victim_distance_ordering() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque
@@ -286,6 +296,8 @@ struct Cnr3CacheCoreSelftestRunResult {
     no printing and does not depend on plugin registration or VapourSynth
     getFrame scheduling.
 */
+void cnr3_cache_core_selftest_set_verbose(bool verbose) noexcept;
+
 [[nodiscard]] Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept;
 
 [[nodiscard]] bool cnr3_cache_core_selftest_run_result_passed(

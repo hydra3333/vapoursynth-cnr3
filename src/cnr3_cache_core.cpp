@@ -1,5 +1,6 @@
 #include "cnr3_cache_core.h"
 
+#include <algorithm>
 #include <limits>
 #include <mutex>
 #include <new>
@@ -20,6 +21,40 @@ static_assert(
     std::is_nothrow_move_assignable_v<Cnr3OwnedFrameRef>,
     "Cnr3OwnedFrameRef must be nothrow move-assignable for cache slot adoption."
     );
+
+namespace {
+
+    [[nodiscard]] bool cnr3_prune_candidate_distance_order_before(
+        Cnr3PruneCandidateDistanceOrderEntry left,
+        Cnr3PruneCandidateDistanceOrderEntry right
+    ) noexcept {
+        if (left.nearest_hot_zone_distance != right.nearest_hot_zone_distance) {
+            return left.nearest_hot_zone_distance > right.nearest_hot_zone_distance;
+        }
+
+        return left.frame_number < right.frame_number;
+    }
+
+    [[nodiscard]] int cnr3_frame_distance_to_hot_zone_boundary(
+        int frame_number,
+        const Cnr3CacheHotZone& hot_zone
+    ) noexcept {
+        if (!hot_zone.is_active || !cnr3_frame_number_is_valid(frame_number)) {
+            return std::numeric_limits<int>::max();
+        }
+
+        if (frame_number < hot_zone.low_frame) {
+            return hot_zone.low_frame - frame_number;
+        }
+
+        if (frame_number > hot_zone.high_frame) {
+            return frame_number - hot_zone.high_frame;
+        }
+
+        return 0;
+    }
+
+} // namespace
 
 Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
     const std::uint64_t value_to_return = (next_value_ != 0U) ? next_value_ : 1U;
@@ -398,6 +433,32 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_noncheckpoint_frames_outside_hot
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded(
+    std::size_t max_select_count,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+) const {
+    out_candidate_order.clear();
+
+    if (max_select_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    if (max_select_count > out_candidate_order.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    if (out_candidate_order.capacity() < max_select_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded_locked(
+        max_select_count,
+        out_candidate_order
+    );
+}
+
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded(
     std::size_t retain_checkpoint_count,
     std::size_t max_remove_count,
@@ -593,6 +654,31 @@ bool Cnr3OutputCacheCore::frame_is_inside_hot_zone_locked(
     }
 
     return false;
+}
+
+int Cnr3OutputCacheCore::nearest_active_hot_zone_boundary_distance_locked(
+    int frame_number
+) const noexcept {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return 0;
+    }
+
+    int nearest_distance = std::numeric_limits<int>::max();
+
+    for (const Cnr3CacheHotZone& hot_zone : hot_zones_) {
+        if (!hot_zone.is_active) {
+            continue;
+        }
+
+        const int distance =
+            cnr3_frame_distance_to_hot_zone_boundary(frame_number, hot_zone);
+
+        if (distance < nearest_distance) {
+            nearest_distance = distance;
+        }
+    }
+
+    return nearest_distance;
 }
 
 bool Cnr3OutputCacheCore::hot_zone_has_pinned_frame_in_range_locked(
@@ -1337,6 +1423,75 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_noncheckpoint_frames_outside_hot
 
     return Cnr3Status::ok;
 }
+
+Cnr3Status Cnr3OutputCacheCore::select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded_locked(
+    std::size_t max_select_count,
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+) const {
+    out_candidate_order.clear();
+
+    if (max_select_count == 0U) {
+        return Cnr3Status::ok;
+    }
+
+    if (out_candidate_order.capacity() < max_select_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    for (const Cnr3CacheSlot& slot : slots_) {
+        if (!cnr3_cache_slot_is_indexable(slot)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            slot.pin_count != 0 ||
+            slot.is_checkpoint ||
+            frame_is_inside_hot_zone_locked(slot.frame_number)
+            ) {
+            continue;
+        }
+
+        const Cnr3PruneCandidateDistanceOrderEntry candidate{
+            slot.frame_number,
+            nearest_active_hot_zone_boundary_distance_locked(slot.frame_number)
+        };
+
+        if (!cnr3_prune_candidate_distance_order_entry_is_valid(candidate)) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (out_candidate_order.size() < max_select_count) {
+            out_candidate_order.push_back(candidate);
+            continue;
+        }
+
+        auto worst_selected = std::max_element(
+            out_candidate_order.begin(),
+            out_candidate_order.end(),
+            cnr3_prune_candidate_distance_order_before
+        );
+
+        if (
+            worst_selected != out_candidate_order.end() &&
+            cnr3_prune_candidate_distance_order_before(candidate, *worst_selected)
+            ) {
+            *worst_selected = candidate;
+        }
+    }
+
+    std::sort(
+        out_candidate_order.begin(),
+        out_candidate_order.end(),
+        cnr3_prune_candidate_distance_order_before
+    );
+
+    return Cnr3Status::ok;
+}
+
 
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded_locked(
     std::size_t retain_checkpoint_count,

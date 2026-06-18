@@ -354,6 +354,27 @@ struct Cnr3CacheHotZone {
 ) noexcept;
 
 /*
+    Ordered prune-candidate distance entry.
+
+    CMS07-G.8A uses this only to prove victim ordering among candidates that
+    are already eligible by the narrow non-checkpoint / unpinned / outside-hot-
+    zone predicate. It is not the final CMS07 prune policy and does not decide
+    when pruning should run.
+*/
+struct Cnr3PruneCandidateDistanceOrderEntry {
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    int nearest_hot_zone_distance = 0;
+};
+
+[[nodiscard]] constexpr bool cnr3_prune_candidate_distance_order_entry_is_valid(
+    Cnr3PruneCandidateDistanceOrderEntry entry
+) noexcept {
+    return
+        cnr3_frame_number_is_valid(entry.frame_number) &&
+        entry.nearest_hot_zone_distance >= 0;
+}
+
+/*
     Ordered frame-number index.
 
     The value is the vector position of the slot in Cnr3OutputCacheCore::slots_.
@@ -612,6 +633,22 @@ public:
     );
 
     /*
+        Lock-owning bounded prune-candidate distance-order selector.
+
+        CMS07-G.8A proves ordering only. The helper returns up to
+        max_select_count candidates that are already eligible by the narrow
+        G.7A predicate, ordered by greatest distance from the nearest active
+        hot-zone boundary, with lower frame number as the deterministic tie
+        breaker. It does not detach slots, trigger pruning, apply active-ceiling
+        pressure, apply checkpoint-retention policy, wire D-SUM counters, or
+        assemble the final CMS07 section 7.1 predicate.
+    */
+    [[nodiscard]] Cnr3Status select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded(
+        std::size_t max_select_count,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+    ) const;
+
+    /*
         Lock-owning bounded checkpoint retention-boundary selection/detach
         operation.
 
@@ -722,6 +759,9 @@ private:
     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats_locked() const noexcept;
     [[nodiscard]] bool frame_is_inside_hot_zone_locked(
+        int frame_number
+    ) const noexcept;
+    [[nodiscard]] int nearest_active_hot_zone_boundary_distance_locked(
         int frame_number
     ) const noexcept;
     [[nodiscard]] bool hot_zone_has_pinned_frame_in_range_locked(
@@ -875,6 +915,23 @@ private:
         std::vector<Cnr3CacheSlot>& detached_slots,
         std::size_t& out_removed_count
     );
+
+    /*
+        Lock-protected bounded distance-order selector.
+
+        This helper assumes the caller already holds cache_mutex_. It must not
+        acquire cache_mutex_ itself. out_candidate_order must have enough
+        reserved capacity before entry so selection does not allocate while the
+        cache lock is held.
+
+        Ordering is by distance to the nearest active hot-zone boundary, not by
+        distance to any one selected zone. A frame adjacent to one live zone is
+        therefore considered near even if it is far from another zone.
+    */
+    [[nodiscard]] Cnr3Status select_unpinned_noncheckpoint_frames_outside_hot_zones_by_distance_bounded_locked(
+        std::size_t max_select_count,
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry>& out_candidate_order
+    ) const;
 
     /*
         Lock-protected bounded checkpoint retention-boundary selection/detach

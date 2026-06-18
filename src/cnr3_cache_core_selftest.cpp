@@ -4959,6 +4959,206 @@ Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexce
             }
         }
 
+        std::vector<Cnr3PruneCandidateDistanceOrderEntry> cross_pool_order{};
+        cross_pool_order.reserve(3U);
+
+        {
+            Cnr3CacheCoreSelftestVsApiState cross_pool_vsapi_state{};
+            g_cnr3_cache_core_selftest_vsapi_state = &cross_pool_vsapi_state;
+
+            VSAPI cross_pool_vsapi = cnr3_cache_core_selftest_make_vsapi();
+            Cnr3OutputCacheCore cross_pool_cache{};
+
+            const auto store_cross_pool_frame = [
+                &cross_pool_cache,
+                &cross_pool_vsapi
+            ](
+                int frame_number,
+                bool is_checkpoint,
+                const VSFrame* frame
+            ) noexcept -> Cnr3Status {
+                Cnr3OwnedFrameRef owned_frame{};
+
+                const Cnr3Status adopt_status =
+                    owned_frame.reset_to_owned_frame(frame, &cross_pool_vsapi);
+
+                if (!cnr3_status_is_ok(adopt_status)) {
+                    return adopt_status;
+                }
+
+                const Cnr3Status store_status =
+                    is_checkpoint
+                    ? cross_pool_cache.store_checkpoint_owned_frame(
+                        frame_number,
+                        std::move(owned_frame)
+                    )
+                    : cross_pool_cache.store_noncheckpoint_owned_frame(
+                        frame_number,
+                        std::move(owned_frame)
+                    );
+
+                if (!cnr3_status_is_ok(store_status)) {
+                    return store_status;
+                }
+
+                if (owned_frame.has_frame()) {
+                    return Cnr3Status::ownership_violation;
+                }
+
+                return Cnr3Status::ok;
+            };
+
+            if (cross_pool_cache.record_hot_zone_observation(100) != Cnr3Status::ok) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            int cross_pool_frame_storage[6] = {};
+
+            const struct CrossPoolFrameSpec {
+                int frame_number = CNR3_INVALID_FRAME_NUMBER;
+                bool is_checkpoint = false;
+            } cross_pool_specs[] = {
+                { 0, true },
+                { 150, true },
+                { 160, false },
+                { 170, false },
+                { 180, true },
+                { 200, false }
+            };
+
+            for (int index = 0; index < static_cast<int>(sizeof(cross_pool_specs) / sizeof(cross_pool_specs[0])); ++index) {
+                cross_pool_frame_storage[index] = 100 + index;
+
+                const VSFrame* frame =
+                    reinterpret_cast<const VSFrame*>(&cross_pool_frame_storage[index]);
+
+                if (
+                    store_cross_pool_frame(
+                        cross_pool_specs[index].frame_number,
+                        cross_pool_specs[index].is_checkpoint,
+                        frame
+                    ) != Cnr3Status::ok
+                    ) {
+                    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                    return Cnr3Status::invariant_violation;
+                }
+            }
+
+            if (cross_pool_cache.checkpoint_count() != 3U) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (
+                cross_pool_cache.select_composite_prune_candidates_bounded(
+                    true,
+                    1U,
+                    3U,
+                    cross_pool_order
+                ) != Cnr3Status::ok
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (cross_pool_order.size() != 3U) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            const int expected_cross_pool_frames[] = {
+                200,
+                180,
+                170
+            };
+
+            const int expected_cross_pool_distances[] = {
+                90,
+                70,
+                60
+            };
+
+            const bool expected_cross_pool_checkpoint_flags[] = {
+                false,
+                true,
+                false
+            };
+
+            for (std::size_t index = 0U; index < cross_pool_order.size(); ++index) {
+                if (
+                    cross_pool_order[index].frame_number !=
+                    expected_cross_pool_frames[index]
+                    ) {
+                    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                    return Cnr3Status::invariant_violation;
+                }
+
+                if (
+                    cross_pool_order[index].nearest_hot_zone_distance !=
+                    expected_cross_pool_distances[index]
+                    ) {
+                    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                    return Cnr3Status::invariant_violation;
+                }
+
+                if (
+                    cross_pool_order[index].is_checkpoint !=
+                    expected_cross_pool_checkpoint_flags[index]
+                    ) {
+                    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                    return Cnr3Status::invariant_violation;
+                }
+            }
+
+            for (const Cnr3PruneCandidateDistanceOrderEntry& entry : cross_pool_order) {
+                if (entry.frame_number == 150 || entry.frame_number == 160) {
+                    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                    return Cnr3Status::invariant_violation;
+                }
+            }
+
+            cnr3_cache_core_selftest_trace_line(
+                "G.9A cross-pool bounded top-K scenario"
+            );
+            cnr3_cache_core_selftest_trace_line(
+                "    active hot zones: [50-110]"
+            );
+            cnr3_cache_core_selftest_trace_line(
+                "    eligible checkpoints: 150(40),180(70); frame 0 excluded"
+            );
+            cnr3_cache_core_selftest_trace_line(
+                "    eligible non-checkpoints: 160(50),170(60),200(90)"
+            );
+            cnr3_cache_core_selftest_trace_line(
+                "    returned global top-3 and nearest-zone distances:"
+            );
+            cnr3_cache_core_selftest_trace_candidate_order(cross_pool_order);
+            cnr3_cache_core_selftest_trace_line(
+                "    expected: 200 noncheckpoint(90), 180 checkpoint(70), 170 noncheckpoint(60)"
+            );
+            cnr3_cache_core_selftest_trace_line(
+                "    absent by assertion: 160 noncheckpoint(50), 150 checkpoint(40)"
+            );
+
+            if (cross_pool_cache.clear() != Cnr3Status::ok) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (!cross_pool_cache.empty()) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (cross_pool_vsapi_state.free_frame_count != 6) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+        }
+
         std::vector<Cnr3PruneCandidateDistanceOrderEntry> no_capacity_order{};
 
         if (

@@ -6232,6 +6232,372 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    constexpr int requested_frame = 100;
+    constexpr int recovery_back_radius = CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS;
+
+    static_assert(
+        recovery_back_radius == CNR3_CACHE_HOT_ZONE_BACK_RADIUS,
+        "H.1A recovery search window must track the CMS07 hot-zone back radius."
+    );
+    static_assert(recovery_back_radius == 50);
+
+    int frame_storage[220] = {};
+
+    for (int index = 0; index < static_cast<int>(sizeof(frame_storage) / sizeof(frame_storage[0])); ++index) {
+        frame_storage[index] = 3000 + index;
+    }
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    const auto store_frame = [
+        &vsapi,
+        &frame_storage
+    ](
+        Cnr3OutputCacheCore& cache,
+        int frame_number,
+        bool is_checkpoint
+    ) noexcept -> Cnr3Status {
+        Cnr3OwnedFrameRef owned_frame{};
+
+        const VSFrame* frame =
+            reinterpret_cast<const VSFrame*>(&frame_storage[frame_number]);
+
+        const Cnr3Status adopt_status =
+            owned_frame.reset_to_owned_frame(frame, &vsapi);
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        const Cnr3Status store_status =
+            is_checkpoint
+            ? cache.store_checkpoint_owned_frame(frame_number, std::move(owned_frame))
+            : cache.store_noncheckpoint_owned_frame(frame_number, std::move(owned_frame));
+
+        if (!cnr3_status_is_ok(store_status)) {
+            return store_status;
+        }
+
+        if (owned_frame.has_frame()) {
+            return Cnr3Status::ownership_violation;
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    const auto run_plan = [](
+        const Cnr3OutputCacheCore& cache,
+        int request,
+        Cnr3CacheRecoverySearchPlan& plan
+    ) noexcept -> Cnr3Status {
+        return cache.plan_bounded_recovery_search(
+            request,
+            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+            plan
+        );
+    };
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, requested_frame, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (store_frame(cache, requested_frame - 1, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, requested_frame, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (plan.search_lower_frame != 50 || plan.search_upper_frame != 99) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_found || plan.anchor_frame_number != 99) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (plan.anchor_frame_number == requested_frame) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.requested_frame_is_repair_target || plan.requested_frame_is_in_hole_catalogue) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.hole_frame_numbers.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, 49, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (store_frame(cache, 50, true) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, requested_frame, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_found || plan.anchor_frame_number != 50) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_is_checkpoint) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, 49, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, requested_frame, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (plan.anchor_found || cnr3_frame_number_is_valid(plan.anchor_frame_number)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.hole_frame_numbers.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, 90, true) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (store_frame(cache, 95, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, requested_frame, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_found || plan.anchor_frame_number != 95 || plan.anchor_is_checkpoint) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, 90, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (store_frame(cache, 95, true) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, requested_frame, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_found || plan.anchor_frame_number != 95 || !plan.anchor_is_checkpoint) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, 90, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (store_frame(cache, requested_frame, false) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, requested_frame, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        const std::vector<int> expected_holes = {
+            91, 92, 93, 94, 95, 96, 97, 98, 99
+        };
+
+        if (!plan.anchor_found || plan.anchor_frame_number != 90) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (plan.hole_frame_numbers != expected_holes) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (const int hole_frame : plan.hole_frame_numbers) {
+            if (hole_frame == plan.anchor_frame_number || hole_frame == requested_frame) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        if (!plan.requested_frame_is_repair_target || plan.requested_frame_is_in_hole_catalogue) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+
+        if (store_frame(cache, 0, true) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (run_plan(cache, 3, plan) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        const std::vector<int> expected_holes = {1, 2};
+
+        if (plan.search_lower_frame != 0 || plan.search_upper_frame != 2) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_found || plan.anchor_frame_number != 0 || !plan.anchor_is_checkpoint) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (plan.hole_frame_numbers != expected_holes) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "H.1A AS1 bounded recovery search scaffold scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    recovery window B = 50; search interval is [requested-B, requested-1]"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    lower bound is inclusive: candidate at requested-B is found"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    below-bound candidate at requested-B-1 is not found"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    checkpoint flag is irrelevant: nearer non-checkpoint and nearer checkpoint both win"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    requested frame is the later repair target, not a hole-catalogue entry"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    underflow edge clamps lower bound to frame 0"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -6324,6 +6690,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "as5_prune_execution_decide_detach_free",
             cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free
+        },
+        {
+            "as1_bounded_recovery_search_scaffold",
+            cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold
         },
         {
             "lookup_addref_hit_and_miss",

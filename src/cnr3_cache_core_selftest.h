@@ -259,6 +259,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noexcept;
 
 /*
+    Run the CMS07-H.1A AS1 bounded recovery search scaffold selftest.
+
+    This proves only read-only recovery planning: descending bounded search from
+    requested_frame - 1, inclusive lower-bound stopping, checkpoint-flag
+    irrelevance for anchor selection, requested-frame exclusion from the hole
+    catalogue, and safe lower-bound clamping near frame 0. It does not pin,
+    store via AS2, recompute, request source frames, return frames, prune, or
+    touch pixel behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

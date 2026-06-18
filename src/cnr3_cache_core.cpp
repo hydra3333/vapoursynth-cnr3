@@ -692,6 +692,44 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass(
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
+    int requested_frame,
+    int max_back_radius,
+    Cnr3CacheRecoverySearchPlan& out_plan
+) const {
+    out_plan = Cnr3CacheRecoverySearchPlan{};
+
+    if (!cnr3_frame_number_is_valid(requested_frame)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (max_back_radius <= 0) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::size_t max_hole_count = static_cast<std::size_t>(max_back_radius);
+
+    if (max_hole_count > out_plan.hole_frame_numbers.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        out_plan.hole_frame_numbers.reserve(max_hole_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return plan_bounded_recovery_search_locked(
+        requested_frame,
+        max_back_radius,
+        out_plan
+    );
+}
+
+
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded(
     std::size_t retain_checkpoint_count,
     std::size_t max_remove_count,
@@ -2134,6 +2172,109 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
 #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
     observe_hot_zone_prune_rejections_locked(hot_zone_prune_rejection_count);
 #endif
+
+    return Cnr3Status::ok;
+}
+
+
+Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+    int requested_frame,
+    int max_back_radius,
+    Cnr3CacheRecoverySearchPlan& out_plan
+) const {
+    out_plan.hole_frame_numbers.clear();
+
+    if (!cnr3_frame_number_is_valid(requested_frame) || max_back_radius <= 0) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::size_t max_hole_count = static_cast<std::size_t>(max_back_radius);
+
+    if (out_plan.hole_frame_numbers.capacity() < max_hole_count) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cache_state_invariants_hold_locked()) {
+        return Cnr3Status::invariant_violation;
+    }
+
+    const int lower_bound =
+        (requested_frame > max_back_radius)
+        ? (requested_frame - max_back_radius)
+        : 0;
+    const int upper_bound =
+        (requested_frame > 0)
+        ? (requested_frame - 1)
+        : CNR3_INVALID_FRAME_NUMBER;
+
+    out_plan.requested_frame = requested_frame;
+    out_plan.max_back_radius = max_back_radius;
+    out_plan.search_lower_frame = lower_bound;
+    out_plan.search_upper_frame = upper_bound;
+    out_plan.search_interval_has_frames =
+        cnr3_frame_number_is_valid(upper_bound) && lower_bound <= upper_bound;
+    out_plan.requested_frame_is_repair_target = true;
+    out_plan.requested_frame_is_in_hole_catalogue = false;
+
+    if (!out_plan.search_interval_has_frames) {
+        return Cnr3Status::ok;
+    }
+
+    int anchor_frame = CNR3_INVALID_FRAME_NUMBER;
+    bool anchor_is_checkpoint = false;
+
+    for (int candidate_frame = upper_bound; candidate_frame >= lower_bound; --candidate_frame) {
+        const auto index_it = frame_index_.find(candidate_frame);
+
+        if (index_it != frame_index_.end()) {
+            const std::size_t slot_index = index_it->second;
+
+            if (slot_index >= slots_.size()) {
+                return Cnr3Status::invariant_violation;
+            }
+
+            const Cnr3CacheSlot& slot = slots_[slot_index];
+
+            if (!cnr3_cache_slot_is_indexable(slot)) {
+                return Cnr3Status::invariant_violation;
+            }
+
+            anchor_frame = candidate_frame;
+            anchor_is_checkpoint = slot.is_checkpoint;
+            break;
+        }
+
+        if (candidate_frame == 0) {
+            break;
+        }
+    }
+
+    if (!cnr3_frame_number_is_valid(anchor_frame)) {
+        return Cnr3Status::ok;
+    }
+
+    out_plan.anchor_found = true;
+    out_plan.anchor_frame_number = anchor_frame;
+    out_plan.anchor_is_checkpoint = anchor_is_checkpoint;
+
+    for (int frame_number = anchor_frame + 1; frame_number < requested_frame; ++frame_number) {
+        const auto index_it = frame_index_.find(frame_number);
+
+        if (index_it == frame_index_.end()) {
+            out_plan.hole_frame_numbers.push_back(frame_number);
+            continue;
+        }
+
+        const std::size_t slot_index = index_it->second;
+
+        if (slot_index >= slots_.size()) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cnr3_cache_slot_is_indexable(slots_[slot_index])) {
+            return Cnr3Status::invariant_violation;
+        }
+    }
 
     return Cnr3Status::ok;
 }

@@ -432,6 +432,32 @@ struct Cnr3CacheAs2StoreRecordSummary {
 };
 
 /*
+    Bounded recovery search plan.
+
+    CMS07-H.1A proves the read-only AS1 recovery search scaffold only. The
+    search descends from requested_frame - 1 within the inclusive lower-bound
+    recovery window, ignores checkpoint classification for anchor eligibility,
+    and records missing frames between the selected anchor and requested frame.
+
+    The requested frame itself is the later repair target and is deliberately
+    not included in hole_frame_numbers. This plan does not pin, store, request
+    source frames, recompute, return frames, or alter cache state.
+*/
+struct Cnr3CacheRecoverySearchPlan {
+    int requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    int max_back_radius = 0;
+    int search_lower_frame = CNR3_INVALID_FRAME_NUMBER;
+    int search_upper_frame = CNR3_INVALID_FRAME_NUMBER;
+    bool search_interval_has_frames = false;
+    bool anchor_found = false;
+    int anchor_frame_number = CNR3_INVALID_FRAME_NUMBER;
+    bool anchor_is_checkpoint = false;
+    bool requested_frame_is_repair_target = false;
+    bool requested_frame_is_in_hole_catalogue = false;
+    std::vector<int> hole_frame_numbers{};
+};
+
+/*
     Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
     trigger decision from a frame byte size and a current slot count.
 
@@ -789,6 +815,26 @@ public:
     );
 
     /*
+        Lock-owning bounded AS1 recovery search scaffold.
+
+        CMS07-H.1A proves only the read-only recovery planning search: descend
+        from requested_frame - 1, stop at the inclusive lower bound
+        requested_frame - max_back_radius clamped to frame 0, choose the nearest
+        present cached output regardless of checkpoint classification, and build
+        the hole catalogue from anchor + 1 through requested_frame - 1.
+
+        The requested frame itself is not a hole-catalogue entry; it is the
+        later repair target handled by a later recovery execution phase. This
+        helper does not pin, store, prune, request source frames, recompute,
+        return frames, or touch pixel behaviour.
+    */
+    [[nodiscard]] Cnr3Status plan_bounded_recovery_search(
+        int requested_frame,
+        int max_back_radius,
+        Cnr3CacheRecoverySearchPlan& out_plan
+    ) const;
+
+    /*
         Lock-owning bounded checkpoint retention-boundary selection/detach
         operation.
 
@@ -1136,6 +1182,19 @@ private:
         std::vector<Cnr3CacheSlot>& detached_slots,
         Cnr3CachePruneExecutionSummary& out_summary
     );
+
+
+    /*
+        Lock-protected bounded recovery search scaffold.
+
+        Caller must hold cache_mutex_ and must pre-reserve hole_frame_numbers so
+        catalogue construction is allocation-free while the cache lock is held.
+    */
+    [[nodiscard]] Cnr3Status plan_bounded_recovery_search_locked(
+        int requested_frame,
+        int max_back_radius,
+        Cnr3CacheRecoverySearchPlan& out_plan
+    ) const;
 
     /*
         Lock-protected bounded checkpoint retention-boundary selection/detach

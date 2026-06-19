@@ -440,8 +440,9 @@ struct Cnr3CacheAs2StoreRecordSummary {
     and records missing frames between the selected anchor and requested frame.
 
     The requested frame itself is the later repair target and is deliberately
-    not included in hole_frame_numbers. This plan does not pin, store, request
-    source frames, recompute, return frames, or alter cache state.
+    not included in hole_frame_numbers. Read-only planning leaves
+    anchor_pin_recorded false. CMS07-H.2A records true only when the bounded
+    recovery anchor is pinned and recorded by the combined AS1 helper.
 */
 struct Cnr3CacheRecoverySearchPlan {
     int requested_frame = CNR3_INVALID_FRAME_NUMBER;
@@ -452,6 +453,7 @@ struct Cnr3CacheRecoverySearchPlan {
     bool anchor_found = false;
     int anchor_frame_number = CNR3_INVALID_FRAME_NUMBER;
     bool anchor_is_checkpoint = false;
+    bool anchor_pin_recorded = false;
     bool requested_frame_is_repair_target = false;
     bool requested_frame_is_in_hole_catalogue = false;
     std::vector<int> hole_frame_numbers{};
@@ -835,6 +837,27 @@ public:
     ) const;
 
     /*
+        Lock-owning AS1 bounded recovery anchor pin-record operation.
+
+        CMS07-H.2A composes the H.1A bounded recovery search with the D.3A-style
+        pin-list discipline. The public helper reserves hole-catalogue storage
+        and one pin-list entry before acquiring cache_mutex_. Under one cache
+        lock it plans the bounded recovery search, then pins and records exactly
+        the selected anchor when an anchor exists. No-anchor and requested-frame-
+        only cases record no pin.
+
+        This helper does not call addFrameRef(), freeFrame(), AS2, source
+        request/retrieve, recompute, return-transfer, prune, getFrame, or pixel
+        processing.
+    */
+    [[nodiscard]] Cnr3Status plan_bounded_recovery_search_and_record_anchor_pin(
+        int requested_frame,
+        int max_back_radius,
+        Cnr3CachePinList& pin_list,
+        Cnr3CacheRecoverySearchPlan& out_plan
+    );
+
+    /*
         Lock-owning bounded checkpoint retention-boundary selection/detach
         operation.
 
@@ -1195,6 +1218,20 @@ private:
         int max_back_radius,
         Cnr3CacheRecoverySearchPlan& out_plan
     ) const;
+
+    /*
+        Lock-protected AS1 bounded recovery anchor pin-record helper.
+
+        Caller must hold cache_mutex_, must pre-reserve hole_frame_numbers, and
+        must pre-reserve one pin-list entry. This helper must not allocate while
+        the cache lock is held.
+    */
+    [[nodiscard]] Cnr3Status plan_bounded_recovery_search_and_record_anchor_pin_locked(
+        int requested_frame,
+        int max_back_radius,
+        Cnr3CachePinList& pin_list,
+        Cnr3CacheRecoverySearchPlan& out_plan
+    );
 
     /*
         Lock-protected bounded checkpoint retention-boundary selection/detach

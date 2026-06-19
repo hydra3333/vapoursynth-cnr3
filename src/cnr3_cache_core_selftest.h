@@ -271,6 +271,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexcept;
 
 /*
+    Run the CMS07-H.2A AS1 recovery anchor pin-record selftest.
+
+    This composes the bounded recovery search with anchor pin-recording under one
+    cache-lock acquisition. It proves anchor-found pin recording, no-anchor and
+    requested-frame-only no-pin cases, and the ordered clear-refused-while-
+    pinned / discharge / clear-succeeds sequence. It does not call AS2, request
+    source frames, recompute, return frames, prune, wire getFrame, change D-SUM
+    gates, or touch pixel behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

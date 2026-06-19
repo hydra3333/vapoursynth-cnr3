@@ -729,6 +729,51 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
     );
 }
 
+Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_pin(
+    int requested_frame,
+    int max_back_radius,
+    Cnr3CachePinList& pin_list,
+    Cnr3CacheRecoverySearchPlan& out_plan
+) {
+    out_plan = Cnr3CacheRecoverySearchPlan{};
+
+    if (!cnr3_frame_number_is_valid(requested_frame)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (max_back_radius <= 0) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::size_t max_hole_count = static_cast<std::size_t>(max_back_radius);
+
+    if (max_hole_count > out_plan.hole_frame_numbers.max_size()) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    try {
+        out_plan.hole_frame_numbers.reserve(max_hole_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    const Cnr3Status reserve_status = pin_list.reserve_for_additional_pins(1U);
+
+    if (!cnr3_status_is_ok(reserve_status)) {
+        return reserve_status;
+    }
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return plan_bounded_recovery_search_and_record_anchor_pin_locked(
+        requested_frame,
+        max_back_radius,
+        pin_list,
+        out_plan
+    );
+}
+
 
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded(
     std::size_t retain_checkpoint_count,
@@ -2183,6 +2228,7 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
     Cnr3CacheRecoverySearchPlan& out_plan
 ) const {
     out_plan.hole_frame_numbers.clear();
+    out_plan.anchor_pin_recorded = false;
 
     if (!cnr3_frame_number_is_valid(requested_frame) || max_back_radius <= 0) {
         return Cnr3Status::invalid_argument;
@@ -2275,6 +2321,40 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
             return Cnr3Status::invariant_violation;
         }
     }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_pin_locked(
+    int requested_frame,
+    int max_back_radius,
+    Cnr3CachePinList& pin_list,
+    Cnr3CacheRecoverySearchPlan& out_plan
+) {
+    const Cnr3Status plan_status = plan_bounded_recovery_search_locked(
+        requested_frame,
+        max_back_radius,
+        out_plan
+    );
+
+    if (!cnr3_status_is_ok(plan_status)) {
+        return plan_status;
+    }
+
+    if (!out_plan.anchor_found) {
+        return Cnr3Status::ok;
+    }
+
+    const Cnr3Status record_status = lookup_frame_and_record_pin_locked(
+        out_plan.anchor_frame_number,
+        pin_list
+    );
+
+    if (!cnr3_status_is_ok(record_status)) {
+        return record_status;
+    }
+
+    out_plan.anchor_pin_recorded = true;
 
     return Cnr3Status::ok;
 }

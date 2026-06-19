@@ -2,8 +2,9 @@
 
 **Version:** v3.2.5 (RESUME-state work plan; focused status update. The version label is
 kept at the "3.2" generation to stay aligned with Document A v3.2; the `.5` patch level
-marks this update. Records P.1A (first pixel phase) as proven/committed on top of the C.14A
-cache-core milestone; sets P.2A as the next phase. See §8. Earlier sections carry forward
+marks this update. Records P.2A (response-table config surface) as proven/committed on top
+of P.1A and the C.14A cache-core milestone; sets P.3A (weighted blend) as the next phase,
+with the CNR2-source upload scheduled for P.3A. See §8. Earlier sections carry forward
 except the version pointers below.)  
 **Date:** 2026-06-19  
 **Role:** Current-state / work-plan document. It states the controlling authority, the
@@ -15,7 +16,37 @@ Spec v2.6 §3A + CMS07.3.
 **Precedence:** volatile. If this document ever conflicts with the latest prevailing CMS,
 the CMS wins. If it conflicts with Production Spec §3A on register-owned rules, §3A wins.
 
-**v3.2.5 status note (pixel arc underway — P.1A proven):** The controlling CMS is
+**v3.2.5 status note (pixel arc advancing — P.2A proven):** The controlling CMS is
+**CMS07.3**; the Production Spec is **v2.6**; the diagnostics spec is **v1.4.1**. On top of
+the C.14A cache-core milestone and P.1A, the second pixel phase **CMS07-P.2A**
+(response-table configuration surface) is now proven, committed, and pushed. **Selftest
+count is now 34/34** (forced-fail 33/34, exit 1; verbose 34/34). P.2A added an
+instance-agnostic response-table config surface (`Cnr3ResponseCurveKind{narrow,wide}`,
+`Cnr3ResponsePlaneConfig{threshold_8bit, strength_8bit, curve}`,
+`Cnr3ResponseTableConfig{sample_peak, y, u, v}`, `Cnr3ResponseTables{...}`) plus the helpers
+`cnr3_scale_8bit_parameter_to_sample_peak`, `cnr3_response_table_geometry_for_sample_peak`,
+and `build_cnr3_response_tables` (build-local-then-publish-on-full-success; no partial
+publish on invalid config). It did NOT resurrect Cnr3Data, parse VSMap or mode strings, or
+wire any VS/getFrame/cache code. **Two facts were verified against original source during
+P.2A review and are now load-bearing for the pixel arc:** (1) the 8-bit→native parameter
+scaling `(clamp(value,0,255) * sample_peak + 127) / 255` (int64-widened, round-to-nearest)
+is EXACTLY the prior-integration helper `scale_8bit_parameter_to_bit_depth()` in
+`superseded_by_v7/vapoursynth-Cnr3.cpp` — faithful salvage, not invented; (2) P.2A's
+table geometry (`table_offset = sample_peak`, `table_size = sample_peak*2+1`; 255/511 at
+8-bit) differs from the old source's (`sample_peak+1` / `offset*2+1`; 256/513) but was proven
+by full signed-difference sweep [-255,+255] to return IDENTICAL looked-up values — the old
+`+1`/`+2` merely left two never-read slots, so P.2A's geometry is equivalent and tighter and
+is the forward convention. The true upstream origin of the scaling (and the blend arithmetic)
+will be re-confirmed against the **CNR2 source at P.3A**. The **next phase is P.3A** (weighted
+blend), at which Dave uploads CNR2/vscnr2 so the designer can verify the blend line-by-line
+AND retro-confirm P.2A scaling/geometry/signedness against the true origin. The pixel-layer
+bit-depth/colour-space/luma facts confirmed from CNR2 source (this session) and the P.3A–P.5A/VS
+review checklist are now recorded in the **Designer/Reviewer Role Handover (v1.2)** §§ (see that
+document's pixel-arc reference and review-checklist sections). The body of this document (§§4–5,
+11) still describes the H.1A-era state; always confirm current build state from the repository
+(§3).
+
+**v3.2.4 status note (pixel arc underway — P.1A proven):** The controlling CMS is
 **CMS07.3**; the Production Spec is **v2.6**; the diagnostics spec is **v1.4.1**. The cache
 core was proven through **CMS07-C.14A** (the isolated cache-core milestone — see the v3.2.3
 note retained below), and the first downstream pixel phase **CMS07-P.1A**
@@ -410,20 +441,50 @@ PIXEL ARC STARTED — P.1A PROVEN (committed 2026-06-19):
     surface; Cnr3Data NOT resurrected), and touched no cache/VS/getFrame/diagnostics code. The
     test was added to the existing cnr3_cache_core_selftest runner (no new module yet — the
     baseline lacks .vcxproj, so new-module wiring could not be verified; revisit a separate
-    pixel selftest module at P.2A/P.3A when the suite grows).
+    pixel selftest module at P.3A when the suite grows).
+
+P.2A PROVEN (committed 2026-06-19):
+    CMS07-P.2A (response-table configuration surface) is committed and pushed; count 34/34
+    (forced-fail 33/34, exit 1; verbose 34/34). It added an instance-agnostic config surface
+    (Cnr3ResponseCurveKind{narrow,wide}; Cnr3ResponsePlaneConfig{threshold_8bit, strength_8bit,
+    curve}; Cnr3ResponseTableConfig{sample_peak, y, u, v}; Cnr3ResponseTables{...}) and helpers
+    cnr3_scale_8bit_parameter_to_sample_peak, cnr3_response_table_geometry_for_sample_peak, and
+    build_cnr3_response_tables. build_cnr3_response_tables builds into a local object and
+    publishes (via swap) only after Y, U and V all succeed — invalid config never partially
+    overwrites an existing valid table set (proven byte-for-byte). The per-plane Y/U/V decomposition
+    matches the authoritative old build_cnr3_lookup_tables exactly (mode[0/1/2]->Y/U/V curve;
+    n=threshold, m=strength). It did NOT resurrect Cnr3Data, parse VSMap or mode strings, or wire
+    any VS/getFrame/cache/diagnostics code. Two source-verified facts now load-bearing for the
+    pixel arc (see Role Handover v1.2 pixel-arc reference):
+      - 8-bit->native scaling = (clamp(value,0,255) * sample_peak + 127) / 255, int64-widened,
+        round-to-nearest. VERIFIED EXACT against scale_8bit_parameter_to_bit_depth() in
+        superseded_by_v7/vapoursynth-Cnr3.cpp (faithful salvage, not invented). True CNR2 origin
+        to be re-confirmed at P.3A.
+      - Geometry (offset=sample_peak, size=sample_peak*2+1; 255/511 at 8-bit) differs from the old
+        source (offset=sample_peak+1, size=offset*2+1; 256/513) but is PROVEN lookup-equivalent
+        across the full signed-difference range [-255,+255] (old +1/+2 left two never-read slots).
+        P.2A's tighter geometry is the forward convention; documented as deliberately divergent.
 
 NEXT — downstream of the now-proven cache core, continuing the pixel arc:
-    1. P.2A — pixel-configuration parameter surface for response tables (THE NEXT PHASE; not
-       yet proposed). This is likely where the deliberately-deferred config/parameter parsing
-       begins to be designed (the eventual home for what build_cnr3_lookup_tables used to do,
-       rebuilt cleanly — NOT by resurrecting Cnr3Data). Propose scope as text first, with the
-       proof approach and any salvage targets established before any patch.
-    2. Remaining pixel phases (P.3A weighted blend — builds on the P.1A tables; P.4A
-       downsampled-luma; P.5A explicit-previous-output frame-processing core; P.6A
-       scene-change / recursive-reset). Salvage per-case with approval from the high-value
-       inventoried files (see §8.5): the explicit-previous-output processing core, the memory
-       diagnostics. CNR2 / vscnr2 is pixel-maths reference ONLY (never its recovery/predecessor
-       logic — see R-ARCH-06).
+    1. P.3A — weighted blend (THE NEXT PHASE; not yet proposed). Builds on the P.1A/P.2A tables.
+       At P.3A, Dave UPLOADS CNR2/vscnr2 source so the designer can (a) verify the blend arithmetic
+       line-by-line against the true reference AND (b) retro-confirm P.2A's scaling/geometry/
+       signedness against the true origin. The blend is the load-bearing place for the
+       signed/unsigned + overflow concern: per CNR2 source the blend is
+       dst = (weight*prev + (shift - weight)*cur + shift1) >> shift2 with weight as int64_t,
+       shift2 = depth<<1 (2*depth), shift = 1LL << shift2 — native pixel depth, int64 ACCUMULATOR
+       (NOT pixel promote/demote); this is the "Fixed high bit depth chroma overflow" fix. See the
+       Role Handover v1.2 review checklist for exactly what to hunt (signed stays signed; int64
+       accumulator; shift2=2*depth and rounding shift1 match CNR2; no unsigned intermediate wrap;
+       table-index out-of-range at extreme pixels). Propose scope as text first, with CNR2 attached,
+       proof approach and salvage targets established, before any patch.
+    2. Remaining pixel phases (P.4A downsampled-luma — 2x2 box average of luma onto the chroma grid,
+       feeding the chroma blend decision, NOT a luma filter; P.5A explicit-previous-output
+       frame-processing core; P.6A scene-change / recursive-reset). Salvage per-case with approval
+       from the high-value inventoried files (see §8.5): the explicit-previous-output processing
+       core, the memory diagnostics. CNR2 / vscnr2 is pixel-maths reference ONLY (never its
+       recovery/predecessor logic — see R-ARCH-06; CNR2's last_frame!=n-1 -> use source[n-1] is the
+       very approximation CNR3's cache replaces with exact output[n-1] recovery).
     3. VapourSynth getFrame integration (arInitial/arAllFramesReady), source request/
        retrieve lifecycle, return-transfer. The Category-B developer-alert (CMS §9.6.4)
        belongs here, at integration/error-mapping time: it is the EMISSION half of what the
@@ -438,13 +499,14 @@ NEXT — downstream of the now-proven cache core, continuing the pixel arc:
     process, read-first review for load-bearing work, genuine-failure-mode tests, and
     explicit-known expected values all still apply, but the proof surface changes (pixel-
     correctness reference-vector proofs and VS-integration proofs rather than cache-core
-    selftests). P.1A demonstrated the pixel proof surface once (exact-integer reference vectors
-    cross-checked against the vscnr2 formula). PROCESS NOTE: P.1A went patch->four-way->commit
-    with the read-first review done POST-COMMIT (sound — it was low-risk pure maths with
-    pre-verified vectors); from VS.1A onward, and for anything touching cache-core/lifecycle,
-    read-first-BEFORE-apply is firm again (a post-hoc review can only catch, not prevent, a bad
-    apply to proven code). See the Designer/Reviewer Role Handover (v1.1) for the full review
-    discipline.
+    selftests). P.1A and P.2A demonstrated the pixel proof surface (exact-integer reference vectors
+    cross-checked against the vscnr2 formula and verified against original source). PROCESS NOTE:
+    P.1A went patch->four-way->commit with the read-first review done POST-COMMIT (sound — low-risk
+    pure maths with pre-verified vectors); P.2A was reviewed read-first-BEFORE-apply (config-surface
+    code building toward the pixel core). From P.3A onward, and for anything touching
+    cache-core/lifecycle, read-first-BEFORE-apply is firm (a post-hoc review can only catch, not
+    prevent, a bad apply to proven code). See the Designer/Reviewer Role Handover (v1.2) for the full
+    review discipline and the pixel-arc review checklist.
 ```
 
 ---

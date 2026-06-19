@@ -1,9 +1,10 @@
 # Document B — CNR3 Work Plan and Current Build State (CMS07.3, RESUME)
 
-**Version:** v3.3 (RESUME-state work plan; v3.3 is a focused status update over v3.2 —
-records H.2A and H.3A as proven/committed, the AS3/H.4A deferral decision, and the C.14A
-guardrail scope; see §8. Other sections carry forward from v3.2 except the version
-pointers below.)  
+**Version:** v3.2.2 (RESUME-state work plan; focused status update. The version label is
+kept at the "3.2" generation to stay aligned with Document A v3.2; the `.2` patch level
+marks this update. Records H.2A, H.3A, and C.13B as proven/committed; the AS3/H.4A
+deferral decision; and C.14A as the next phase, now building on the proven C.13B guard.
+See §8. Earlier sections carry forward except the version pointers below.)  
 **Date:** 2026-06-19  
 **Role:** Current-state / work-plan document. It states the controlling authority, the
 **current build state**, the working method that has emerged, the immediate next phase,
@@ -14,14 +15,16 @@ Spec v2.6 §3A + CMS07.3.
 **Precedence:** volatile. If this document ever conflicts with the latest prevailing CMS,
 the CMS wins. If it conflicts with Production Spec §3A on register-owned rules, §3A wins.
 
-**v3.3 status note (what changed since v3.2):** The controlling CMS is now **CMS07.3**
-(adds §9.6: current minimal recovery path, AS3 deferral, the two state categories, the
-developer-alert principle). The Production Spec is now **v2.6** and the diagnostics spec is
-now **v1.4** (both carry the same telemetry-vs-hard-error clarification). The cache core is
-proven through **CMS07-H.3A** (30/30 selftests), not H.1A as the body of this document
-(written at the H.2A-next moment) still describes in §§4–5, 11. For the authoritative
+**v3.2.2 status note (what changed since the v3.3-content predecessor):** The controlling
+CMS is **CMS07.3** (adds §9.6: current minimal recovery path, AS3 deferral, the two state
+categories, the developer-alert principle). The Production Spec is **v2.6**; the
+diagnostics spec is **v1.4.1** (adds §2.4 telemetry-vs-hard-error and §2.3.1 the
+R-PROCESS-19 pointer). The cache core is now proven through **CMS07-C.13B** (31/31
+selftests) — H.2A (anchor pin-record), H.3A (AS2 store-consumer), and C.13B (recovery-plan
+contiguity guard) are all committed and pushed. The body of this document (§§4–5, 11) was
+written at the H.2A-next moment and still describes the H.1A state; for the authoritative
 current build state always confirm from the repository (§3). The immediate next phase is
-now **C.14A** (the aggregate proof), NOT H.4A — see §8 for the AS3-deferral decision.
+**C.14A** (the aggregate capstone), which now builds on the proven C.13B guard — see §8.
 
 ---
 
@@ -316,14 +319,31 @@ These have been held at every atomic so far and must continue:
 
 ---
 
-## 8. Remaining work plan (after H.3A)
+## 8. Remaining work plan (after C.13B)
 
 ```text
-STATUS UPDATE (2026-06-19): H.2A (AS1 recovery anchor pin-record) and H.3A (AS2 recovery
-store-consumer) are both PROVEN, committed, and pushed. Selftest count is now 30/30. The
-G.12A usage note was made load-bearing at H.3A exactly as anticipated (every AS2 call
-records one pin to discharge, including the duplicate/adopt case where the incoming frame
-is rejected and the existing winner is pinned) and was proven there.
+STATUS UPDATE (2026-06-19): H.2A (AS1 recovery anchor pin-record), H.3A (AS2 recovery
+store-consumer), and C.13B (recovery-plan contiguity guard) are all PROVEN, committed, and
+pushed. Selftest count is now 31/31. The G.12A usage note was made load-bearing at H.3A
+exactly as anticipated (every AS2 call records one pin to discharge, including the
+duplicate/adopt case where the incoming frame is rejected and the existing winner is
+pinned) and was proven there.
+
+C.13B — recovery-plan contiguity guard — PROVEN (committed 2026-06-19):
+    A production hard-status guard enforcing the CMS §9.6 current-minimal-recovery contract
+    (nearest-anchor + contiguous holes). An internal validator
+    (cnr3_current_minimal_recovery_plan_status) is called at every success return of the
+    planner atomic plan_bounded_recovery_search_locked() (source guard, in-lock, pure
+    bounded arithmetic) AND at the start of store_recovery_plan_hole_owned_frame_and_record_pin()
+    before AS2 delegation (consumer guard, outside the lock). A non-contiguous /
+    AS3-positive / requested-as-hole / self-inconsistent plan returns invariant_violation.
+    This makes CMS §9.6's contiguity invariant self-enforcing: a future maintainer who
+    breaks contiguity (e.g. while implementing the deferred sparse-plan revision) trips the
+    guard rather than producing wrong output silently. The consumer guard also consolidated
+    the three former ad-hoc H.3A plan checks into the single authoritative validator, so the
+    planner and consumer now enforce the same contract via the same code. Detection only:
+    the cache core returns hard status and emits NO stderr; the developer-alert is future
+    integration work (CMS §9.6.4).
 
 H.4A / AS3 — DEFERRED (decision 2026-06-19, CMS §9.6):
     AS3 (reused-frame pin during ascending fill) is RESERVED but DEFERRED. Under the
@@ -337,26 +357,32 @@ H.4A / AS3 — DEFERRED (decision 2026-06-19, CMS §9.6):
     already handled correctly by AS2 first-in-best-dressed duplicate/adopt (proven H.3A);
     it is expected fmParallel-class concurrency, not an error. Current recovery correctness
     path = H.2A anchor pin-record + H.3A AS2 planned-hole store/adopt; requested frame N is
-    handled separately by later return/output authority.
+    handled separately by later return/output authority. NOTE: the C.13B guard is the
+    tripwire that will need revising/relaxing when the sparse-plan revision is undertaken.
 
 C.14A — aggregate cache-core proof (the milestone capstone, NEXT PHASE):
     Combined-workload proof across lookup/pin, AS2 store-record, prune execution,
     hot-zone movement, checkpoint monotonicity, D-SUM gates, and recovery
     planning/execution together. MUST include diagnostics enabled/disabled equivalence
-    wherever D-SUM compute gates are involved (the culmination R-PROCESS-19 builds toward).
-    C.14A ALSO proves the current-minimal-recovery structural guardrails (CMS §9.6):
-        - the recovery plan is nearest-anchor + contiguous-hole;
+    wherever D-SUM compute gates are involved (the culmination R-PROCESS-19 builds toward);
+    the macro-off aggregate run is required exit evidence, even though C.14A adds no new
+    D-SUM gate, because it is the first time the AGGREGATE workload exercises the existing
+    D-SUM-11 gates and proves their observe-only-ness under combined load.
+    C.14A now BUILDS ON the proven C.13B guard rather than introducing the guardrails: it
+    ASSERTS and EXERCISES the current-minimal-recovery structural guardrails (CMS §9.6),
+    which C.13B already enforces in production:
+        - the recovery plan is nearest-anchor + contiguous-hole (assert planner output);
         - requested_frame is never consumed as a hole;
         - every recovery AS2 consume is for a genuine planned hole;
         - planned-hole duplicate/adopt (Category A) is accepted and accounted, not failed;
         - an impossible non-contiguous / AS3-positive shape (Category B) is rejected by
-          hard status (invariant_violation / lifecycle_violation), not silently accepted.
+          hard status (the C.13B guard) — re-confirmed in aggregate, not re-implemented.
     These guardrails are status-return-based in the cache core (no printing). The
     user-visible developer-alert for Category-B states is FUTURE integration work (getFrame
     error-mapping), NOT part of C.14A; do not add production stderr emission or new D-SUM
-    counters in C.14A unless separately approved. If the guardrails turn out to need
-    substantial NEW structural checks (beyond asserting existing behaviour), raise whether
-    they warrant a small dedicated phase before C.14A rather than enlarging C.14A.
+    counters/gates in C.14A unless separately approved. Prefer a tightly-coupled sequence of
+    sub-scenarios within one selftest over a single monolithic scenario, so a failure stays
+    localisable.
 
 Then (downstream of a proven, complete cache core):
     - Pixel-layer salvage (V8.1): native-depth int64 accumulator, weighted blend,

@@ -1,14 +1,16 @@
 # CNR3 CMS — Future Investigations and Open Questions
 
-**Date:** 2026-06-17
+**Date:** 2026-06-19
 **Pairs with:** the CNR3 Cache Manager Design Specification (CMS) at the **identical
 version number**, which is carried in this document's filename
-(`CNR3_CMS_Future_Investigations_and_Open_Questions_v7.2.md` pairs with CMS07.2).
+(`CNR3_CMS_Future_Investigations_and_Open_Questions_v7.3.md` pairs with CMS07.3).
 This document carries **no internal version number** — its version is its filename,
 and that filename always matches the prevailing CMS version. The date above reflects
 this document's last **content** change (which may be older than the filename version,
 because this document re-versions in lockstep with the CMS even when its content is
-unchanged — see the maintenance rule below).
+unchanged — see the maintenance rule below). This v7.3 issue is both a lockstep
+re-version to pair with CMS07.3 AND a genuine content change (the new FI-02 entry below),
+so the date is updated.
 
 ---
 
@@ -62,6 +64,11 @@ section below. This index is kept current as items are added or resolved.
 FI-01  FORWARD_RADIUS tuning for higher thread counts — hot-zone forward window
        (=10) is sized for ~6 threads; likely needs raising (≈12) for higher
        parallelism. Efficiency-only; correctness is never affected. OPEN.
+FI-02  Sparse-plan / recompute-avoidance recovery (the deferred AS3 work) — the
+       current minimal recovery planner is nearest-anchor + contiguous-hole, so AS3
+       has no reachable trigger and is deferred (CMS §9.6). A future sparse planner
+       would give AS3 a job; the C.13B contiguity guard is the tripwire that must be
+       revised when this is undertaken. OPEN.
 ```
 
 ---
@@ -164,6 +171,73 @@ coherence comments (CR1–CR5, decay_margin bound) in the build-config header
 (`cnr3_build_config.h`, established in the G.1A constants phase) must be updated to match
 the new value. This is not a Production Spec §3A change (it is design, not process) and
 not a diagnostics-spec change.
+
+---
+
+### FI-02 — Sparse-plan / recompute-avoidance recovery (the deferred AS3 work)
+
+**Status:** OPEN — deferred. Reserved as future design work; not currently scheduled.
+
+**Trigger (when to assess this):** when recovery profiling under fmParallel shows that
+recompute of already-present intermediate frames is a measurable cost worth avoiding, OR
+when a future design need requires the recovery planner to represent present intermediate
+frames distinct from holes. Not before — there is no correctness driver, only a possible
+future efficiency one.
+
+**Background — why AS3 is deferred.** CMS07.3 §9.6 clarified that the current proven
+recovery planner is **nearest-present-start-point + contiguous-hole**: Phase-1 bounded
+search descends from `requested-1`, the first present cached output becomes the
+start/anchor, and the hole catalogue is contiguous from `anchor+1` through `requested-1`.
+Under that planner there are only two states for a frame between the anchor and the
+requested frame — it was present at plan time (so it *became* the anchor) or it was absent
+(so it is a planned hole consumed through AS2). There is **no reachable third category** of
+"present reused intermediate distinct from anchor and holes". The AS3 atomic (§8.7,
+"reused-frame pin during ascending fill") therefore has no reachable trigger in the current
+path and is **reserved but deferred**. The concurrent case people intuitively associate
+with AS3 — a planned hole that becomes present (via another activation) before this
+activation's AS2 store — is already handled correctly by AS2 first-in-best-dressed
+duplicate/adopt (proven at H.3A): it is expected fmParallel-class concurrency, not an
+error, and is correctness-complete without AS3.
+
+**What a future sparse-plan revision would entail (to scope when assessed).** Giving AS3 a
+real job requires the planner to be able to represent a non-contiguous plan — present
+intermediate frames interleaved with genuine holes — which is a planner *data-model and
+search* change, not just a new atomic. Likely pieces: a plan representation that catalogues
+present-reused intermediates separately from absent holes; a Phase-1 search that does not
+stop at the first present frame but continues cataloguing; AS3 itself (find-present →
+pin → record under one lock, reusing the proven lookup-pin-record primitive, taking a
+frame number with NO owned-frame parameter so it structurally cannot store/release); and a
+revision of the CMS §9.1/§9.2/§9.5 recovery model. This is a CMS revision with its own
+proposal, proof phases, and sign-off — materially larger than a single atomic.
+
+**Interaction with the C.13B contiguity guard (IMPORTANT for the future implementer).**
+Phase CMS07-C.13B added a production hard-status guard
+(`cnr3_current_minimal_recovery_plan_status`) that enforces the current contiguity
+contract: it is called at every success return of `plan_bounded_recovery_search_locked()`
+and at the start of `store_recovery_plan_hole_owned_frame_and_record_pin()`, and it returns
+`invariant_violation` for any non-contiguous / AS3-positive / requested-as-hole plan shape.
+This guard is deliberately the **tripwire** that protects the current invariant against a
+future maintainer who changes the planner without realising the downstream dependence on
+contiguity. **Therefore, whoever implements the sparse-plan revision MUST revise or relax
+the C.13B guard as an explicit, reviewed part of that work** — the guard will (correctly)
+reject the very non-contiguous plans the sparse revision intends to produce, so it cannot
+simply be left as-is. The guard firing is the signal that the contiguity assumption is
+being changed and that the dependent recovery consumers (the H.3A AS2 consumer, the anchor
+logic, and anything assuming contiguous holes) must be re-examined together. This is the
+guard doing its job: forcing the future change to be deliberate and complete rather than
+silent and partial.
+
+**Correctness note.** Like FI-01, this is not a correctness gap in the current design —
+the current minimal planner plus AS2 duplicate/adopt is correctness-complete for the
+reachable recovery cases. Sparse-plan / AS3 is a potential future *efficiency* refinement
+(avoid recompute when an intermediate is already present), gated on measured need.
+
+**Authority note.** The recovery planner model and the AS register are CMS-owned (§8.7,
+§9.x). A sparse-plan revision is therefore a CMS revision (new CMS version, diff-verified,
+with proof phases), accompanied by the corresponding C.13B-guard revision in the cache
+core. It is not a Production Spec §3A change and not, in itself, a diagnostics-spec change
+(though the deferred D-SUM-12/D-SUM-13 recovery/recompute telemetry — see diagnostics spec
+— would naturally be revisited at the same time).
 
 ---
 

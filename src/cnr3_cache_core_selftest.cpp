@@ -7,6 +7,7 @@
 #include "cnr3_response_tables.h"
 
 #include <cstdio>
+#include <limits>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -8439,6 +8440,329 @@ Cnr3Status cnr3_cache_core_selftest_response_table_vector_proof() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_response_table_config_surface_proof() noexcept {
+    /*
+        P.2A still hosts the pixel-number proof in the established runner so
+        the four-way count and forced-fail machinery remain unchanged. Reassess
+        a separate pixel selftest module at P.3A, when project-file wiring can
+        be reviewed deliberately.
+    */
+    constexpr int expected_peak_8bit = 255;
+    constexpr int expected_offset_8bit = 255;
+    constexpr int expected_size_8bit = 511;
+
+    constexpr int expected_peak_10bit = 1023;
+    constexpr int expected_offset_10bit = 1023;
+    constexpr int expected_size_10bit = 2047;
+
+    constexpr int expected_peak_16bit = 65535;
+    constexpr int expected_offset_16bit = 65535;
+    constexpr int expected_size_16bit = 131071;
+
+    constexpr int max_sample_peak_without_geometry_overflow =
+        (std::numeric_limits<int>::max() - 1) / 2;
+    constexpr int first_overflowing_sample_peak =
+        max_sample_peak_without_geometry_overflow + 1;
+
+    constexpr int expected_scale_10_to_16bit = 2570;
+    constexpr int expected_scale_20_to_16bit = 5140;
+    constexpr int expected_scale_200_to_16bit = 51400;
+    constexpr int expected_scale_128_to_10bit = 514;
+
+    constexpr int expected_p1_peak_strength_255 = 254;
+    constexpr int expected_p1_narrow_255_t10_d5 = 127;
+    constexpr int expected_p1_wide_255_t10_d5 = 216;
+    constexpr int expected_p1_wide_200_t20_d7 = 192;
+
+    constexpr int expected_y16_peak_strength = 65534;
+    constexpr int expected_y16_narrow_mid = 32767;
+    constexpr int expected_u16_peak_strength = 51400;
+    constexpr int expected_u16_wide_mid = 43872;
+
+    static_assert(expected_size_8bit == (expected_offset_8bit * 2) + 1);
+    static_assert(expected_size_10bit == (expected_offset_10bit * 2) + 1);
+    static_assert(expected_size_16bit == (expected_offset_16bit * 2) + 1);
+    static_assert(
+        (max_sample_peak_without_geometry_overflow * 2) + 1 ==
+        std::numeric_limits<int>::max()
+    );
+
+    static_assert(expected_scale_10_to_16bit == 2570);
+    static_assert(expected_scale_20_to_16bit == 5140);
+    static_assert(expected_scale_200_to_16bit == 51400);
+    static_assert(expected_scale_128_to_10bit == 514);
+
+    static_assert(expected_p1_peak_strength_255 == 254);
+    static_assert(expected_p1_narrow_255_t10_d5 == 127);
+    static_assert(expected_p1_wide_255_t10_d5 == 216);
+    static_assert(expected_p1_wide_200_t20_d7 == 192);
+
+    static_assert(expected_y16_peak_strength == 65534);
+    static_assert(expected_y16_narrow_mid == 32767);
+    static_assert(expected_u16_peak_strength == 51400);
+    static_assert(expected_u16_wide_mid == 43872);
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto expect_table_value = [](
+        const std::vector<int>& table,
+        int table_offset,
+        int signed_diff,
+        int expected_value
+    ) noexcept -> bool {
+        return get_cnr3_table_value_for_signed_diff(
+            table,
+            table_offset,
+            signed_diff
+        ) == expected_value;
+    };
+
+    {
+        int table_offset = 0;
+        int table_size = 0;
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                expected_peak_8bit,
+                table_offset,
+                table_size
+            ) != Cnr3Status::ok ||
+            table_offset != expected_offset_8bit ||
+            table_size != expected_size_8bit
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                expected_peak_10bit,
+                table_offset,
+                table_size
+            ) != Cnr3Status::ok ||
+            table_offset != expected_offset_10bit ||
+            table_size != expected_size_10bit
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                0,
+                table_offset,
+                table_size
+            ) != Cnr3Status::invalid_argument ||
+            table_offset != 0 ||
+            table_size != 0
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                -1,
+                table_offset,
+                table_size
+            ) != Cnr3Status::invalid_argument ||
+            table_offset != 0 ||
+            table_size != 0
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                max_sample_peak_without_geometry_overflow,
+                table_offset,
+                table_size
+            ) != Cnr3Status::ok ||
+            table_offset != max_sample_peak_without_geometry_overflow ||
+            table_size != std::numeric_limits<int>::max()
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                first_overflowing_sample_peak,
+                table_offset,
+                table_size
+            ) != Cnr3Status::invalid_argument ||
+            table_offset != 0 ||
+            table_size != 0
+            ) {
+            return fail();
+        }
+    }
+
+    if (
+        cnr3_scale_8bit_parameter_to_sample_peak(-5, expected_peak_8bit) != 0 ||
+        cnr3_scale_8bit_parameter_to_sample_peak(0, expected_peak_8bit) != 0 ||
+        cnr3_scale_8bit_parameter_to_sample_peak(10, expected_peak_8bit) != 10 ||
+        cnr3_scale_8bit_parameter_to_sample_peak(255, expected_peak_8bit) != 255 ||
+        cnr3_scale_8bit_parameter_to_sample_peak(300, expected_peak_8bit) != 255 ||
+        cnr3_scale_8bit_parameter_to_sample_peak(10, expected_peak_16bit) != expected_scale_10_to_16bit ||
+        cnr3_scale_8bit_parameter_to_sample_peak(20, expected_peak_16bit) != expected_scale_20_to_16bit ||
+        cnr3_scale_8bit_parameter_to_sample_peak(200, expected_peak_16bit) != expected_scale_200_to_16bit ||
+        cnr3_scale_8bit_parameter_to_sample_peak(255, expected_peak_16bit) != expected_peak_16bit ||
+        cnr3_scale_8bit_parameter_to_sample_peak(128, expected_peak_10bit) != expected_scale_128_to_10bit
+        ) {
+        return fail();
+    }
+
+    {
+        Cnr3ResponseTableConfig config{};
+        config.sample_peak = expected_peak_8bit;
+        config.y.threshold_8bit = 10;
+        config.y.strength_8bit = 255;
+        config.y.curve = Cnr3ResponseCurveKind::wide;
+        config.u.threshold_8bit = 10;
+        config.u.strength_8bit = 255;
+        config.u.curve = Cnr3ResponseCurveKind::narrow;
+        config.v.threshold_8bit = 20;
+        config.v.strength_8bit = 200;
+        config.v.curve = Cnr3ResponseCurveKind::wide;
+
+        Cnr3ResponseTables tables{};
+
+        if (build_cnr3_response_tables(config, tables) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (
+            tables.sample_peak != expected_peak_8bit ||
+            tables.table_offset != expected_offset_8bit ||
+            tables.table_size != expected_size_8bit ||
+            tables.y.size() != static_cast<std::size_t>(expected_size_8bit) ||
+            tables.u.size() != static_cast<std::size_t>(expected_size_8bit) ||
+            tables.v.size() != static_cast<std::size_t>(expected_size_8bit)
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(tables.y, tables.table_offset, 0, expected_p1_peak_strength_255) ||
+            !expect_table_value(tables.y, tables.table_offset, 5, expected_p1_wide_255_t10_d5) ||
+            !expect_table_value(tables.u, tables.table_offset, 0, expected_p1_peak_strength_255) ||
+            !expect_table_value(tables.u, tables.table_offset, 5, expected_p1_narrow_255_t10_d5) ||
+            !expect_table_value(tables.v, tables.table_offset, 0, 200) ||
+            !expect_table_value(tables.v, tables.table_offset, 7, expected_p1_wide_200_t20_d7)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3ResponseTableConfig config{};
+        config.sample_peak = expected_peak_16bit;
+        config.y.threshold_8bit = 10;
+        config.y.strength_8bit = 255;
+        config.y.curve = Cnr3ResponseCurveKind::narrow;
+        config.u.threshold_8bit = 20;
+        config.u.strength_8bit = 200;
+        config.u.curve = Cnr3ResponseCurveKind::wide;
+        config.v.threshold_8bit = 0;
+        config.v.strength_8bit = 300;
+        config.v.curve = Cnr3ResponseCurveKind::narrow;
+
+        Cnr3ResponseTables tables{};
+
+        if (build_cnr3_response_tables(config, tables) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (
+            tables.sample_peak != expected_peak_16bit ||
+            tables.table_offset != expected_offset_16bit ||
+            tables.table_size != expected_size_16bit ||
+            tables.y.size() != static_cast<std::size_t>(expected_size_16bit) ||
+            tables.u.size() != static_cast<std::size_t>(expected_size_16bit) ||
+            tables.v.size() != static_cast<std::size_t>(expected_size_16bit)
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(tables.y, tables.table_offset, 0, expected_y16_peak_strength) ||
+            !expect_table_value(tables.y, tables.table_offset, 1285, expected_y16_narrow_mid) ||
+            !expect_table_value(tables.y, tables.table_offset, 2570, 0) ||
+            !expect_table_value(tables.u, tables.table_offset, 0, expected_u16_peak_strength) ||
+            !expect_table_value(tables.u, tables.table_offset, 2570, expected_u16_wide_mid) ||
+            !expect_table_value(tables.u, tables.table_offset, 5140, 0) ||
+            !expect_table_value(tables.v, tables.table_offset, 0, expected_peak_16bit) ||
+            !expect_table_value(tables.v, tables.table_offset, 1, 0)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3ResponseTables tables{};
+        tables.sample_peak = expected_peak_8bit;
+        tables.table_offset = expected_offset_8bit;
+        tables.table_size = expected_size_8bit;
+        tables.y = { 1 };
+        tables.u = { 2 };
+        tables.v = { 3 };
+
+        Cnr3ResponseTableConfig invalid_config{};
+        invalid_config.sample_peak = -1;
+
+        if (
+            build_cnr3_response_tables(invalid_config, tables) !=
+            Cnr3Status::invalid_argument
+            ) {
+            return fail();
+        }
+
+        if (
+            tables.sample_peak != expected_peak_8bit ||
+            tables.table_offset != expected_offset_8bit ||
+            tables.table_size != expected_size_8bit ||
+            tables.y.size() != 1U ||
+            tables.u.size() != 1U ||
+            tables.v.size() != 1U ||
+            tables.y[0] != 1 ||
+            tables.u[0] != 2 ||
+            tables.v[0] != 3
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "P.2A response-table config surface proof scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    geometry proof maps sample_peak to signed table offset and size"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    scaling proof codifies round-to-nearest 8-bit-domain native scaling"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    8-bit Y/U/V build proves per-plane narrow/wide configs do not cross"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    16-bit build proves scaled thresholds/strengths and native table geometry"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    Y table is a luma-difference response for chroma blend, not a luma filter"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    subsampling traversal, downSampleLuma, and int64 blend are deferred to P.3A/P.4A/P.5A"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    invalid config proof preserves prior output tables without partial publish"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    reassess separate pixel selftest module at P.3A with project wiring review"
+    );
+
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -8555,6 +8879,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "response_table_vector_proof",
             cnr3_cache_core_selftest_response_table_vector_proof
+        },
+        {
+            "response_table_config_surface_proof",
+            cnr3_cache_core_selftest_response_table_config_surface_proof
         },
         {
             "lookup_addref_hit_and_miss",

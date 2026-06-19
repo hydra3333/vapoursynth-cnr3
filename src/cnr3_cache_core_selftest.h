@@ -318,6 +318,19 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_response_table_vector_proof() noexcept;
 
 /*
+    Run the CMS07-P.2A response-table configuration surface proof.
+
+    This is the second pixel-number proof after the C.14A cache-core milestone.
+    It temporarily uses the existing selftest runner so the four-way harness,
+    count discipline, and forced-fail machinery remain unchanged. It proves
+    explicit Y/U/V response-table configuration and native-bit-depth scaling.
+    The Y table is a luma-difference response for the later chroma blend, not
+    a luma filter. Native subsampling traversal, downSampleLuma, and the int64
+    blend remain deliberately deferred to P.3A/P.4A/P.5A.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_response_table_config_surface_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

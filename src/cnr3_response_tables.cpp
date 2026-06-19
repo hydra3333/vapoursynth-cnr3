@@ -2,6 +2,8 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
+#include <limits>
 #include <new>
 
 int get_cnr3_table_value_for_signed_diff(
@@ -91,6 +93,137 @@ Cnr3Status build_cnr3_weight_table(
 
         table[static_cast<std::size_t>(index)] = value;
     }
+
+    return Cnr3Status::ok;
+}
+
+int cnr3_scale_8bit_parameter_to_sample_peak(
+    int value_8bit,
+    int sample_peak
+) noexcept {
+    if (sample_peak <= 0) {
+        return 0;
+    }
+
+    const int clamped_value_8bit = cnr3_clamp_int(value_8bit, 0, 255);
+
+    /*
+        CMS07.3 V8.1 requires native-bit-depth pixel computation. The exact
+        8-bit-parameter to native-peak scaling rule is codified here for the
+        active pixel layer: round-to-nearest from the historical 8-bit domain.
+        This preserves the prior integration helper's formula while making the
+        P.2A response-table surface the forward authority for later pixel phases.
+    */
+    return static_cast<int>(
+        (
+            static_cast<std::int64_t>(clamped_value_8bit) *
+            static_cast<std::int64_t>(sample_peak) +
+            127
+        ) / 255
+    );
+}
+
+Cnr3Status cnr3_response_table_geometry_for_sample_peak(
+    int sample_peak,
+    int& table_offset,
+    int& table_size
+) noexcept {
+    table_offset = 0;
+    table_size = 0;
+
+    constexpr int max_sample_peak_without_table_size_overflow =
+        (std::numeric_limits<int>::max() - 1) / 2;
+
+    if (
+        sample_peak <= 0 ||
+        sample_peak > max_sample_peak_without_table_size_overflow
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    table_offset = sample_peak;
+    table_size = (sample_peak * 2) + 1;
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status build_cnr3_response_tables(
+    const Cnr3ResponseTableConfig& config,
+    Cnr3ResponseTables& tables
+) noexcept {
+    int table_offset = 0;
+    int table_size = 0;
+
+    const Cnr3Status geometry_status =
+        cnr3_response_table_geometry_for_sample_peak(
+            config.sample_peak,
+            table_offset,
+            table_size
+        );
+
+    if (geometry_status != Cnr3Status::ok) {
+        return geometry_status;
+    }
+
+    const auto build_plane = [
+        table_offset,
+        table_size,
+        sample_peak = config.sample_peak
+    ](
+        const Cnr3ResponsePlaneConfig& plane_config,
+        std::vector<int>& table
+    ) noexcept -> Cnr3Status {
+        const int threshold = cnr3_scale_8bit_parameter_to_sample_peak(
+            plane_config.threshold_8bit,
+            sample_peak
+        );
+        const int strength = cnr3_scale_8bit_parameter_to_sample_peak(
+            plane_config.strength_8bit,
+            sample_peak
+        );
+        const bool wide_response =
+            plane_config.curve == Cnr3ResponseCurveKind::wide;
+
+        return build_cnr3_weight_table(
+            table,
+            table_offset,
+            table_size,
+            sample_peak,
+            threshold,
+            strength,
+            wide_response
+        );
+    };
+
+    Cnr3ResponseTables next{};
+    next.sample_peak = config.sample_peak;
+    next.table_offset = table_offset;
+    next.table_size = table_size;
+
+    Cnr3Status status = build_plane(config.y, next.y);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = build_plane(config.u, next.u);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = build_plane(config.v, next.v);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    tables.sample_peak = next.sample_peak;
+    tables.table_offset = next.table_offset;
+    tables.table_size = next.table_size;
+    tables.y.swap(next.y);
+    tables.u.swap(next.u);
+    tables.v.swap(next.v);
 
     return Cnr3Status::ok;
 }

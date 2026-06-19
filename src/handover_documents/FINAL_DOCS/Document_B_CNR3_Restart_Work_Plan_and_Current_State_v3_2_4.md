@@ -1,30 +1,40 @@
 # Document B — CNR3 Work Plan and Current Build State (CMS07.3, RESUME)
 
-**Version:** v3.2.2 (RESUME-state work plan; focused status update. The version label is
-kept at the "3.2" generation to stay aligned with Document A v3.2; the `.2` patch level
-marks this update. Records H.2A, H.3A, and C.13B as proven/committed; the AS3/H.4A
-deferral decision; and C.14A as the next phase, now building on the proven C.13B guard.
-See §8. Earlier sections carry forward except the version pointers below.)  
+**Version:** v3.2.4 (RESUME-state work plan; focused status/update patch over v3.2.3.
+The version label remains in the "3.2" generation to stay aligned with Document A v3.2;
+the `.4` patch level marks this update. This version keeps the C.14A milestone status,
+removes the most misleading stale H.1A/H.2A body references, and makes the downstream
+pixel/integration arc the explicit current work direction.)  
 **Date:** 2026-06-19  
 **Role:** Current-state / work-plan document. It states the controlling authority, the
-**current build state**, the working method that has emerged, the immediate next phase,
-the proof obligations, and what must not be implemented yet.
+**current build state**, the working method, the immediate next phase, the proof
+obligations, and what must not be implemented yet.
 
 **Generation source:** repository git history (authoritative build state) + Production
-Spec v2.6 §3A + CMS07.3.  
+Spec v2.6 §3A + CMS07.3 + diagnostics specification v1.4.1.  
 **Precedence:** volatile. If this document ever conflicts with the latest prevailing CMS,
 the CMS wins. If it conflicts with Production Spec §3A on register-owned rules, §3A wins.
 
-**v3.2.2 status note (what changed since the v3.3-content predecessor):** The controlling
-CMS is **CMS07.3** (adds §9.6: current minimal recovery path, AS3 deferral, the two state
-categories, the developer-alert principle). The Production Spec is **v2.6**; the
-diagnostics spec is **v1.4.1** (adds §2.4 telemetry-vs-hard-error and §2.3.1 the
-R-PROCESS-19 pointer). The cache core is now proven through **CMS07-C.13B** (31/31
-selftests) — H.2A (anchor pin-record), H.3A (AS2 store-consumer), and C.13B (recovery-plan
-contiguity guard) are all committed and pushed. The body of this document (§§4–5, 11) was
-written at the H.2A-next moment and still describes the H.1A state; for the authoritative
-current build state always confirm from the repository (§3). The immediate next phase is
-**C.14A** (the aggregate capstone), which now builds on the proven C.13B guard — see §8.
+**v3.2.4 status note (MILESTONE — the isolated cache-core proving arc is complete):** The
+controlling CMS is **CMS07.3**; the Production Spec is **v2.6**; the diagnostics spec is
+**v1.4.1**. The cache core is proven through **CMS07-C.14A** (32/32 selftests), the
+aggregate capstone — H.2A (anchor pin-record), H.3A (AS2 store-consumer), C.13B (recovery
+contiguity guard), and C.14A (aggregate workload + R-PROCESS-19 observe-only equivalence)
+are all committed and pushed. **C.14A completes the isolated cache-core milestone:** all
+cache-core mechanisms (lookup/pin, AS2 store/adopt incl. duplicate/adopt, checkpoint
+monotonicity, hot-zone movement, prune trigger/select/AS5 execution, the full recovery
+chain, pin-list discharge accounting) are proven to compose correctly under one combined
+workload, and the D-SUM-11 compute gate is proven observe-only in aggregate (macro-on and
+macro-off behavioural outcomes identical). The project now pivots from the isolated
+cache-core arc to the downstream arc — pixel-layer salvage, then VapourSynth getFrame
+integration, then VS2026 project wiring — see §8.
+
+**v3.2.4 cleanup note:** v3.2.3 already carried the correct milestone status in the front
+matter and §8, but several earlier sections still contained carried-forward H.1A/H.2A-era
+working text. This version updates the most operationally important sections (§0–§5,
+§10–§11) so a future coder is less likely to follow stale "H.2A next" instructions. If any
+older wording remains elsewhere, the front matter, §3, §8, and the repository remain the
+authoritative current-state checks.
 
 ---
 
@@ -32,33 +42,39 @@ current build state always confirm from the repository (§3). The immediate next
 
 The earlier Document B (v3.1) described starting the cache-core build from scratch (rename
 files to `.txt`, build the first milestone, etc.). **That is no longer the situation and
-that framing is obsolete.** The CNR3 cache-core build is well advanced: it has been built
-incrementally and proven phase-by-phase, and is currently proven through phase
-**CMS07-H.1A**, with **28 of 28 isolated cache-core selftests passing**.
+that framing is obsolete.** The CMS07 isolated cache-core build is now complete through
+**CMS07-C.14A**, with **32 of 32 isolated cache-core selftests passing** in the normal
+configuration and the forced-failure harness expected to report **31/32 PASS, 1 FAIL**.
 
 A coder chat reading this pack is **resuming an in-progress, proven build**. Do not
 re-propose the file layout, do not rename files, do not rebuild already-proven phases, and
-do not treat the "first milestone" as the current task. The current task is the **next
-phase** (see §5). Confirm the build state for yourself from the repository before
-proposing anything (see §3).
+do not treat the cache-core milestone as still pending. The current task is the **next arc**:
+pixel-layer salvage, then VapourSynth getFrame integration, then VS2026 project wiring (see
+§8). Confirm the build state from the repository before proposing or coding anything (see
+§3).
 
 ---
 
 ## 1. Controlling authority
 
-- The latest prevailing CMS is **CMS07.2** (`cnr3_cache_manager_design_v7_2.md`), the
-  controlling design authority. It supersedes CMS07.1 and CMS07.0.
+- The latest prevailing CMS is **CMS07.3** (`cnr3_cache_manager_design_v7_3.md`), the
+  controlling design authority. It supersedes CMS07.2, CMS07.1, CMS07.0, and all earlier
+  CMS06.x / CMS0x cache designs.
   - CMS07.1 added §6.6 (checkpoint flag is **monotonic** under duplicate stores: a
     checkpoint-eligible duplicate may **promote** an existing non-checkpoint slot; a
     non-checkpoint duplicate never **demotes** a checkpoint; first-in-best-dressed governs
     the frame *data*).
-  - CMS07.2 added a non-normative **companion document** reference
-    (`CNR3_CMS_Future_Investigations_and_Open_Questions_v7.2.md`), which is NOT part of the
-    coder handover pack and NOT controlling. Ignore it for implementation; it records
-    deferred tuning questions only.
+  - CMS07.2 added the non-normative companion-document reference. The companion document is
+    NOT part of the coder handover pack and NOT controlling; it records deferred tuning
+    questions only.
+  - CMS07.3 added §9.6 and the AS3 register status note: current minimal recovery is
+    nearest-present start point + contiguous holes; AS3/H.4A is deferred; expected
+    planned-hole duplicate/adopt is handled by AS2; impossible non-contiguous / AS3-positive
+    plan shapes are hard-status failures, with user-visible developer-alert emission
+    deferred to later getFrame integration.
 - References to "CMS07.0" anywhere (including reproduced rule text in Document A) mean the
-  latest prevailing CMS, currently CMS07.2, per the CMS's own version-neutrality rule.
-  Specific CMS section pointers are version-specific and must be re-checked against CMS07.2.
+  latest prevailing CMS, currently CMS07.3, per the CMS's version-neutrality rule. Specific
+  CMS section pointers are version-specific and must be re-checked against CMS07.3.
 - If the CMS conflicts with, or is unclear in alignment with, prior material, the CMS wins
   unless the user explicitly says otherwise.
 - If the CMS itself is silent, ambiguous, or incomplete on an implementation point, **stop
@@ -69,63 +85,71 @@ proposing anything (see §3).
 ## 2. Handover-pack state
 
 ```text
-Controlling design:   CMS07.2 (cnr3_cache_manager_design_v7_2.md), included unchanged.
-CMS companion:        CNR3_CMS_Future_Investigations_and_Open_Questions_v7.2.md
+Controlling design:   CMS07.3 (cnr3_cache_manager_design_v7_3.md).
+CMS companion:        CNR3_CMS_Future_Investigations_and_Open_Questions_v7.3.md
                       (NON-NORMATIVE, NOT in this pack as authority; reference only).
-Production Spec:      v2.4 (CNR3_Handover_Pack_Production_Spec_v2_4.md), §3A populated,
-                      includes R-PROCESS-19.
-Diagnostics spec:     v1.3 (cnr3_diagnostics_specification_v1_3.md), subordinate to the
-                      CMS and §3A.
-Document A:           v3.2, reproduces §3.2 canonical context and the §3A register
-                      (including R-PROCESS-19).
-Document B:           this v3.2 resume-state work plan.
-Coder introduction:   the v3.2 resume introduction.
-Code state:           CMS07 cache-core built and proven through CMS07-H.1A (28/28
+Production Spec:      v2.6, §3A register populated; includes R-PROCESS-19 and PDAP.
+Diagnostics spec:     v1.4.1, subordinate to the CMS and §3A; distinguishes D-SUM
+                      telemetry from future hard developer-alert internal-error emission.
+Document A:           v3.2, reproduces canonical context and the §3A register.
+Document B:           this v3.2.4 resume-state work plan.
+Coder introduction:   v3.2 resume introduction.
+Code state:           CMS07 isolated cache core proven through CMS07-C.14A (32/32
                       selftests). Source is in active .h/.cpp build under vs/cnr3.
 ```
 
 ---
 
-## 3. FIRST ACTION in the new coder chat — confirm the build state from the repository
+## 3. FIRST ACTION in a resumed coder chat — confirm the build state from the repository
 
 Before proposing or coding anything, the coder must re-establish the build state from the
 authoritative source (the repository), not from this document's say-so. This restores the
-project's standing "prove it, do not assert it" discipline from the first action:
+project's standing "prove it, do not assert it" discipline from the first action.
+
+For the post-C.14A downstream arc, the expected repository state is:
 
 ```text
-1. Read the recent git log (e.g. last ~25 commits). Confirm the latest commit is the
-   CMS07-H.1A bounded recovery search scaffold, and that the F-series and G-series
-   phases listed in section 4 are present.
+1. Read the recent git log (e.g. last ~25 commits). Confirm the latest code milestone is
+   CMS07-C.14A aggregate cache-core proof, and that H.2A, H.3A, C.13B, and C.14A are
+   present in the committed history.
 
 2. Read src/cnr3_build_config.h and confirm the edit-version marker reads:
-       CMS07-H.1A-as1-bounded-recovery-search-scaffold-proof
+       CMS07-C.14A-aggregate-cache-core-proof
 
-   (How this works: cnr3_build_config.h holds an inline constexpr string
-   CNR3_EDIT_VERSION that is bumped to the current phase name at each phase. The
-   selftest runner prints it as "edit_version: ..." on every run, so the console
-   output always identifies which build/phase produced it. It is for human
-   diagnostics and build identification ONLY and must never be used for control
-   flow. Bumping it is part of each phase's edit.)
+   The CNR3_EDIT_VERSION marker is for human diagnostics and build identification only.
+   It must never be used for control flow.
 
 3. Build and run the isolated cache-core selftest (Debug and Release) and confirm:
-       normal:       28/28 PASS, exit 0
-       forced-fail:  27/28 PASS, 1 FAIL, exit 1   (--force-fail-for-harness-proof)
-       verbose:      28/28 PASS, exit 0           (--verbose)
+       normal:       32/32 PASS, exit 0
+       forced-fail:  31/32 PASS, 1 FAIL, exit 1   (--force-fail-for-harness-proof)
+       verbose:      32/32 PASS, exit 0           (--verbose)
+
+4. If D-SUM-11 observe-only equivalence is being re-verified, comment out only:
+       #define CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE 1
+   rebuild Release|x64, and confirm the same non-D-SUM results:
+       normal:       32/32 PASS, exit 0
+       forced-fail:  31/32 PASS, 1 FAIL, exit 1
+       verbose:      32/32 PASS, exit 0
+   Then restore the macro line before any commit.
+```
 
 If any of these do not match, STOP and report the discrepancy to the user before doing
 anything else.
-```
 
 The repository is: `https://github.com/hydra3333/vapoursynth-cnr3` (local working tree
 under `E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github`). Builds are done in
 **Visual Studio 2026**, x64.
 
+At this C.14A checkpoint, a source-baseline re-sync is recommended before the next arc:
+upload or otherwise compare the current committed active `src/` baseline so the coder's
+working copy is anchored to the committed milestone before pixel-layer salvage begins.
+
 ---
 
 ## 4. Current build state — phases proven (history of record)
 
-The cache core was built incrementally, each phase proven in isolation before the next, in
-this order (this is the committed history; treat it as done and proven, not to be redone):
+The cache core was built incrementally, each phase proven in isolation before the next, and
+then proven together at C.14A. Treat this history as done and proven, not to be redone.
 
 ```text
 Foundations and data model:
@@ -178,59 +202,83 @@ Hot-zone model and prune assembly:
 Store-and-record atomic (AS2):
     G.12A        AS2 combined store_owned_frame_and_record_pin() — store OR adopt
                  first-in-best-dressed winner + monotonic checkpoint promotion + pin +
-                 pin-list record, all under one lock; loser freed OUTSIDE the lock (held
-                 in the by-value public parameter so it releases after the nested lock
-                 scope — this is commented in the code and must not be "simplified").
-                 NOTE: every AS2 call records one pin to discharge, INCLUDING a
-                 duplicate-store call that rejects the incoming frame and pins the
-                 existing winner.
+                 pin-list record, all under one lock; loser freed OUTSIDE the lock.
+                 Every AS2 call records one pin to discharge, INCLUDING a duplicate-store
+                 call that rejects the incoming frame and pins the existing winner.
 
-Recovery planning (AS1, read-only):
-    H.1A         bounded recovery search scaffold (CURRENT LATEST). Read-only planning:
-                 descend from requested_frame - 1, inclusive lower bound
-                 requested_frame - B clamped to 0 (B = HOT_ZONE_BACK_RADIUS = 50),
-                 nearest present cached output wins (checkpoint flag irrelevant to the
-                 search), hole catalogue = anchor+1 .. requested-1, requested frame is
-                 the repair TARGET and is NOT a hole-catalogue entry. No pins, no AS2,
-                 no source, no recompute.
+Recovery planning and recovery store-consumer path:
+    H.1A         bounded recovery search scaffold: descend from requested_frame - 1,
+                 inclusive lower bound requested_frame - B clamped to 0 (B =
+                 HOT_ZONE_BACK_RADIUS = 50), nearest present cached output wins
+                 (checkpoint flag irrelevant), hole catalogue = anchor+1 .. requested-1,
+                 requested frame is the repair TARGET and is NOT a hole.
+    H.2A         AS1 recovery anchor pin-record: bounded search + selected-anchor pin +
+                 pin-list record under one cache lock; no-anchor and requested-only cases
+                 record no pin; discharge returns pin counts to zero.
+    H.3A         AS2 recovery planned-hole store-consumer: recovery holes are consumed
+                 through store_owned_frame_and_record_pin(); duplicate/adopt during
+                 recovery pins the existing winner and records one pin to discharge.
+    C.13B        recovery-plan contiguity guard: current minimal recovery plan is
+                 self-enforced as nearest-anchor + contiguous holes; malformed
+                 non-contiguous / AS3-positive / requested-as-hole plans return hard
+                 invariant_violation before AS2 delegation.
+    C.14A        aggregate cache-core proof: one combined workload across AS2 store/adopt,
+                 checkpoint monotonicity, hot-zone/prune/AS5, recovery planning/anchor
+                 pin/AS2 hole-fill, and C.13B guard exercise. D-SUM-11 compute gate
+                 proven observe-only under aggregate macro-on/macro-off runs.
 ```
 
-Current selftest count: **28**. Edit marker: `CMS07-H.1A-as1-bounded-recovery-search-scaffold-proof`.
+Current selftest count: **32**. Edit marker: `CMS07-C.14A-aggregate-cache-core-proof`.
 
 ---
 
-## 5. Immediate next phase — CMS07-H.2A (to be regenerated)
+## 5. Immediate next phase — downstream arc begins with pixel-layer salvage proposal
 
-The next phase is **CMS07-H.2A — AS1 recovery anchor pin-record proof.** It extends H.1A
-just far enough to hold the selected recovery anchor safe.
+The isolated cache-core proving milestone is complete. The immediate next work is not
+another cache-core proof; it is the first downstream pixel-layer salvage phase, proposed as
+text first and approved before any patch.
+
+Recommended first phase for proposal:
 
 ```text
-H.2A purpose:
-    Compose the H.1A bounded recovery planner with the existing D.3A-style
-    lookup-pin-record primitive, so the selected anchor is pinned and recorded under one
-    cache lock.
-
-H.2A must apply the same lessons proven at D.3A and G.12A:
-    - reserve the hole-catalogue capacity AND one pin-list entry BEFORE the lock;
-    - bounded recovery search + anchor pin + pin-list record occur under ONE lock;
-    - no split public pin path (no bare public pin/record that could be used separately);
-    - no-anchor case records no pin; requested-frame-only case records no pin;
-    - pinned anchor prevents clear() until the pin is discharged;
-    - discharge returns cache total_pin_count and pin-list count to zero;
-    - cache invariants remain clean.
-
-H.2A explicitly does NOT:
-    - call AS2; store through recovery; recompute; request or retrieve source frames;
-      return frames; prune; change any D-SUM gate; wire getFrame; touch source lifecycle
-      or pixel behaviour.
-
-H.2A does NOT trigger R-PROCESS-19 (it introduces/changes no D-SUM compute gate).
+CMS07-P.1A — response-table salvage and vector proof
 ```
 
-**IMPORTANT:** an earlier H.2A patch was drafted by the previous coder chat but was
-**never reviewed and never applied, and has been discarded.** Do not look for or rely on
-it. Regenerate H.2A fresh from CMS07.2 and the H.1A code, as a read-first patch (the user
-reviews the patch before applying), consistent with how D.3A and G.12A were handled.
+Purpose:
+    Salvage/adapt the vscnr2-style signed-difference response-table construction as the
+    first small pixel-maths phase. This is the most self-contained salvage target: table
+    construction only, with no frame traversal, no blending, no cache, no predecessor
+    handling, and no VapourSynth getFrame integration.
+
+Likely active/superseded files to inspect before proposal:
+
+```text
+Active baseline:
+    src/cnr3_response_tables.cpp/.h
+    src/cnr3_frame_processing.cpp/.h       (context only for P.1A; do not expand scope)
+    src/cnr3_common.h                      (only if required for small utilities/types)
+
+Superseded salvage reference:
+    src/superseded_by_v7/cnr3_response_tables.cpp.txt
+    src/superseded_by_v7/cnr3_response_tables.h.txt
+    src/superseded_by_v7/cnr3_frame_internal_processing.cpp.txt  (context for later)
+    src/superseded_by_v7/cnr3_frame_internal_processing.h.txt    (context for later)
+    src/superseded_by_v7/cnr3_common.h.txt                       (selective utilities only)
+```
+
+Proof approach changes in this arc:
+    Cache-core phases proved behavioural invariants. Pixel phases must prove numerical
+    correctness: known inputs -> known output reference vectors. For CNR2/vscnr2-compatible
+    pixel maths, reference values must be cross-checked against the salvaged/CNR2 maths and
+    asserted explicitly. A proof must have genuine failure modes: a wrong curve, wrong mode
+    character, wrong strength scaling, wrong sign/offset, or wrong bit-depth scaling must
+    produce a different detectable number.
+
+Salvage governance now active:
+    Per-case approval is required before copying/adapting old `.txt` code. CNR2/vscnr2 is a
+    pixel-maths reference only. Do NOT carry CNR2 predecessor/recovery logic into CMS07. The
+    explicit-previous-output pixel boundary from `cnr3_frame_internal_processing` is valuable
+    for later phases; the sibling CNR2-style fallback predecessor logic is not.
 
 ---
 
@@ -319,7 +367,7 @@ These have been held at every atomic so far and must continue:
 
 ---
 
-## 8. Remaining work plan (after C.13B)
+## 8. Remaining work plan (after C.14A — cache-core milestone reached)
 
 ```text
 STATUS UPDATE (2026-06-19): H.2A (AS1 recovery anchor pin-record), H.3A (AS2 recovery
@@ -360,39 +408,45 @@ H.4A / AS3 — DEFERRED (decision 2026-06-19, CMS §9.6):
     handled separately by later return/output authority. NOTE: the C.13B guard is the
     tripwire that will need revising/relaxing when the sparse-plan revision is undertaken.
 
-C.14A — aggregate cache-core proof (the milestone capstone, NEXT PHASE):
-    Combined-workload proof across lookup/pin, AS2 store-record, prune execution,
-    hot-zone movement, checkpoint monotonicity, D-SUM gates, and recovery
-    planning/execution together. MUST include diagnostics enabled/disabled equivalence
-    wherever D-SUM compute gates are involved (the culmination R-PROCESS-19 builds toward);
-    the macro-off aggregate run is required exit evidence, even though C.14A adds no new
-    D-SUM gate, because it is the first time the AGGREGATE workload exercises the existing
-    D-SUM-11 gates and proves their observe-only-ness under combined load.
-    C.14A now BUILDS ON the proven C.13B guard rather than introducing the guardrails: it
-    ASSERTS and EXERCISES the current-minimal-recovery structural guardrails (CMS §9.6),
-    which C.13B already enforces in production:
-        - the recovery plan is nearest-anchor + contiguous-hole (assert planner output);
-        - requested_frame is never consumed as a hole;
-        - every recovery AS2 consume is for a genuine planned hole;
-        - planned-hole duplicate/adopt (Category A) is accepted and accounted, not failed;
-        - an impossible non-contiguous / AS3-positive shape (Category B) is rejected by
-          hard status (the C.13B guard) — re-confirmed in aggregate, not re-implemented.
-    These guardrails are status-return-based in the cache core (no printing). The
-    user-visible developer-alert for Category-B states is FUTURE integration work (getFrame
-    error-mapping), NOT part of C.14A; do not add production stderr emission or new D-SUM
-    counters/gates in C.14A unless separately approved. Prefer a tightly-coupled sequence of
-    sub-scenarios within one selftest over a single monolithic scenario, so a failure stays
-    localisable.
+C.14A — aggregate cache-core proof — PROVEN (committed 2026-06-19): THE CACHE-CORE MILESTONE.
+    Combined-workload proof across lookup/pin, AS2 store/adopt (incl. duplicate/adopt),
+    checkpoint monotonicity, hot-zone movement, prune trigger/select/AS5 execution, and the
+    full recovery chain (bounded planning, anchor pin-record, AS2 planned-hole fill),
+    composed in ONE selftest (aggregate_cache_core_workload) with four labelled
+    sub-scenarios. Count 31 -> 32. It BUILT ON the proven C.13B guard — exercising it
+    (rejecting a hand-constructed corrupt plan), not re-implementing it.
+    R-PROCESS-19 AGGREGATE OBSERVE-ONLY PROOF DONE: the same aggregate selftest was run with
+    CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE defined AND manually commented out; both produced
+    identical non-D-SUM behaviour (Release normal 32/32 exit 0, forced-fail 31/32 exit 1,
+    verbose 32/32 exit 0), proving the D-SUM-11 compute gate is observe-only under combined
+    load. The behavioural assertions never read D-SUM counters. This is the culmination the
+    compute-gate discipline (G.6A, G.13A, every D-SUM touch) was built toward.
+    *** With C.14A, the isolated cache-core proving arc is COMPLETE. All cache-core
+    mechanisms are proven to compose correctly, and diagnostics are proven observe-only in
+    aggregate. The project now pivots to the downstream arc below. ***
 
-Then (downstream of a proven, complete cache core):
-    - Pixel-layer salvage (V8.1): native-depth int64 accumulator, weighted blend,
-      response tables, downsampled-luma, in-compute scene-change detection. CNR2 / vscnr2
-      is pixel-maths reference ONLY (never its recovery/predecessor logic — see R-ARCH-06).
-    - VapourSynth getFrame integration (arInitial/arAllFramesReady), source request/
-      retrieve lifecycle, return-transfer. The Category-B developer-alert (CMS §9.6.4)
-      belongs here, at integration/error-mapping time: clean filter failure plus a bounded
-      one-shot stderr alert outside locks; expected Category-A duplicate/adopt stays silent.
-    - Visual Studio 2026 project wiring for the full plugin build.
+NEXT — downstream of the now-proven, complete cache core (the new arc):
+    1. Pixel-layer salvage (V8.1): native-depth int64 accumulator, weighted blend,
+       response tables, downsampled-luma, in-compute scene-change detection. Salvage from
+       the high-value inventoried files (see §8.5): the explicit-previous-output processing
+       core, the vscnr2 response tables, the memory diagnostics — study/adapt per-case with
+       approval. CNR2 / vscnr2 is pixel-maths reference ONLY (never its recovery/predecessor
+       logic — see R-ARCH-06). This is the likely next phase; propose scope as text first.
+    2. VapourSynth getFrame integration (arInitial/arAllFramesReady), source request/
+       retrieve lifecycle, return-transfer. The Category-B developer-alert (CMS §9.6.4)
+       belongs here, at integration/error-mapping time: it is the EMISSION half of what the
+       C.13B guard DETECTS — map the hard status to clean filter failure plus a bounded
+       one-shot stderr developer-alert outside locks; expected Category-A duplicate/adopt
+       stays silent. The VS-LIFECYCLE-01 rule (source frames retrieved in arAllFramesReady
+       must have been requested in arInitial of the same activation) becomes binding here.
+    3. Visual Studio 2026 project wiring for the full plugin build.
+
+    NOTE on the arc shift: phases 1-3 leave the isolated cache-core selftest harness and
+    move into pixel maths and live VapourSynth interaction. The PDAP delivery process,
+    read-first review for load-bearing work, genuine-failure-mode tests, and explicit-known
+    expected values all still apply, but the proof surface changes (pixel-correctness proofs
+    and VS-integration proofs rather than cache-core selftests). Expect to discuss the new
+    proof approach when the pixel/integration phases are proposed.
 ```
 
 ---
@@ -495,24 +549,26 @@ QUARANTINE — do NOT open for ideas, do NOT salvage logic (history only):
 - No old cache concepts: deferred pinning, held-ref predecessor reservation,
   checkpoint-as-pin, zone-as-findability-guarantee, bounded-warmup conservative source
   window. (See the retired-fact entries R-RETIRED-01..07 in Document A / §3A.)
-- No getFrame / VapourSynth wiring until the cache core is proven complete (through the
-  C.14A aggregate proof). H.2A/H.3A are recovery PLANNING and store-consumer proofs in
-  isolation, still no getFrame.
+- No getFrame / VapourSynth wiring during pixel-maths salvage phases. getFrame integration
+  is a later explicit phase after the relevant pixel layer has a reviewed/proven boundary;
+  when it arrives, it must follow CMS07 AS1-AS7, VS-LIFECYCLE-01, return-transfer, and
+  hard-status/error-mapping rules.
 - No old-.txt-code salvage copied into new files without explicit per-case approval.
 - No CNR2 recovery/predecessor logic, ever.
 - No file renaming, file creation beyond the agreed phase, salvage copy, getFrame
   integration, or mutex/lock-scope change without explicit user discussion, agreement,
   and instruction.
-- Do not re-open the diagnostics-spec v1.4 pointer or the memory-diagnostics fold during
+- Do not re-open the diagnostics-spec v1.4.1 pointer or the memory-diagnostics fold during
   a coding phase; those are separate deferred documentation tasks.
 ```
 
 ---
 
-## 10. Proof obligations carried toward the milestone
+## 10. Proof obligations carried beyond the cache-core milestone
 
-The original ownership/eviction proof obligations remain the bar, now proven
-incrementally and to be confirmed together at C.14A:
+The original ownership/eviction proof obligations are now proven incrementally and together
+at C.14A. They remain standing regression obligations as the project moves into pixel and
+VapourSynth integration:
 
 ```text
 - pin/unpin balance = 0
@@ -524,9 +580,22 @@ incrementally and to be confirmed together at C.14A:
 - checkpoint flag is monotonic under duplicate stores (promote allowed, never demote)
 - recovery search is bounded (never walks below the recovery window) and selects the
   nearest present output regardless of checkpoint flag
+- recovery plan remains nearest-anchor + contiguous-hole until a future sparse-plan CMS
+  revision deliberately changes that contract
 - shutdown clear() releases everything, with a warning on any non-zero pin
 - diagnostics are observe-only: a compute-macro-disabled build preserves all non-D-SUM
   behaviour (R-PROCESS-19)
+```
+
+For the downstream arc, new proof obligations are added rather than replacing these:
+
+```text
+- pixel maths must be proven by known-input -> known-output reference vectors;
+- salvage must be per-case approved before copy/adapt;
+- CNR2/vscnr2 recovery/predecessor logic must not be carried over;
+- VapourSynth source frames retrieved in arAllFramesReady must have been requested in
+  arInitial of the same activation;
+- final return-transfer and error-mapping must preserve cache ownership balances.
 ```
 
 ---
@@ -534,15 +603,17 @@ incrementally and to be confirmed together at C.14A:
 ## 11. Current status summary
 
 ```text
-Design authority:   CMS07.2 (cnr3_cache_manager_design_v7_2.md).
-Production Spec:    v2.4 (§3A populated; includes R-PROCESS-19).
-Diagnostics spec:   v1.3 (subordinate).
-Code state:         CMS07 cache core proven through CMS07-H.1A; 28/28 selftests.
-                    Edit marker CMS07-H.1A-as1-bounded-recovery-search-scaffold-proof.
-Immediate task:     Confirm build state from the repo (section 3), then regenerate and
-                    review CMS07-H.2A (recovery anchor pin-record) as a read-first patch.
-Discarded:          The previous chat's unreviewed H.2A patch (do not use).
-After that:         H.3A (recovery AS2 store-consumer), then C.14A aggregate proof, then
-                    pixel salvage, then VapourSynth integration, then VS2026 project.
-Pixel layer:        Deferred to salvage; CNR2 is pixel-maths reference only.
+Design authority:   CMS07.3 (cnr3_cache_manager_design_v7_3.md).
+Production Spec:    v2.6 (§3A register populated; includes R-PROCESS-19 and PDAP).
+Diagnostics spec:   v1.4.1 (subordinate; D-SUM telemetry vs hard developer-alert clarified).
+Code state:         CMS07 isolated cache core proven through CMS07-C.14A; 32/32 selftests.
+                    Edit marker CMS07-C.14A-aggregate-cache-core-proof.
+Milestone:          Isolated cache-core proving arc COMPLETE.
+Immediate task:     Re-sync current committed src/ baseline, confirm C.14A marker, then
+                    propose the first pixel-layer salvage phase as text.
+Recommended first:  CMS07-P.1A response-table salvage and vector proof, subject to review.
+After that:         Explicit-previous-output frame processing / weighted blend proof,
+                    then VapourSynth getFrame integration, then VS2026 project wiring.
+Pixel layer:        CNR2/vscnr2 is pixel-maths reference only. Never carry CNR2
+                    recovery/predecessor logic into CMS07.
 ```

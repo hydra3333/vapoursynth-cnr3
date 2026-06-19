@@ -1,0 +1,537 @@
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 147164e..ad1a8a1 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -22,7 +22,7 @@
+     This string is for human diagnostics and build identification only. It must
+     not be used for control flow.
+ */
+-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-H.1A-as1-bounded-recovery-search-scaffold-proof";
++inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-H.2A-as1-recovery-anchor-pin-record-proof";
+ 
+ /*
+     Temporary proof scaffold convention.
+diff --git a/src/cnr3_cache_core.cpp b/src/cnr3_cache_core.cpp
+index 6700531..a1be40a 100644
+--- a/src/cnr3_cache_core.cpp
++++ b/src/cnr3_cache_core.cpp
+@@ -730,6 +730,52 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
+ }
+ 
+ 
++Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_pin(
++    int requested_frame,
++    int max_back_radius,
++    Cnr3CachePinList& pin_list,
++    Cnr3CacheRecoveryAnchorPinRecordPlan& out_plan
++) {
++    out_plan = Cnr3CacheRecoveryAnchorPinRecordPlan{};
++
++    if (!cnr3_frame_number_is_valid(requested_frame)) {
++        return Cnr3Status::invalid_argument;
++    }
++
++    if (max_back_radius <= 0) {
++        return Cnr3Status::invalid_argument;
++    }
++
++    const std::size_t max_hole_count = static_cast<std::size_t>(max_back_radius);
++
++    if (max_hole_count > out_plan.search_plan.hole_frame_numbers.max_size()) {
++        return Cnr3Status::capacity_exceeded;
++    }
++
++    try {
++        out_plan.search_plan.hole_frame_numbers.reserve(max_hole_count);
++    }
++    catch (const std::bad_alloc&) {
++        return Cnr3Status::allocation_failed;
++    }
++
++    const Cnr3Status reserve_status = pin_list.reserve_for_additional_pins(1U);
++
++    if (!cnr3_status_is_ok(reserve_status)) {
++        return reserve_status;
++    }
++
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    return plan_bounded_recovery_search_and_record_anchor_pin_locked(
++        requested_frame,
++        max_back_radius,
++        pin_list,
++        out_plan
++    );
++}
++
++
+ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded(
+     std::size_t retain_checkpoint_count,
+     std::size_t max_remove_count,
+@@ -2280,6 +2326,64 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+ }
+ 
+ 
++Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_pin_locked(
++    int requested_frame,
++    int max_back_radius,
++    Cnr3CachePinList& pin_list,
++    Cnr3CacheRecoveryAnchorPinRecordPlan& out_plan
++) {
++    out_plan.anchor_pin_recorded = false;
++    out_plan.pinned_anchor_frame_number = CNR3_INVALID_FRAME_NUMBER;
++
++    const Cnr3Status plan_status = plan_bounded_recovery_search_locked(
++        requested_frame,
++        max_back_radius,
++        out_plan.search_plan
++    );
++
++    if (!cnr3_status_is_ok(plan_status)) {
++        return plan_status;
++    }
++
++    if (!out_plan.search_plan.anchor_found) {
++        return Cnr3Status::ok;
++    }
++
++    Cnr3CacheSlotPinToken pin_token{};
++
++    const Cnr3Status pin_status = pin_frame_locked(
++        out_plan.search_plan.anchor_frame_number,
++        pin_token
++    );
++
++    if (!cnr3_status_is_ok(pin_status)) {
++        return pin_status;
++    }
++
++    const Cnr3Status record_status =
++        pin_list.record_pin_without_allocation(pin_token);
++
++    if (!cnr3_status_is_ok(record_status)) {
++        const Cnr3Status unpin_status = unpin_frame_locked(pin_token);
++
++        if (!cnr3_status_is_ok(unpin_status)) {
++            return unpin_status;
++        }
++
++        return record_status;
++    }
++
++    out_plan.anchor_pin_recorded = true;
++    out_plan.pinned_anchor_frame_number = out_plan.search_plan.anchor_frame_number;
++
++    if (!cache_state_invariants_hold_locked()) {
++        return Cnr3Status::invariant_violation;
++    }
++
++    return Cnr3Status::ok;
++}
++
++
+ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_bounded_locked(
+     std::size_t retain_checkpoint_count,
+     std::size_t max_remove_count,
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 7f8b536..1401195 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -457,6 +457,25 @@ struct Cnr3CacheRecoverySearchPlan {
+     std::vector<int> hole_frame_numbers{};
+ };
+ 
++/*
++    Recovery anchor pin-record plan.
++
++    CMS07-H.2A extends the H.1A read-only search scaffold only far enough to
++    pin and record the selected anchor. The public helper pre-reserves both the
++    hole catalogue and one pin-list entry before acquiring cache_mutex_, then
++    performs bounded search, anchor pin, and pin-list record under one lock.
++
++    If no anchor is found, no pin is recorded. If an anchor is found, every
++    successful H.2A call records exactly one pin for the caller to discharge.
++    This plan does not store, request source frames, recompute, return frames,
++    prune, or touch pixel behaviour.
++*/
++struct Cnr3CacheRecoveryAnchorPinRecordPlan {
++    Cnr3CacheRecoverySearchPlan search_plan{};
++    bool anchor_pin_recorded = false;
++    int pinned_anchor_frame_number = CNR3_INVALID_FRAME_NUMBER;
++};
++
+ /*
+     Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
+     trigger decision from a frame byte size and a current slot count.
+@@ -834,6 +853,27 @@ public:
+         Cnr3CacheRecoverySearchPlan& out_plan
+     ) const;
+ 
++    /*
++        Lock-owning AS1 recovery anchor search/pin-record operation.
++
++        This is the CMS07-H.2A primitive for holding a recovery anchor safe after
++        the H.1A bounded search chooses it. The helper reserves hole-catalogue
++        and pin-list capacity before acquiring cache_mutex_, then under one
++        cache-lock acquisition it plans the bounded recovery search, pins the
++        selected anchor if one exists, and records that pin without allocation.
++
++        A successful call with no anchor records no pin. A successful call with
++        an anchor records exactly one pin to be discharged by the caller. This
++        operation does not addFrameRef(), freeFrame(), store frames, recover
++        holes, request source frames, or touch pixel behaviour.
++    */
++    [[nodiscard]] Cnr3Status plan_bounded_recovery_search_and_record_anchor_pin(
++        int requested_frame,
++        int max_back_radius,
++        Cnr3CachePinList& pin_list,
++        Cnr3CacheRecoveryAnchorPinRecordPlan& out_plan
++    );
++
+     /*
+         Lock-owning bounded checkpoint retention-boundary selection/detach
+         operation.
+@@ -1196,6 +1236,20 @@ private:
+         Cnr3CacheRecoverySearchPlan& out_plan
+     ) const;
+ 
++    /*
++        Lock-protected AS1 recovery anchor search/pin-record helper.
++
++        Caller must hold cache_mutex_ and must pre-reserve both the search
++        plan's hole_frame_numbers storage and one pin-list entry. This helper
++        must not allocate or acquire cache_mutex_ itself.
++    */
++    [[nodiscard]] Cnr3Status plan_bounded_recovery_search_and_record_anchor_pin_locked(
++        int requested_frame,
++        int max_back_radius,
++        Cnr3CachePinList& pin_list,
++        Cnr3CacheRecoveryAnchorPinRecordPlan& out_plan
++    );
++
+     /*
+         Lock-protected bounded checkpoint retention-boundary selection/detach
+         helper.
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index 00ddf6f..4f18e27 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -6598,6 +6598,284 @@ Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexc
+     return Cnr3Status::ok;
+ }
+ 
++
++Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept {
++    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
++    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
++
++    constexpr int requested_frame = 100;
++    constexpr int recovery_back_radius = CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS;
++
++    int frame_storage[220] = {};
++
++    for (int index = 0; index < static_cast<int>(sizeof(frame_storage) / sizeof(frame_storage[0])); ++index) {
++        frame_storage[index] = 4000 + index;
++    }
++
++    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++
++    const auto store_frame = [
++        &vsapi,
++        &frame_storage
++    ](
++        Cnr3OutputCacheCore& cache,
++        int frame_number,
++        bool is_checkpoint
++    ) noexcept -> Cnr3Status {
++        Cnr3OwnedFrameRef owned_frame{};
++
++        const VSFrame* frame =
++            reinterpret_cast<const VSFrame*>(&frame_storage[frame_number]);
++
++        const Cnr3Status adopt_status =
++            owned_frame.reset_to_owned_frame(frame, &vsapi);
++
++        if (!cnr3_status_is_ok(adopt_status)) {
++            return adopt_status;
++        }
++
++        const Cnr3Status store_status =
++            is_checkpoint
++            ? cache.store_checkpoint_owned_frame(frame_number, std::move(owned_frame))
++            : cache.store_noncheckpoint_owned_frame(frame_number, std::move(owned_frame));
++
++        if (!cnr3_status_is_ok(store_status)) {
++            return store_status;
++        }
++
++        if (owned_frame.has_frame()) {
++            return Cnr3Status::ownership_violation;
++        }
++
++        return Cnr3Status::ok;
++    };
++
++    const auto run_anchor_pin = [](
++        Cnr3OutputCacheCore& cache,
++        int request,
++        Cnr3CachePinList& pin_list,
++        Cnr3CacheRecoveryAnchorPinRecordPlan& plan
++    ) noexcept -> Cnr3Status {
++        return cache.plan_bounded_recovery_search_and_record_anchor_pin(
++            request,
++            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
++            pin_list,
++            plan
++        );
++    };
++
++    {
++        Cnr3OutputCacheCore cache{};
++        Cnr3CachePinList pin_list{};
++        Cnr3CacheRecoveryAnchorPinRecordPlan plan{};
++
++        if (store_frame(cache, 90, false) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (run_anchor_pin(cache, requested_frame, pin_list, plan) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (!plan.search_plan.anchor_found || plan.search_plan.anchor_frame_number != 90) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (!plan.anchor_pin_recorded || plan.pinned_anchor_frame_number != 90) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (cache.clear() != Cnr3Status::lifecycle_violation) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (vsapi_state.free_frame_count != 0) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.pin_count() != 0U || cache.total_pin_count() != 0) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (cache.clear() != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++    }
++
++    {
++        Cnr3OutputCacheCore cache{};
++        Cnr3CachePinList pin_list{};
++        Cnr3CacheRecoveryAnchorPinRecordPlan plan{};
++
++        if (store_frame(cache, requested_frame, false) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (run_anchor_pin(cache, requested_frame, pin_list, plan) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (plan.search_plan.anchor_found || plan.anchor_pin_recorded) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (cnr3_frame_number_is_valid(plan.pinned_anchor_frame_number)) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.pin_count() != 0U || cache.total_pin_count() != 0) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (cache.clear() != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++    }
++
++    {
++        Cnr3OutputCacheCore cache{};
++        Cnr3CachePinList pin_list{};
++        Cnr3CacheRecoveryAnchorPinRecordPlan plan{};
++
++        if (store_frame(cache, requested_frame - recovery_back_radius, true) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (run_anchor_pin(cache, requested_frame, pin_list, plan) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (
++            !plan.search_plan.anchor_found ||
++            plan.search_plan.anchor_frame_number != requested_frame - recovery_back_radius ||
++            !plan.search_plan.anchor_is_checkpoint
++            ) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (
++            !plan.anchor_pin_recorded ||
++            plan.pinned_anchor_frame_number != requested_frame - recovery_back_radius
++            ) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (cache.clear() != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++    }
++
++    {
++        Cnr3OutputCacheCore cache{};
++        Cnr3CachePinList pin_list{};
++        Cnr3CacheRecoveryAnchorPinRecordPlan plan{};
++
++        if (store_frame(cache, 90, false) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (store_frame(cache, 95, true) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (run_anchor_pin(cache, requested_frame, pin_list, plan) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (!plan.search_plan.anchor_found || plan.search_plan.anchor_frame_number != 95) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (!plan.search_plan.anchor_is_checkpoint) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (!plan.anchor_pin_recorded || plan.pinned_anchor_frame_number != 95) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (cache.clear() != Cnr3Status::ok) {
++            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++            return Cnr3Status::invariant_violation;
++        }
++    }
++
++    cnr3_cache_core_selftest_trace_line(
++        "H.2A AS1 recovery anchor pin-record scenario"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    bounded search and anchor pin-record run under one cache lock"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    pin-list and hole-catalogue capacity are reserved before locking"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    no-anchor and requested-frame-only cases record no pin"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    lower-bound anchor and nearest checkpoint anchor are pinned and discharged"
++    );
++
++    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++
++    return Cnr3Status::ok;
++}
++
+ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
+ 
+@@ -6695,6 +6973,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+             "as1_bounded_recovery_search_scaffold",
+             cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold
+         },
++        {
++            "as1_recovery_anchor_pin_record",
++            cnr3_cache_core_selftest_as1_recovery_anchor_pin_record
++        },
+         {
+             "lookup_addref_hit_and_miss",
+             cnr3_cache_core_selftest_lookup_addref_hit_and_miss
+diff --git a/src/cnr3_cache_core_selftest.h b/src/cnr3_cache_core_selftest.h
+index fb146bf..5f4f3e5 100644
+--- a/src/cnr3_cache_core_selftest.h
++++ b/src/cnr3_cache_core_selftest.h
+@@ -270,6 +270,18 @@
+ */
+ [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexcept;
+ 
++/*
++    Run the CMS07-H.2A AS1 recovery anchor pin-record selftest.
++
++    This proves that the H.1A selected recovery anchor can be pinned and
++    recorded under the same cache lock after pre-reserving pin-list and hole
++    catalogue capacity. It verifies no-anchor/no-pin behaviour, requested-frame
++    exclusion from anchor pinning, anchor-pin discharge, and cache invariant
++    cleanliness. It does not call AS2, recover holes, request source frames,
++    return frames, or touch pixel behaviour.
++*/
++[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept;
++
+ /*
+     Run the CMS07-C.5A lookup/addref selftest.
+ 

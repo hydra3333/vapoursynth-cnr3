@@ -283,6 +283,20 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept;
 
 /*
+    Run the CMS07-H.3A AS2 recovery store-consumer selftest.
+
+    This verifies that genuine holes from a bounded recovery plan are consumed
+    through the existing AS2 store/adopt/pin-record helper, and that every AS2
+    call contributes one recorded pin to the per-invocation pin-list. The proof
+    includes the duplicate/adopt case: a racing winner remains first-in-best-
+    dressed, the incoming loser is released once, and the existing winner is
+    pinned and recorded for later discharge. It does not introduce AS3 reused-
+    frame pinning, source lifecycle handling, getFrame wiring, pixel behaviour,
+    prune changes, or D-SUM diagnostics.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as2_recovery_store_consumer() noexcept;
+
+/*
     Run the CMS07-C.5A lookup/addref selftest.
 
     This uses a synthetic VSAPI addFrameRef/freeFrame stub pair and fake opaque

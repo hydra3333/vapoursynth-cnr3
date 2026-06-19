@@ -405,6 +405,59 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin(
     return status;
 }
 
+Cnr3Status Cnr3OutputCacheCore::store_recovery_plan_hole_owned_frame_and_record_pin(
+    const Cnr3CacheRecoverySearchPlan& recovery_plan,
+    int hole_frame_number,
+    Cnr3OwnedFrameRef frame,
+    bool is_checkpoint,
+    Cnr3CachePinList& pin_list,
+    Cnr3CacheAs2StoreRecordSummary& out_summary
+) {
+    out_summary = Cnr3CacheAs2StoreRecordSummary{};
+
+    if (!cnr3_frame_number_is_valid(hole_frame_number)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!frame.has_frame()) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!cnr3_frame_number_is_valid(recovery_plan.requested_frame)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (!recovery_plan.requested_frame_is_repair_target) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (recovery_plan.requested_frame_is_in_hole_catalogue) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    if (hole_frame_number == recovery_plan.requested_frame) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const auto hole_it = std::find(
+        recovery_plan.hole_frame_numbers.begin(),
+        recovery_plan.hole_frame_numbers.end(),
+        hole_frame_number
+    );
+
+    if (hole_it == recovery_plan.hole_frame_numbers.end()) {
+        return Cnr3Status::not_found;
+    }
+
+    return store_owned_frame_and_record_pin(
+        hole_frame_number,
+        std::move(frame),
+        is_checkpoint,
+        pin_list,
+        out_summary
+    );
+}
+
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame(
     int frame_number
 ) {

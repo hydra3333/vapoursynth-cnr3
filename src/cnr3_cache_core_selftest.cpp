@@ -11,14 +11,20 @@
 
 namespace {
 
+    constexpr int CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT = 8;
+
     struct Cnr3CacheCoreSelftestVsApiState {
         int add_frame_ref_count = 0;
         int free_frame_count = 0;
         const VSFrame* last_add_ref_frame = nullptr;
         const VSFrame* last_freed_frame = nullptr;
 
-        const VSFrame* tracked_release_frames[4] = {};
-        int tracked_release_counts[4] = {};
+        const VSFrame* tracked_release_frames[
+            CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT
+        ] = {};
+        int tracked_release_counts[
+            CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT
+        ] = {};
     };
 
     /*
@@ -47,7 +53,7 @@ namespace {
             ++g_cnr3_cache_core_selftest_vsapi_state->free_frame_count;
             g_cnr3_cache_core_selftest_vsapi_state->last_freed_frame = frame;
 
-            for (int tracked_index = 0; tracked_index < 4; ++tracked_index) {
+            for (int tracked_index = 0; tracked_index < CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT; ++tracked_index) {
                 if (
                     g_cnr3_cache_core_selftest_vsapi_state->
                     tracked_release_frames[tracked_index] != nullptr &&
@@ -6841,6 +6847,378 @@ Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_as2_recovery_store_consumer() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    constexpr int anchor_frame_number = 10;
+    constexpr int first_hole_frame_number = 11;
+    constexpr int duplicate_hole_frame_number = 12;
+    constexpr int requested_frame = 13;
+    constexpr int recovery_back_radius = CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS;
+
+    constexpr std::size_t expected_anchor_pin_count = 1U;
+    constexpr std::size_t expected_first_hole_as2_pin_count = 1U;
+    constexpr std::size_t expected_duplicate_hole_as2_pin_count = 1U;
+    constexpr std::size_t expected_final_pin_list_count =
+        expected_anchor_pin_count +
+        expected_first_hole_as2_pin_count +
+        expected_duplicate_hole_as2_pin_count;
+
+    static_assert(expected_final_pin_list_count == 3U);
+
+    int anchor_frame_storage = 5100;
+    int first_hole_frame_storage = 5110;
+    int duplicate_winner_frame_storage = 5120;
+    int duplicate_loser_frame_storage = 5121;
+    int requested_reject_frame_storage = 5130;
+
+    const VSFrame* anchor_frame =
+        reinterpret_cast<const VSFrame*>(&anchor_frame_storage);
+    const VSFrame* first_hole_frame =
+        reinterpret_cast<const VSFrame*>(&first_hole_frame_storage);
+    const VSFrame* duplicate_winner_frame =
+        reinterpret_cast<const VSFrame*>(&duplicate_winner_frame_storage);
+    const VSFrame* duplicate_loser_frame =
+        reinterpret_cast<const VSFrame*>(&duplicate_loser_frame_storage);
+    const VSFrame* requested_reject_frame =
+        reinterpret_cast<const VSFrame*>(&requested_reject_frame_storage);
+
+    vsapi_state.tracked_release_frames[0] = anchor_frame;
+    vsapi_state.tracked_release_frames[1] = first_hole_frame;
+    vsapi_state.tracked_release_frames[2] = duplicate_winner_frame;
+    vsapi_state.tracked_release_frames[3] = duplicate_loser_frame;
+    vsapi_state.tracked_release_frames[4] = requested_reject_frame;
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+    Cnr3OutputCacheCore cache{};
+    Cnr3CachePinList pin_list{};
+    Cnr3CacheRecoverySearchPlan plan{};
+    Cnr3CacheAs2StoreRecordSummary summary{};
+
+    const auto make_owned_frame = [
+        &vsapi
+    ](
+        const VSFrame* frame,
+        Cnr3OwnedFrameRef& owned_frame
+    ) noexcept -> Cnr3Status {
+        return owned_frame.reset_to_owned_frame(frame, &vsapi);
+    };
+
+    Cnr3OwnedFrameRef anchor_owned{};
+
+    if (make_owned_frame(anchor_frame, anchor_owned) != Cnr3Status::ok) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.store_noncheckpoint_owned_frame(
+            anchor_frame_number,
+            std::move(anchor_owned)
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (anchor_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.plan_bounded_recovery_search_and_record_anchor_pin(
+            requested_frame,
+            recovery_back_radius,
+            pin_list,
+            plan
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    const std::vector<int> expected_holes = {
+        first_hole_frame_number,
+        duplicate_hole_frame_number
+    };
+
+    if (
+        !plan.anchor_found ||
+        plan.anchor_frame_number != anchor_frame_number ||
+        !plan.anchor_pin_recorded ||
+        !plan.requested_frame_is_repair_target ||
+        plan.requested_frame_is_in_hole_catalogue ||
+        plan.hole_frame_numbers != expected_holes
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        pin_list.pin_count() != expected_anchor_pin_count ||
+        cache.total_pin_count() != static_cast<int>(expected_anchor_pin_count)
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3OwnedFrameRef requested_reject_owned{};
+
+    if (
+        make_owned_frame(requested_reject_frame, requested_reject_owned) !=
+        Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.store_recovery_plan_hole_owned_frame_and_record_pin(
+            plan,
+            requested_frame,
+            std::move(requested_reject_owned),
+            false,
+            pin_list,
+            summary
+        ) != Cnr3Status::invalid_argument
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (requested_reject_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        summary.pin_recorded ||
+        pin_list.pin_count() != expected_anchor_pin_count ||
+        cache.total_pin_count() != static_cast<int>(expected_anchor_pin_count) ||
+        vsapi_state.tracked_release_counts[4] != 1
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3OwnedFrameRef first_hole_owned{};
+
+    if (make_owned_frame(first_hole_frame, first_hole_owned) != Cnr3Status::ok) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.store_recovery_plan_hole_owned_frame_and_record_pin(
+            plan,
+            first_hole_frame_number,
+            std::move(first_hole_owned),
+            false,
+            pin_list,
+            summary
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (first_hole_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        summary.frame_number != first_hole_frame_number ||
+        summary.requested_checkpoint ||
+        !summary.inserted_new_slot ||
+        summary.duplicate_existing_slot ||
+        summary.checkpoint_promoted ||
+        summary.resulting_slot_is_checkpoint ||
+        !summary.pin_recorded ||
+        !summary.incoming_frame_consumed ||
+        summary.incoming_frame_rejected
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    const std::size_t expected_after_first_hole_pin_count =
+        expected_anchor_pin_count + expected_first_hole_as2_pin_count;
+
+    if (
+        pin_list.pin_count() != expected_after_first_hole_pin_count ||
+        cache.total_pin_count() != static_cast<int>(expected_after_first_hole_pin_count)
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.tracked_release_counts[1] != 0) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3OwnedFrameRef duplicate_winner_owned{};
+
+    if (
+        make_owned_frame(duplicate_winner_frame, duplicate_winner_owned) !=
+        Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.store_noncheckpoint_owned_frame(
+            duplicate_hole_frame_number,
+            std::move(duplicate_winner_owned)
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (duplicate_winner_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        pin_list.pin_count() != expected_after_first_hole_pin_count ||
+        cache.total_pin_count() != static_cast<int>(expected_after_first_hole_pin_count) ||
+        vsapi_state.tracked_release_counts[2] != 0
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3OwnedFrameRef duplicate_loser_owned{};
+
+    if (
+        make_owned_frame(duplicate_loser_frame, duplicate_loser_owned) !=
+        Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        cache.store_recovery_plan_hole_owned_frame_and_record_pin(
+            plan,
+            duplicate_hole_frame_number,
+            std::move(duplicate_loser_owned),
+            false,
+            pin_list,
+            summary
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (duplicate_loser_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        summary.frame_number != duplicate_hole_frame_number ||
+        summary.requested_checkpoint ||
+        summary.inserted_new_slot ||
+        !summary.duplicate_existing_slot ||
+        summary.checkpoint_promoted ||
+        summary.resulting_slot_is_checkpoint ||
+        !summary.pin_recorded ||
+        summary.incoming_frame_consumed ||
+        !summary.incoming_frame_rejected
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        pin_list.pin_count() != expected_final_pin_list_count ||
+        cache.total_pin_count() != static_cast<int>(expected_final_pin_list_count)
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        vsapi_state.tracked_release_counts[2] != 0 ||
+        vsapi_state.tracked_release_counts[3] != 1
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.clear() != Cnr3Status::lifecycle_violation) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        pin_list.pin_count() != expected_final_pin_list_count ||
+        cache.total_pin_count() != static_cast<int>(expected_final_pin_list_count)
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!pin_list.empty() || cache.total_pin_count() != 0) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (cache.clear() != Cnr3Status::ok) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (!cache.empty() || !cache.cache_state_invariants_hold()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        vsapi_state.tracked_release_counts[0] != 1 ||
+        vsapi_state.tracked_release_counts[1] != 1 ||
+        vsapi_state.tracked_release_counts[2] != 1 ||
+        vsapi_state.tracked_release_counts[3] != 1 ||
+        vsapi_state.tracked_release_counts[4] != 1
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "H.3A AS2 recovery store-consumer scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    planned holes 11 and 12 are consumed through the existing AS2 helper"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    duplicate race: existing winner 12 survives, incoming loser is released once"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    expected pins: anchor 1 + inserted-hole AS2 1 + duplicate-hole AS2 1 = 3"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    G.12A owns freeFrame-outside-lock timing; H.3A proves recovery pin accounting"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -6941,6 +7319,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "as1_recovery_anchor_pin_record",
             cnr3_cache_core_selftest_as1_recovery_anchor_pin_record
+        },
+        {
+            "as2_recovery_store_consumer",
+            cnr3_cache_core_selftest_as2_recovery_store_consumer
         },
         {
             "lookup_addref_hit_and_miss",

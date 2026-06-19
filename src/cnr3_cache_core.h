@@ -684,6 +684,32 @@ public:
     );
 
     /*
+        Recovery planned-hole AS2 consumer.
+
+        CMS07-H.3A uses the already-proven AS2 helper to consume one hole from
+        a bounded recovery plan. This wrapper validates that hole_frame_number
+        is one of the plan's genuine hole entries and is not the requested
+        repair target, then delegates to store_owned_frame_and_record_pin().
+
+        This is not a second AS2 primitive and must not grow a split pin path.
+        The G.12A AS2 helper remains responsible for store/adopt, checkpoint
+        promotion, pin, pin-list record, and duplicate-loser release after the
+        cache lock. H.3A proves the recovery consumer accounts for the AS2 pin
+        produced by every planned-hole store/adopt call.
+
+        This helper does not request/retrieve source frames, compute pixels,
+        prune, return frames, wire D-SUM counters, or connect to getFrame.
+    */
+    [[nodiscard]] Cnr3Status store_recovery_plan_hole_owned_frame_and_record_pin(
+        const Cnr3CacheRecoverySearchPlan& recovery_plan,
+        int hole_frame_number,
+        Cnr3OwnedFrameRef frame,
+        bool is_checkpoint,
+        Cnr3CachePinList& pin_list,
+        Cnr3CacheAs2StoreRecordSummary& out_summary
+    );
+
+    /*
         Lock-owning central single-slot remove operation.
 
         This is the CMS07-F.1A low-level detach primitive for future prune and

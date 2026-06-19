@@ -295,6 +295,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_recovery_plan_contiguity_guard() noexcept;
 
 /*
+    Run the CMS07-C.14A aggregate cache-core workload selftest.
+
+    This capstone proof composes AS2 store/adopt, checkpoint monotonicity,
+    hot-zone/prune execution, recovery anchor pin-record, recovery AS2 hole
+    consumption, and the C.13B contiguity guard in one labelled aggregate
+    workload. Behavioural assertions must not read D-SUM counters; the same
+    test must pass when CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE is compiled out.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_aggregate_cache_core_workload() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

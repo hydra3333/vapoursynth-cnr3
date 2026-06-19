@@ -54,6 +54,91 @@ namespace {
         return 0;
     }
 
+    [[nodiscard]] Cnr3Status cnr3_current_minimal_recovery_plan_status(
+        const Cnr3CacheRecoverySearchPlan& plan
+    ) noexcept {
+        if (
+            !cnr3_frame_number_is_valid(plan.requested_frame) ||
+            plan.max_back_radius <= 0
+            ) {
+            return Cnr3Status::invalid_argument;
+        }
+
+        const int expected_lower_frame =
+            (plan.requested_frame > plan.max_back_radius)
+            ? (plan.requested_frame - plan.max_back_radius)
+            : 0;
+        const int expected_upper_frame =
+            (plan.requested_frame > 0)
+            ? (plan.requested_frame - 1)
+            : CNR3_INVALID_FRAME_NUMBER;
+        const bool expected_has_interval =
+            cnr3_frame_number_is_valid(expected_upper_frame) &&
+            expected_lower_frame <= expected_upper_frame;
+
+        if (
+            plan.search_lower_frame != expected_lower_frame ||
+            plan.search_upper_frame != expected_upper_frame ||
+            plan.search_interval_has_frames != expected_has_interval ||
+            !plan.requested_frame_is_repair_target ||
+            plan.requested_frame_is_in_hole_catalogue
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!plan.anchor_found) {
+            if (
+                cnr3_frame_number_is_valid(plan.anchor_frame_number) ||
+                plan.anchor_is_checkpoint ||
+                plan.anchor_pin_recorded ||
+                !plan.hole_frame_numbers.empty()
+                ) {
+                return Cnr3Status::invariant_violation;
+            }
+
+            return Cnr3Status::ok;
+        }
+
+        if (
+            !cnr3_frame_number_is_valid(plan.anchor_frame_number) ||
+            plan.anchor_frame_number < plan.search_lower_frame ||
+            plan.anchor_frame_number > plan.search_upper_frame ||
+            plan.anchor_frame_number >= plan.requested_frame
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        const int expected_hole_count =
+            plan.requested_frame - plan.anchor_frame_number - 1;
+
+        if (expected_hole_count < 0) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            plan.hole_frame_numbers.size() !=
+            static_cast<std::size_t>(expected_hole_count)
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (std::size_t hole_index = 0U;
+            hole_index < plan.hole_frame_numbers.size();
+            ++hole_index) {
+            const int expected_hole_frame =
+                plan.anchor_frame_number + 1 + static_cast<int>(hole_index);
+
+            if (
+                plan.hole_frame_numbers[hole_index] != expected_hole_frame ||
+                plan.hole_frame_numbers[hole_index] == plan.requested_frame
+                ) {
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        return Cnr3Status::ok;
+    }
+
     [[nodiscard]] Cnr3Status cnr3_consider_prune_candidate_bounded(
         Cnr3PruneCandidateDistanceOrderEntry candidate,
         std::size_t max_select_count,
@@ -423,16 +508,11 @@ Cnr3Status Cnr3OutputCacheCore::store_recovery_plan_hole_owned_frame_and_record_
         return Cnr3Status::invalid_argument;
     }
 
-    if (!cnr3_frame_number_is_valid(recovery_plan.requested_frame)) {
-        return Cnr3Status::invalid_argument;
-    }
+    const Cnr3Status plan_status =
+        cnr3_current_minimal_recovery_plan_status(recovery_plan);
 
-    if (!recovery_plan.requested_frame_is_repair_target) {
-        return Cnr3Status::invalid_argument;
-    }
-
-    if (recovery_plan.requested_frame_is_in_hole_catalogue) {
-        return Cnr3Status::invalid_argument;
+    if (!cnr3_status_is_ok(plan_status)) {
+        return plan_status;
     }
 
     if (hole_frame_number == recovery_plan.requested_frame) {
@@ -2316,7 +2396,7 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
     out_plan.requested_frame_is_in_hole_catalogue = false;
 
     if (!out_plan.search_interval_has_frames) {
-        return Cnr3Status::ok;
+        return cnr3_current_minimal_recovery_plan_status(out_plan);
     }
 
     int anchor_frame = CNR3_INVALID_FRAME_NUMBER;
@@ -2349,7 +2429,7 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
     }
 
     if (!cnr3_frame_number_is_valid(anchor_frame)) {
-        return Cnr3Status::ok;
+        return cnr3_current_minimal_recovery_plan_status(out_plan);
     }
 
     out_plan.anchor_found = true;
@@ -2375,7 +2455,7 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
         }
     }
 
-    return Cnr3Status::ok;
+    return cnr3_current_minimal_recovery_plan_status(out_plan);
 }
 
 Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_pin_locked(

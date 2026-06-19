@@ -283,6 +283,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept;
 
 /*
+    Run the CMS07-C.13B recovery-plan contiguity guard selftest.
+
+    This verifies the production hard-status guard for the current minimal
+    nearest-anchor + contiguous-hole recovery model. It proves reachable planner
+    output satisfies the contiguity contract and that a hand-constructed
+    non-contiguous plan is rejected before AS2 delegation. It does not implement
+    AS3, sparse planning, D-SUM counters, stderr emission, getFrame wiring,
+    source lifecycle handling, or pixel behaviour.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_recovery_plan_contiguity_guard() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

@@ -7219,6 +7219,202 @@ Cnr3Status cnr3_cache_core_selftest_as2_recovery_store_consumer() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_recovery_plan_contiguity_guard() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    constexpr int anchor_frame_number = 10;
+    constexpr int first_hole_frame_number = 11;
+    constexpr int second_hole_frame_number = 12;
+    constexpr int corrupt_extra_hole_frame_number = 13;
+    constexpr int normal_requested_frame = 13;
+    constexpr int corrupt_requested_frame = 14;
+    constexpr int recovery_back_radius = CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS;
+
+    constexpr std::size_t expected_normal_hole_count = 2U;
+    static_assert(expected_normal_hole_count == 2U);
+
+    int normal_anchor_storage = 5200;
+    int corrupt_incoming_storage = 5210;
+
+    const VSFrame* normal_anchor_frame =
+        reinterpret_cast<const VSFrame*>(&normal_anchor_storage);
+    const VSFrame* corrupt_incoming_frame =
+        reinterpret_cast<const VSFrame*>(&corrupt_incoming_storage);
+
+    vsapi_state.tracked_release_frames[0] = normal_anchor_frame;
+    vsapi_state.tracked_release_frames[1] = corrupt_incoming_frame;
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    const auto make_owned_frame = [
+        &vsapi
+    ](
+        const VSFrame* frame,
+        Cnr3OwnedFrameRef& owned_frame
+    ) noexcept -> Cnr3Status {
+        return owned_frame.reset_to_owned_frame(frame, &vsapi);
+    };
+
+    Cnr3OutputCacheCore normal_cache{};
+    Cnr3OwnedFrameRef normal_anchor_owned{};
+
+    if (
+        make_owned_frame(normal_anchor_frame, normal_anchor_owned) !=
+        Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        normal_cache.store_noncheckpoint_owned_frame(
+            anchor_frame_number,
+            std::move(normal_anchor_owned)
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (normal_anchor_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3CacheRecoverySearchPlan normal_plan{};
+
+    if (
+        normal_cache.plan_bounded_recovery_search(
+            normal_requested_frame,
+            recovery_back_radius,
+            normal_plan
+        ) != Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    const std::vector<int> expected_normal_holes = {
+        first_hole_frame_number,
+        second_hole_frame_number
+    };
+
+    if (
+        !normal_plan.anchor_found ||
+        normal_plan.anchor_frame_number != anchor_frame_number ||
+        normal_plan.anchor_pin_recorded ||
+        !normal_plan.requested_frame_is_repair_target ||
+        normal_plan.requested_frame_is_in_hole_catalogue ||
+        normal_plan.hole_frame_numbers.size() != expected_normal_hole_count ||
+        normal_plan.hole_frame_numbers != expected_normal_holes
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (normal_cache.clear() != Cnr3Status::ok) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        vsapi_state.tracked_release_counts[0] != 1 ||
+        normal_cache.total_pin_count() != 0
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    Cnr3OutputCacheCore corrupt_cache{};
+    Cnr3CachePinList corrupt_pin_list{};
+    Cnr3CacheAs2StoreRecordSummary corrupt_summary{};
+    Cnr3CacheRecoverySearchPlan corrupt_plan{};
+
+    corrupt_plan.requested_frame = corrupt_requested_frame;
+    corrupt_plan.max_back_radius = recovery_back_radius;
+    corrupt_plan.search_lower_frame = 0;
+    corrupt_plan.search_upper_frame = corrupt_requested_frame - 1;
+    corrupt_plan.search_interval_has_frames = true;
+    corrupt_plan.anchor_found = true;
+    corrupt_plan.anchor_frame_number = anchor_frame_number;
+    corrupt_plan.anchor_is_checkpoint = false;
+    corrupt_plan.anchor_pin_recorded = false;
+    corrupt_plan.requested_frame_is_repair_target = true;
+    corrupt_plan.requested_frame_is_in_hole_catalogue = false;
+    corrupt_plan.hole_frame_numbers = {
+        first_hole_frame_number,
+        corrupt_extra_hole_frame_number
+    };
+
+    Cnr3OwnedFrameRef corrupt_incoming_owned{};
+
+    if (
+        make_owned_frame(corrupt_incoming_frame, corrupt_incoming_owned) !=
+        Cnr3Status::ok
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    const int free_count_before_corrupt_call = vsapi_state.free_frame_count;
+
+    if (
+        corrupt_cache.store_recovery_plan_hole_owned_frame_and_record_pin(
+            corrupt_plan,
+            corrupt_extra_hole_frame_number,
+            std::move(corrupt_incoming_owned),
+            false,
+            corrupt_pin_list,
+            corrupt_summary
+        ) != Cnr3Status::invariant_violation
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (corrupt_incoming_owned.has_frame()) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (
+        corrupt_summary.pin_recorded ||
+        corrupt_summary.inserted_new_slot ||
+        corrupt_summary.duplicate_existing_slot ||
+        corrupt_summary.incoming_frame_consumed ||
+        corrupt_summary.incoming_frame_rejected ||
+        !corrupt_pin_list.empty() ||
+        corrupt_cache.total_pin_count() != 0 ||
+        corrupt_cache.slot_count() != 0U ||
+        vsapi_state.free_frame_count != free_count_before_corrupt_call + 1 ||
+        vsapi_state.tracked_release_counts[1] != 1
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "C.13B recovery-plan contiguity guard scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    source guard accepts reachable nearest-anchor + contiguous-hole plan 10 -> 13"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    consumer guard rejects corrupt non-contiguous holes {11,13} for requested 14"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    rejection returns invariant_violation before AS2 delegation, with no pins recorded"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    cache core emits no stderr; future getFrame integration owns developer-alert text"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -7323,6 +7519,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "as2_recovery_store_consumer",
             cnr3_cache_core_selftest_as2_recovery_store_consumer
+        },
+        {
+            "recovery_plan_contiguity_guard",
+            cnr3_cache_core_selftest_recovery_plan_contiguity_guard
         },
         {
             "lookup_addref_hit_and_miss",

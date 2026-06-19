@@ -697,8 +697,13 @@ public:
         cache lock. H.3A proves the recovery consumer accounts for the AS2 pin
         produced by every planned-hole store/adopt call.
 
+        This helper first re-validates the current minimal recovery-plan
+        contiguity contract before any AS2 delegation. That guard is ordinary
+        hard-status logic, not a diagnostic gate.
+
         This helper does not request/retrieve source frames, compute pixels,
-        prune, return frames, wire D-SUM counters, or connect to getFrame.
+        prune, return frames, wire D-SUM counters, emit stderr, or connect to
+        getFrame.
     */
     [[nodiscard]] Cnr3Status store_recovery_plan_hole_owned_frame_and_record_pin(
         const Cnr3CacheRecoverySearchPlan& recovery_plan,
@@ -1238,6 +1243,10 @@ private:
 
         Caller must hold cache_mutex_ and must pre-reserve hole_frame_numbers so
         catalogue construction is allocation-free while the cache lock is held.
+        The helper validates the current minimal nearest-anchor + contiguous-
+        hole postcondition before returning ok. The guard is a bounded pure scan
+        over the just-built catalogue and does not allocate, print, touch
+        frame refs, or handle sparse/AS3 plans.
     */
     [[nodiscard]] Cnr3Status plan_bounded_recovery_search_locked(
         int requested_frame,

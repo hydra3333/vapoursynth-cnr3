@@ -306,6 +306,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_aggregate_cache_core_workload() noexcept;
 
 /*
+    Run the CMS07-P.1A response-table vector proof.
+
+    This is the first pixel-number proof after the C.14A cache-core milestone.
+    It temporarily uses the existing selftest runner so the four-way harness,
+    count discipline, and forced-fail machinery remain unchanged. It proves
+    exact integer vscnr2-compatible response-table values and does not touch
+    cache-core behaviour, VapourSynth getFrame lifecycle, Cnr3Data/VSMap
+    parsing, or predecessor/recovery logic.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_response_table_vector_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed
@@ -396,7 +408,7 @@ struct Cnr3CacheCoreSelftestRunResult {
 };
 
 /*
-    Run all cache-core selftests currently implemented.
+    Run all registered selftests currently implemented.
 
     The runner records all pass/fail counts and preserves the first failing
     selftest name/status for the C.6C console harness. This function performs

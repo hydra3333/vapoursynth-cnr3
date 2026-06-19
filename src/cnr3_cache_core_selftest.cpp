@@ -4,6 +4,8 @@
 
 #include "cnr3_diagnostics.h"
 
+#include "cnr3_response_tables.h"
+
 #include <cstdio>
 #include <type_traits>
 #include <utility>
@@ -8123,6 +8125,320 @@ Cnr3Status cnr3_cache_core_selftest_aggregate_cache_core_workload() noexcept {
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_response_table_vector_proof() noexcept {
+    /*
+        P.1A temporarily hosts this first pixel-number proof in the established
+        selftest runner so the four-way count and forced-fail machinery remain
+        unchanged. The active response-table code stays separate from cache
+        state and from VapourSynth instance/getFrame lifecycle.
+    */
+    constexpr int table_offset_8bit = 255;
+    constexpr int table_size_8bit = 511;
+    constexpr int sample_peak_8bit = 255;
+
+    constexpr int expected_peak_strength_255 = 254;
+    constexpr int expected_narrow_255_t10_d5 = 127;
+    constexpr int expected_wide_255_t10_d5 = 216;
+    constexpr int expected_narrow_200_t20_d7 = 145;
+    constexpr int expected_wide_200_t20_d7 = 192;
+
+    static_assert(table_size_8bit == (table_offset_8bit * 2) + 1);
+    static_assert(expected_peak_strength_255 == 254);
+    static_assert(expected_narrow_255_t10_d5 == 127);
+    static_assert(expected_wide_255_t10_d5 == 216);
+    static_assert(expected_narrow_200_t20_d7 == 145);
+    static_assert(expected_wide_200_t20_d7 == 192);
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto expect_table_value = [](
+        const std::vector<int>& table,
+        int table_offset,
+        int signed_diff,
+        int expected_value
+    ) noexcept -> bool {
+        return get_cnr3_table_value_for_signed_diff(
+            table,
+            table_offset,
+            signed_diff
+        ) == expected_value;
+    };
+
+    {
+        const std::vector<int> table = {
+            0,
+            10,
+            20,
+            30,
+            40
+        };
+        constexpr int lookup_offset = 2;
+
+        if (
+            !expect_table_value(table, lookup_offset, -2, 0) ||
+            !expect_table_value(table, lookup_offset, -1, 10) ||
+            !expect_table_value(table, lookup_offset, 0, 20) ||
+            !expect_table_value(table, lookup_offset, 1, 30) ||
+            !expect_table_value(table, lookup_offset, 2, 40) ||
+            !expect_table_value(table, lookup_offset, -3, 0) ||
+            !expect_table_value(table, lookup_offset, 3, 0)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> table{};
+
+        if (
+            build_cnr3_weight_table(
+                table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                0,
+                200,
+                false
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            table.size() != static_cast<std::size_t>(table_size_8bit) ||
+            !expect_table_value(table, table_offset_8bit, 0, 200) ||
+            !expect_table_value(table, table_offset_8bit, -1, 0) ||
+            !expect_table_value(table, table_offset_8bit, 1, 0)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> table{};
+
+        if (
+            build_cnr3_weight_table(
+                table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                10,
+                255,
+                false
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(table, table_offset_8bit, 0, expected_peak_strength_255) ||
+            !expect_table_value(table, table_offset_8bit, -5, expected_narrow_255_t10_d5) ||
+            !expect_table_value(table, table_offset_8bit, 5, expected_narrow_255_t10_d5) ||
+            !expect_table_value(table, table_offset_8bit, -10, 0) ||
+            !expect_table_value(table, table_offset_8bit, 10, 0) ||
+            !expect_table_value(table, table_offset_8bit, -11, 0) ||
+            !expect_table_value(table, table_offset_8bit, 11, 0)
+            ) {
+            return fail();
+        }
+
+        if (
+            get_cnr3_table_value_for_signed_diff(table, table_offset_8bit, -5) !=
+            get_cnr3_table_value_for_signed_diff(table, table_offset_8bit, 5)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> table{};
+
+        if (
+            build_cnr3_weight_table(
+                table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                10,
+                255,
+                true
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(table, table_offset_8bit, 0, expected_peak_strength_255) ||
+            !expect_table_value(table, table_offset_8bit, -5, expected_wide_255_t10_d5) ||
+            !expect_table_value(table, table_offset_8bit, 5, expected_wide_255_t10_d5) ||
+            !expect_table_value(table, table_offset_8bit, -10, 0) ||
+            !expect_table_value(table, table_offset_8bit, 10, 0)
+            ) {
+            return fail();
+        }
+
+        if (
+            get_cnr3_table_value_for_signed_diff(table, table_offset_8bit, -5) !=
+            get_cnr3_table_value_for_signed_diff(table, table_offset_8bit, 5)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> narrow_table{};
+        std::vector<int> wide_table{};
+
+        if (
+            build_cnr3_weight_table(
+                narrow_table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                20,
+                200,
+                false
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            build_cnr3_weight_table(
+                wide_table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                20,
+                200,
+                true
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(narrow_table, table_offset_8bit, 0, 200) ||
+            !expect_table_value(narrow_table, table_offset_8bit, -7, expected_narrow_200_t20_d7) ||
+            !expect_table_value(narrow_table, table_offset_8bit, 7, expected_narrow_200_t20_d7) ||
+            !expect_table_value(narrow_table, table_offset_8bit, -20, 0) ||
+            !expect_table_value(narrow_table, table_offset_8bit, 20, 0) ||
+            !expect_table_value(wide_table, table_offset_8bit, 0, 200) ||
+            !expect_table_value(wide_table, table_offset_8bit, -7, expected_wide_200_t20_d7) ||
+            !expect_table_value(wide_table, table_offset_8bit, 7, expected_wide_200_t20_d7) ||
+            !expect_table_value(wide_table, table_offset_8bit, -20, 0) ||
+            !expect_table_value(wide_table, table_offset_8bit, 20, 0)
+            ) {
+            return fail();
+        }
+
+        if (
+            get_cnr3_table_value_for_signed_diff(narrow_table, table_offset_8bit, -7) !=
+            get_cnr3_table_value_for_signed_diff(narrow_table, table_offset_8bit, 7)
+            ) {
+            return fail();
+        }
+
+        if (
+            get_cnr3_table_value_for_signed_diff(wide_table, table_offset_8bit, -7) !=
+            get_cnr3_table_value_for_signed_diff(wide_table, table_offset_8bit, 7)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> table{};
+
+        if (
+            build_cnr3_weight_table(
+                table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                -5,
+                300,
+                false
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(table, table_offset_8bit, 0, 255) ||
+            !expect_table_value(table, table_offset_8bit, 1, 0)
+            ) {
+            return fail();
+        }
+
+        if (
+            build_cnr3_weight_table(
+                table,
+                table_offset_8bit,
+                table_size_8bit,
+                sample_peak_8bit,
+                300,
+                -1,
+                true
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !expect_table_value(table, table_offset_8bit, 0, 0) ||
+            !expect_table_value(table, table_offset_8bit, 1, 0)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> table{};
+
+        if (
+            build_cnr3_weight_table(
+                table,
+                table_offset_8bit,
+                0,
+                sample_peak_8bit,
+                10,
+                255,
+                false
+            ) != Cnr3Status::invalid_argument
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "P.1A response-table vector proof scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    safe signed lookup proves table_offset indexing and out-of-range zero"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    threshold-zero proof sets only the centre entry"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    narrow 255/10 proves diff 5 -> 127 and peak 254 integer-division quirk"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    wide 255/10 proves diff 5 -> 216 through squared response curve"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    second 200/20 family proves narrow diff 7 -> 145 and wide diff 7 -> 192"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    clamp vectors prove threshold/strength are clamped before table generation"
+    );
+
+    return Cnr3Status::ok;
+}
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -8235,6 +8551,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "aggregate_cache_core_workload",
             cnr3_cache_core_selftest_aggregate_cache_core_workload
+        },
+        {
+            "response_table_vector_proof",
+            cnr3_cache_core_selftest_response_table_vector_proof
         },
         {
             "lookup_addref_hit_and_miss",

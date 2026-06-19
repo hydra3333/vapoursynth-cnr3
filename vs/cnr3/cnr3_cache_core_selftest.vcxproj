@@ -24,6 +24,7 @@
     <ClCompile Include="..\..\src\cnr3_cache_core_selftest_main.cpp" />
     <ClCompile Include="..\..\src\cnr3_diagnostics.cpp" />
     <ClCompile Include="..\..\src\cnr3_owned_frame_ref.cpp" />
+    <ClCompile Include="..\..\src\cnr3_response_tables.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\cnr3_build_config.h" />
@@ -32,6 +33,7 @@
     <ClInclude Include="..\..\src\cnr3_common.h" />
     <ClInclude Include="..\..\src\cnr3_diagnostics.h" />
     <ClInclude Include="..\..\src\cnr3_owned_frame_ref.h" />
+    <ClInclude Include="..\..\src\cnr3_response_tables.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VapourSynth4.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h" />
   </ItemGroup>

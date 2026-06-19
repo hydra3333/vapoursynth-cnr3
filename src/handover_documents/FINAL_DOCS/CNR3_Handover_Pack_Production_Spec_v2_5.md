@@ -1219,6 +1219,31 @@ The cycle for each phase has three stages.
 - the order is always propose -> review -> approve -> apply -> test -> commit; code is
   never applied before review and approval.
 
+**Source baseline and patch generation (so `git apply --check` evidence is genuine):**
+
+- The coder validates each patch with `git apply --check` against a **local source baseline
+  held in its working environment**, not against ad-hoc web reads of individual files. The
+  coordinator therefore **uploads the current source baseline** (the relevant `src/` files,
+  or the whole `src/` directory plus the `vs/cnr3` project files) at the start of a working
+  session, pinned to a known commit (e.g. the current HEAD code commit), and the coder
+  confirms its baseline marker matches before producing any patch.
+- The coder **self-maintains** this source baseline patch-to-patch within a session:
+  generate each patch from the current baseline; validate it without advancing the
+  baseline; and only **advance the maintained baseline after the coordinator reports the
+  patch applied, built, tested, and accepted** — so a later phase is never based on a draft
+  patch that was revised or rejected.
+- The coordinator **re-syncs** the coder (re-uploads the authoritative source) whenever
+  drift is possible or detected: anything applied out-of-band; a manual edit after applying
+  a patch; the branch moving in a way the coder did not produce; an unexpected
+  `git apply --check` failure; a changed-files or selftest-count mismatch; the start of a
+  new chat/session; or at a major checkpoint (e.g. after a milestone phase) for a clean
+  anchor. A per-phase re-upload is not required when all patches are produced in-session,
+  applied exactly, and the posted results match.
+- Patches are generated with **wider unified-diff context (`git diff -U10`, ten context
+  lines each side, not the default three)** so that `git apply --check` fails cleanly on
+  base drift rather than risking application near the wrong code. The apply/check commands
+  are unchanged; the wider context is carried inside the patch file itself.
+
 ## 3A.6 Architecture and salvage rules
 ### R-ARCH-01 — Reuse the existing per-frame processing boundary (no parallel pixel algorithm)
 

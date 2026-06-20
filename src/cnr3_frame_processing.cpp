@@ -2,6 +2,9 @@
 
 #include "cnr3_response_tables.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 
 namespace {
@@ -121,6 +124,82 @@ void cnr3_write_plane_sample(
 ) noexcept {
     view.samples[(y * view.stride) + x] = value;
 }
+
+
+[[nodiscard]] bool cnr3_native_plane_byte_shape_is_valid(
+    int width,
+    int height,
+    int stride_bytes,
+    int storage_bytes
+) noexcept {
+    if (
+        width <= 0 ||
+        height <= 0 ||
+        storage_bytes <= 0 ||
+        width > (std::numeric_limits<int>::max() / storage_bytes)
+        ) {
+        return false;
+    }
+
+    const int active_row_bytes = width * storage_bytes;
+
+    return stride_bytes >= active_row_bytes &&
+        height <= (std::numeric_limits<int>::max() / stride_bytes);
+}
+
+[[nodiscard]] bool cnr3_const_native_plane_byte_view_is_valid(
+    const Cnr3ConstNativePlaneByteView& view,
+    int storage_bytes
+) noexcept {
+    return view.data != nullptr &&
+        cnr3_native_plane_byte_shape_is_valid(
+            view.width,
+            view.height,
+            view.stride_bytes,
+            storage_bytes
+        );
+}
+
+[[nodiscard]] bool cnr3_mutable_native_plane_byte_view_is_valid(
+    const Cnr3MutableNativePlaneByteView& view,
+    int storage_bytes
+) noexcept {
+    return view.data != nullptr &&
+        cnr3_native_plane_byte_shape_is_valid(
+            view.width,
+            view.height,
+            view.stride_bytes,
+            storage_bytes
+        );
+}
+
+[[nodiscard]] bool cnr3_native_plane_dimensions_match(
+    const Cnr3ConstNativePlaneByteView& native_plane,
+    const Cnr3MutablePlaneBufferView& scalar_plane
+) noexcept {
+    return native_plane.width == scalar_plane.width &&
+        native_plane.height == scalar_plane.height;
+}
+
+[[nodiscard]] bool cnr3_native_plane_dimensions_match(
+    const Cnr3ConstPlaneBufferView& scalar_plane,
+    const Cnr3MutableNativePlaneByteView& native_plane
+) noexcept {
+    return scalar_plane.width == native_plane.width &&
+        scalar_plane.height == native_plane.height;
+}
+
+[[nodiscard]] std::size_t cnr3_native_plane_byte_offset(
+    int x,
+    int y,
+    int stride_bytes,
+    int storage_bytes
+) noexcept {
+    return
+        (static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_bytes)) +
+        (static_cast<std::size_t>(x) * static_cast<std::size_t>(storage_bytes));
+}
+
 
 } // namespace
 
@@ -385,6 +464,275 @@ Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     result = resolved;
     return Cnr3Status::ok;
 }
+
+
+
+Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
+    int bits_per_sample,
+    int& storage_bytes
+) noexcept {
+    storage_bytes = 0;
+
+    if (bits_per_sample == 8) {
+        storage_bytes = 1;
+        return Cnr3Status::ok;
+    }
+
+    if (bits_per_sample > 8 && bits_per_sample <= 16) {
+        storage_bytes = 2;
+        return Cnr3Status::ok;
+    }
+
+    return Cnr3Status::invalid_argument;
+}
+
+Cnr3Status cnr3_load_native_plane_sample(
+    const Cnr3ConstNativePlaneByteView& plane,
+    int x,
+    int y,
+    int& output_sample
+) noexcept {
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        plane.bits_per_sample,
+        storage_bytes
+    );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    int sample_peak = 0;
+
+    if (
+        cnr3_sample_peak_for_bit_depth(plane.bits_per_sample, sample_peak) != Cnr3Status::ok ||
+        !cnr3_const_native_plane_byte_view_is_valid(plane, storage_bytes) ||
+        x < 0 ||
+        y < 0 ||
+        x >= plane.width ||
+        y >= plane.height
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const auto* bytes = static_cast<const std::uint8_t*>(plane.data);
+    const std::size_t offset = cnr3_native_plane_byte_offset(
+        x,
+        y,
+        plane.stride_bytes,
+        storage_bytes
+    );
+
+    int sample = 0;
+
+    if (storage_bytes == 1) {
+        sample = bytes[offset];
+    } else {
+        std::uint16_t native_sample = 0;
+        std::memcpy(&native_sample, bytes + offset, sizeof(native_sample));
+        sample = static_cast<int>(native_sample);
+    }
+
+    if (!cnr3_value_is_inclusive_range(sample, 0, sample_peak)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    output_sample = sample;
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_store_native_plane_sample(
+    Cnr3MutableNativePlaneByteView& plane,
+    int x,
+    int y,
+    int sample
+) noexcept {
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        plane.bits_per_sample,
+        storage_bytes
+    );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    int sample_peak = 0;
+
+    if (
+        cnr3_sample_peak_for_bit_depth(plane.bits_per_sample, sample_peak) != Cnr3Status::ok ||
+        !cnr3_mutable_native_plane_byte_view_is_valid(plane, storage_bytes) ||
+        x < 0 ||
+        y < 0 ||
+        x >= plane.width ||
+        y >= plane.height ||
+        !cnr3_value_is_inclusive_range(sample, 0, sample_peak)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    auto* bytes = static_cast<std::uint8_t*>(plane.data);
+    const std::size_t offset = cnr3_native_plane_byte_offset(
+        x,
+        y,
+        plane.stride_bytes,
+        storage_bytes
+    );
+
+    if (storage_bytes == 1) {
+        bytes[offset] = static_cast<std::uint8_t>(sample);
+    } else {
+        const std::uint16_t native_sample = static_cast<std::uint16_t>(sample);
+        std::memcpy(bytes + offset, &native_sample, sizeof(native_sample));
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_copy_native_plane_to_scalar_buffer(
+    const Cnr3ConstNativePlaneByteView& native_plane,
+    Cnr3MutablePlaneBufferView& scalar_plane
+) noexcept {
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        native_plane.bits_per_sample,
+        storage_bytes
+    );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    if (
+        !cnr3_const_native_plane_byte_view_is_valid(native_plane, storage_bytes) ||
+        !cnr3_mutable_plane_view_is_valid(scalar_plane) ||
+        !cnr3_native_plane_dimensions_match(native_plane, scalar_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int sample_count = native_plane.width * native_plane.height;
+    std::vector<int> resolved_samples;
+
+    try {
+        resolved_samples.resize(static_cast<std::size_t>(sample_count));
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    for (int y = 0; y < native_plane.height; ++y) {
+        for (int x = 0; x < native_plane.width; ++x) {
+            int sample = 0;
+
+            const Cnr3Status sample_status = cnr3_load_native_plane_sample(
+                native_plane,
+                x,
+                y,
+                sample
+            );
+
+            if (sample_status != Cnr3Status::ok) {
+                return sample_status;
+            }
+
+            resolved_samples[static_cast<std::size_t>((y * native_plane.width) + x)] =
+                sample;
+        }
+    }
+
+    for (int y = 0; y < native_plane.height; ++y) {
+        for (int x = 0; x < native_plane.width; ++x) {
+            cnr3_write_plane_sample(
+                scalar_plane,
+                x,
+                y,
+                resolved_samples[static_cast<std::size_t>((y * native_plane.width) + x)]
+            );
+        }
+    }
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_copy_scalar_buffer_to_native_plane(
+    const Cnr3ConstPlaneBufferView& scalar_plane,
+    Cnr3MutableNativePlaneByteView& native_plane
+) noexcept {
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        native_plane.bits_per_sample,
+        storage_bytes
+    );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    if (
+        !cnr3_const_plane_view_is_valid(scalar_plane) ||
+        !cnr3_mutable_native_plane_byte_view_is_valid(native_plane, storage_bytes) ||
+        !cnr3_native_plane_dimensions_match(scalar_plane, native_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    std::vector<std::uint8_t> resolved_bytes;
+
+    try {
+        resolved_bytes.assign(
+            static_cast<std::size_t>(native_plane.stride_bytes) *
+                static_cast<std::size_t>(native_plane.height),
+            std::uint8_t{0}
+        );
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3MutableNativePlaneByteView resolved_plane{
+        resolved_bytes.data(),
+        native_plane.width,
+        native_plane.height,
+        native_plane.stride_bytes,
+        native_plane.bits_per_sample
+    };
+
+    for (int y = 0; y < scalar_plane.height; ++y) {
+        for (int x = 0; x < scalar_plane.width; ++x) {
+            const Cnr3Status sample_status = cnr3_store_native_plane_sample(
+                resolved_plane,
+                x,
+                y,
+                cnr3_plane_sample_at(scalar_plane, x, y)
+            );
+
+            if (sample_status != Cnr3Status::ok) {
+                return sample_status;
+            }
+        }
+    }
+
+    auto* destination = static_cast<std::uint8_t*>(native_plane.data);
+
+    for (int y = 0; y < native_plane.height; ++y) {
+        for (int x = 0; x < native_plane.width; ++x) {
+            const std::size_t offset = cnr3_native_plane_byte_offset(
+                x,
+                y,
+                native_plane.stride_bytes,
+                storage_bytes
+            );
+
+            if (storage_bytes == 1) {
+                destination[offset] = resolved_bytes[offset];
+            } else {
+                std::memcpy(destination + offset, resolved_bytes.data() + offset, 2U);
+            }
+        }
+    }
+
+    return Cnr3Status::ok;
+}
+
 
 
 Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(

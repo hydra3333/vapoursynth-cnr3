@@ -9,6 +9,8 @@
 #include "cnr3_response_tables.h"
 
 #include <cstdio>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -10365,6 +10367,445 @@ Cnr3Status cnr3_cache_core_selftest_source_luma_downsample_plane_traversal_proof
 
     return Cnr3Status::ok;
 }
+
+Cnr3Status cnr3_cache_core_selftest_native_byte_plane_access_vector_proof() noexcept {
+    /*
+        P.8A proves native byte-stride access over synthetic byte buffers only.
+        It does not call VapourSynth frame APIs or make getFrame lifecycle
+        decisions. Multi-byte column offsets must be x * storage_bytes.
+    */
+    constexpr int width = 3;
+    constexpr int height = 2;
+    constexpr int scalar_stride = 4;
+    constexpr int stride_8bit = 5;
+    constexpr int stride_10bit = 8;
+    constexpr int bits_8 = 8;
+    constexpr int bits_10 = 10;
+
+    constexpr int expected_10bit_first = 0x0123;
+    constexpr int expected_10bit_second = 0x02AB;
+    constexpr int expected_10bit_third = 0x03FF;
+    constexpr int expected_10bit_count = width * height;
+
+    static_assert(expected_10bit_first == 291);
+    static_assert(expected_10bit_second == 683);
+    static_assert(expected_10bit_third == 1023);
+    static_assert(expected_10bit_count == 6);
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto scalar_padding_is = [](
+        const std::vector<int>& samples,
+        int active_width,
+        int active_height,
+        int stride,
+        int sentinel
+    ) noexcept -> bool {
+        for (int y = 0; y < active_height; ++y) {
+            for (int x = active_width; x < stride; ++x) {
+                if (samples[static_cast<std::size_t>((y * stride) + x)] != sentinel) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    const auto native_padding_is = [](
+        const std::vector<std::uint8_t>& bytes,
+        int active_width,
+        int active_height,
+        int stride_bytes,
+        int storage_bytes,
+        std::uint8_t sentinel
+    ) noexcept -> bool {
+        const int active_row_bytes = active_width * storage_bytes;
+
+        for (int y = 0; y < active_height; ++y) {
+            for (int byte_index = active_row_bytes; byte_index < stride_bytes; ++byte_index) {
+                if (
+                    bytes[
+                        static_cast<std::size_t>((y * stride_bytes) + byte_index)
+                    ] != sentinel
+                    ) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    const auto put_native_u16 = [](
+        std::vector<std::uint8_t>& bytes,
+        int stride_bytes,
+        int x,
+        int y,
+        std::uint16_t value
+    ) noexcept {
+        const std::size_t offset =
+            (static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_bytes)) +
+            (static_cast<std::size_t>(x) * 2U);
+        std::memcpy(bytes.data() + offset, &value, sizeof(value));
+    };
+
+    const auto get_native_u16 = [](
+        const std::vector<std::uint8_t>& bytes,
+        int stride_bytes,
+        int x,
+        int y
+    ) noexcept -> int {
+        const std::size_t offset =
+            (static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_bytes)) +
+            (static_cast<std::size_t>(x) * 2U);
+        std::uint16_t value = 0;
+        std::memcpy(&value, bytes.data() + offset, sizeof(value));
+        return static_cast<int>(value);
+    };
+
+    {
+        int storage_bytes = -1;
+
+        if (
+            cnr3_native_storage_bytes_for_bit_depth(8, storage_bytes) != Cnr3Status::ok ||
+            storage_bytes != 1 ||
+            cnr3_native_storage_bytes_for_bit_depth(9, storage_bytes) != Cnr3Status::ok ||
+            storage_bytes != 2 ||
+            cnr3_native_storage_bytes_for_bit_depth(10, storage_bytes) != Cnr3Status::ok ||
+            storage_bytes != 2 ||
+            cnr3_native_storage_bytes_for_bit_depth(16, storage_bytes) != Cnr3Status::ok ||
+            storage_bytes != 2
+            ) {
+            return fail();
+        }
+
+        storage_bytes = 1234;
+
+        if (
+            cnr3_native_storage_bytes_for_bit_depth(7, storage_bytes) != Cnr3Status::invalid_argument ||
+            storage_bytes != 0 ||
+            cnr3_native_storage_bytes_for_bit_depth(17, storage_bytes) != Cnr3Status::invalid_argument ||
+            storage_bytes != 0
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        const std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_8bit * height), 0U);
+        const Cnr3ConstNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_8bit,
+            bits_8
+        };
+        int sample = 777;
+
+        if (
+            cnr3_load_native_plane_sample(native_plane, -1, 0, sample) != Cnr3Status::invalid_argument ||
+            sample != 777
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_8bit * height), 0xEEU);
+        native_bytes[0] = 10;
+        native_bytes[1] = 20;
+        native_bytes[2] = 30;
+        native_bytes[5] = 110;
+        native_bytes[6] = 120;
+        native_bytes[7] = 130;
+
+        const Cnr3ConstNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_8bit,
+            bits_8
+        };
+        std::vector<int> scalar(static_cast<std::size_t>(scalar_stride * height), -100);
+        Cnr3MutablePlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+
+        if (
+            cnr3_copy_native_plane_to_scalar_buffer(native_plane, scalar_plane) != Cnr3Status::ok ||
+            scalar[0] != 10 ||
+            scalar[1] != 20 ||
+            scalar[2] != 30 ||
+            scalar[4] != 110 ||
+            scalar[5] != 120 ||
+            scalar[6] != 130 ||
+            !scalar_padding_is(scalar, width, height, scalar_stride, -100)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_10bit * height), 0xEEU);
+        put_native_u16(native_bytes, stride_10bit, 0, 0, static_cast<std::uint16_t>(expected_10bit_first));
+        put_native_u16(native_bytes, stride_10bit, 1, 0, static_cast<std::uint16_t>(expected_10bit_second));
+        put_native_u16(native_bytes, stride_10bit, 2, 0, static_cast<std::uint16_t>(expected_10bit_third));
+        put_native_u16(native_bytes, stride_10bit, 0, 1, 100);
+        put_native_u16(native_bytes, stride_10bit, 1, 1, 512);
+        put_native_u16(native_bytes, stride_10bit, 2, 1, 900);
+
+        const Cnr3ConstNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_10bit,
+            bits_10
+        };
+        std::vector<int> scalar(static_cast<std::size_t>(scalar_stride * height), -110);
+        Cnr3MutablePlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+
+        if (
+            cnr3_copy_native_plane_to_scalar_buffer(native_plane, scalar_plane) != Cnr3Status::ok ||
+            scalar[0] != expected_10bit_first ||
+            scalar[1] != expected_10bit_second ||
+            scalar[2] != expected_10bit_third ||
+            scalar[4] != 100 ||
+            scalar[5] != 512 ||
+            scalar[6] != 900 ||
+            !scalar_padding_is(scalar, width, height, scalar_stride, -110)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        const std::vector<int> scalar{
+            10, 20, 30, -1,
+            110, 120, 130, -1
+        };
+        const Cnr3ConstPlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_8bit * height), 0xDDU);
+        Cnr3MutableNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_8bit,
+            bits_8
+        };
+
+        if (
+            cnr3_copy_scalar_buffer_to_native_plane(scalar_plane, native_plane) != Cnr3Status::ok ||
+            native_bytes[0] != 10 ||
+            native_bytes[1] != 20 ||
+            native_bytes[2] != 30 ||
+            native_bytes[5] != 110 ||
+            native_bytes[6] != 120 ||
+            native_bytes[7] != 130 ||
+            !native_padding_is(native_bytes, width, height, stride_8bit, 1, 0xDDU)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        const std::vector<int> scalar{
+            expected_10bit_first, expected_10bit_second, expected_10bit_third, -1,
+            1, 258, 515, -1
+        };
+        const Cnr3ConstPlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_10bit * height), 0xCCU);
+        Cnr3MutableNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_10bit,
+            bits_10
+        };
+
+        if (
+            cnr3_copy_scalar_buffer_to_native_plane(scalar_plane, native_plane) != Cnr3Status::ok ||
+            get_native_u16(native_bytes, stride_10bit, 0, 0) != expected_10bit_first ||
+            get_native_u16(native_bytes, stride_10bit, 1, 0) != expected_10bit_second ||
+            get_native_u16(native_bytes, stride_10bit, 2, 0) != expected_10bit_third ||
+            get_native_u16(native_bytes, stride_10bit, 0, 1) != 1 ||
+            get_native_u16(native_bytes, stride_10bit, 1, 1) != 258 ||
+            get_native_u16(native_bytes, stride_10bit, 2, 1) != 515 ||
+            !native_padding_is(native_bytes, width, height, stride_10bit, 2, 0xCCU)
+            ) {
+            return fail();
+        }
+
+        int sample = -1;
+        const Cnr3ConstNativePlaneByteView round_trip_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_10bit,
+            bits_10
+        };
+
+        if (
+            cnr3_load_native_plane_sample(round_trip_plane, 1, 0, sample) != Cnr3Status::ok ||
+            sample != expected_10bit_second
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_10bit * height), 0U);
+        Cnr3MutableNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_10bit,
+            bits_10
+        };
+
+        if (cnr3_store_native_plane_sample(native_plane, 1, 0, 321) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (
+            cnr3_store_native_plane_sample(native_plane, 1, 0, 1024) != Cnr3Status::invalid_argument ||
+            get_native_u16(native_bytes, stride_10bit, 1, 0) != 321
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_10bit * height), 0xEEU);
+        put_native_u16(native_bytes, stride_10bit, 0, 0, 1);
+        put_native_u16(native_bytes, stride_10bit, 1, 0, 2);
+        put_native_u16(native_bytes, stride_10bit, 2, 0, 3);
+        put_native_u16(native_bytes, stride_10bit, 0, 1, 4);
+        put_native_u16(native_bytes, stride_10bit, 1, 1, 5);
+        put_native_u16(native_bytes, stride_10bit, 2, 1, 1024);
+
+        const Cnr3ConstNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_10bit,
+            bits_10
+        };
+        std::vector<int> scalar(static_cast<std::size_t>(scalar_stride * height), -900);
+        Cnr3MutablePlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+
+        if (
+            cnr3_copy_native_plane_to_scalar_buffer(native_plane, scalar_plane) != Cnr3Status::invalid_argument ||
+            scalar[0] != -900 ||
+            scalar[1] != -900 ||
+            scalar[2] != -900 ||
+            scalar[4] != -900 ||
+            scalar[5] != -900 ||
+            scalar[6] != -900 ||
+            !scalar_padding_is(scalar, width, height, scalar_stride, -900)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        const std::vector<int> scalar{
+            1, 2, 3, -1,
+            4, 5, 1024, -1
+        };
+        const Cnr3ConstPlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_10bit * height), 0xAAU);
+        Cnr3MutableNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            stride_10bit,
+            bits_10
+        };
+
+        if (cnr3_copy_scalar_buffer_to_native_plane(scalar_plane, native_plane) != Cnr3Status::invalid_argument) {
+            return fail();
+        }
+
+        for (std::uint8_t byte : native_bytes) {
+            if (byte != 0xAAU) {
+                return fail();
+            }
+        }
+    }
+
+    {
+        std::vector<std::uint8_t> native_bytes(static_cast<std::size_t>(stride_10bit * height), 0U);
+        const Cnr3ConstNativePlaneByteView native_plane{
+            native_bytes.data(),
+            width,
+            height,
+            5,
+            bits_10
+        };
+        std::vector<int> scalar(static_cast<std::size_t>(scalar_stride * height), -910);
+        Cnr3MutablePlaneBufferView scalar_plane{
+            scalar.data(),
+            width,
+            height,
+            scalar_stride
+        };
+
+        if (
+            cnr3_copy_native_plane_to_scalar_buffer(native_plane, scalar_plane) != Cnr3Status::invalid_argument ||
+            scalar[0] != -910 ||
+            scalar[1] != -910 ||
+            scalar[2] != -910 ||
+            scalar[4] != -910 ||
+            scalar[5] != -910 ||
+            scalar[6] != -910
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line("P.8A native byte-plane access vector proof scenario");
+    cnr3_cache_core_selftest_trace_line("    bit-depth proof maps 8-bit to one-byte storage and 9..16-bit to two-byte storage");
+    cnr3_cache_core_selftest_trace_line("    native byte-stride loads convert 8-bit and 10-bit rows into scalar int planes");
+    cnr3_cache_core_selftest_trace_line("    10-bit vectors prove column byte offsets use x*storage_bytes");
+    cnr3_cache_core_selftest_trace_line("    scalar-to-native stores preserve active samples and native padding bytes");
+    cnr3_cache_core_selftest_trace_line("    invalid late native/scalar samples publish no partial destination plane");
+    cnr3_cache_core_selftest_trace_line("    VapourSynth frame ownership, source-frame lifecycle, and scene-change remain deferred");
+
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -10505,6 +10946,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "source_luma_downsample_plane_traversal_proof",
             cnr3_cache_core_selftest_source_luma_downsample_plane_traversal_proof
+        },
+        {
+            "native_byte_plane_access_vector_proof",
+            cnr3_cache_core_selftest_native_byte_plane_access_vector_proof
         },
         {
             "lookup_addref_hit_and_miss",

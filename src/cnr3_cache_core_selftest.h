@@ -387,6 +387,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_source_luma_downsample_plane_traversal_proof() noexcept;
 
 /*
+    Run the CMS07-P.8A native byte-plane access vector proof.
+
+    This proves synthetic native byte-stride sample load/store and whole-plane
+    scalar/native copy discipline for 8-bit and 9..16-bit integer storage. It
+    verifies that multi-byte column addressing uses x * storage_bytes and that
+    invalid late samples publish no partial destination. It does not use
+    VapourSynth frame pointers, source-frame lifecycle, cache authority, or
+    scene-change handling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_native_byte_plane_access_vector_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

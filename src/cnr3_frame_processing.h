@@ -47,13 +47,22 @@
     VapourSynth frame memory, uint8_t/uint16_t byte-stride reinterpretation,
     scene-change handling, or getFrame/cache integration.
 
+    CMS07-P.8A adds native byte-plane access helpers for synthetic byte
+    buffers. It proves one-byte 8-bit storage, two-byte 9..16-bit storage,
+    byte-stride-aware load/store, and whole-plane scalar/native copy discipline.
+    Multi-byte sample access advances by x * storage_bytes within each row and
+    uses memcpy so the proof layer does not depend on pointer alignment. It is
+    still not VapourSynth frame ownership, getReadPtr/getWritePtr/getStride
+    wiring, source-frame lifecycle, scene-change handling, or getFrame/cache
+    integration.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
-        - real frame-buffer byte-stride access and uint8_t/uint16_t reinterpretation;
+        - real VapourSynth frame ownership and pointer/stride acquisition;
         - scene-change/reset decisions;
         - explicit previous-output frame acquisition and ownership;
         - VapourSynth frame access and getFrame integration.
@@ -152,6 +161,51 @@ struct Cnr3DownsampledLumaPlaneProcessSummary {
     int first_output_sample = 0;
     int last_output_sample = 0;
 };
+
+struct Cnr3ConstNativePlaneByteView {
+    const void* data = nullptr;
+    int width = 0;
+    int height = 0;
+    int stride_bytes = 0;
+    int bits_per_sample = 0;
+};
+
+struct Cnr3MutableNativePlaneByteView {
+    void* data = nullptr;
+    int width = 0;
+    int height = 0;
+    int stride_bytes = 0;
+    int bits_per_sample = 0;
+};
+
+[[nodiscard]] Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
+    int bits_per_sample,
+    int& storage_bytes
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_load_native_plane_sample(
+    const Cnr3ConstNativePlaneByteView& plane,
+    int x,
+    int y,
+    int& output_sample
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_store_native_plane_sample(
+    Cnr3MutableNativePlaneByteView& plane,
+    int x,
+    int y,
+    int sample
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_copy_native_plane_to_scalar_buffer(
+    const Cnr3ConstNativePlaneByteView& native_plane,
+    Cnr3MutablePlaneBufferView& scalar_plane
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_copy_scalar_buffer_to_native_plane(
+    const Cnr3ConstPlaneBufferView& scalar_plane,
+    Cnr3MutableNativePlaneByteView& native_plane
+) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     int current_downsampled_luma_sample,

@@ -24,13 +24,19 @@
     y1 = y0 + subSamplingH, and (a + b + c + d + 2) >> 2. Right/bottom edge
     reads are clamped deliberately so CNR3 does not rely on frame-padding slack.
 
+    CMS07-P.5A composes the scalar signed-difference, response-table lookup,
+    and weighted chroma blend decision. It keeps current-minus-previous
+    differences signed end-to-end, uses the P.1A total table lookup, and requires
+    the P.2A table geometry convention: table_offset = sample_peak and
+    table_size = sample_peak * 2 + 1. This is still scalar/vector proof only,
+    not frame traversal.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
-        - signed-difference extraction and table lookup from frame pixels;
         - native-subsampling traversal;
         - frame-buffer downSampleLuma traversal;
         - scene-change/reset decisions;
@@ -45,6 +51,7 @@
 #include "cnr3_common.h"
 
 #include <cstdint>
+#include <vector>
 
 struct Cnr3DownsampledLumaTapCoordinates {
     int x0 = 0;
@@ -89,4 +96,24 @@ struct Cnr3DownsampledLumaTapCoordinates {
     int chroma_response,
     int bits_per_sample,
     int& output_sample
+) noexcept;
+
+struct Cnr3ChromaBlendSampleResult {
+    int luma_signed_diff = 0;
+    int chroma_signed_diff = 0;
+    int y_response = 0;
+    int chroma_response = 0;
+    int output_sample = 0;
+};
+
+[[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
+    int current_downsampled_luma_sample,
+    int previous_downsampled_luma_sample,
+    int current_source_chroma_sample,
+    int previous_filtered_chroma_sample,
+    const std::vector<int>& y_response_table,
+    const std::vector<int>& chroma_response_table,
+    int table_offset,
+    int bits_per_sample,
+    Cnr3ChromaBlendSampleResult& result
 ) noexcept;

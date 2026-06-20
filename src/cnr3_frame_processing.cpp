@@ -1,5 +1,7 @@
 #include "cnr3_frame_processing.h"
 
+#include "cnr3_response_tables.h"
+
 #include <limits>
 
 namespace {
@@ -206,5 +208,96 @@ Cnr3Status cnr3_blend_chroma_sample(
 
     output_sample = static_cast<int>(blended_sample);
 
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
+    int current_downsampled_luma_sample,
+    int previous_downsampled_luma_sample,
+    int current_source_chroma_sample,
+    int previous_filtered_chroma_sample,
+    const std::vector<int>& y_response_table,
+    const std::vector<int>& chroma_response_table,
+    int table_offset,
+    int bits_per_sample,
+    Cnr3ChromaBlendSampleResult& result
+) noexcept {
+    int sample_peak = 0;
+
+    const Cnr3Status peak_status = cnr3_sample_peak_for_bit_depth(
+        bits_per_sample,
+        sample_peak
+    );
+
+    if (peak_status != Cnr3Status::ok) {
+        return peak_status;
+    }
+
+    int expected_table_offset = 0;
+    int expected_table_size = 0;
+
+    const Cnr3Status geometry_status =
+        cnr3_response_table_geometry_for_sample_peak(
+            sample_peak,
+            expected_table_offset,
+            expected_table_size
+        );
+
+    if (geometry_status != Cnr3Status::ok) {
+        return geometry_status;
+    }
+
+    if (
+        table_offset != expected_table_offset ||
+        y_response_table.size() != static_cast<std::size_t>(expected_table_size) ||
+        chroma_response_table.size() != static_cast<std::size_t>(expected_table_size) ||
+        !cnr3_value_is_inclusive_range(current_downsampled_luma_sample, 0, sample_peak) ||
+        !cnr3_value_is_inclusive_range(previous_downsampled_luma_sample, 0, sample_peak) ||
+        !cnr3_value_is_inclusive_range(current_source_chroma_sample, 0, sample_peak) ||
+        !cnr3_value_is_inclusive_range(previous_filtered_chroma_sample, 0, sample_peak)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int luma_signed_diff =
+        current_downsampled_luma_sample - previous_downsampled_luma_sample;
+    const int chroma_signed_diff =
+        current_source_chroma_sample - previous_filtered_chroma_sample;
+
+    const int y_response = get_cnr3_table_value_for_signed_diff(
+        y_response_table,
+        table_offset,
+        luma_signed_diff
+    );
+
+    const int chroma_response = get_cnr3_table_value_for_signed_diff(
+        chroma_response_table,
+        table_offset,
+        chroma_signed_diff
+    );
+
+    int blended_sample = 0;
+
+    const Cnr3Status blend_status = cnr3_blend_chroma_sample(
+        current_source_chroma_sample,
+        previous_filtered_chroma_sample,
+        y_response,
+        chroma_response,
+        bits_per_sample,
+        blended_sample
+    );
+
+    if (blend_status != Cnr3Status::ok) {
+        return blend_status;
+    }
+
+    Cnr3ChromaBlendSampleResult resolved{};
+    resolved.luma_signed_diff = luma_signed_diff;
+    resolved.chroma_signed_diff = chroma_signed_diff;
+    resolved.y_response = y_response;
+    resolved.chroma_response = chroma_response;
+    resolved.output_sample = blended_sample;
+
+    result = resolved;
     return Cnr3Status::ok;
 }

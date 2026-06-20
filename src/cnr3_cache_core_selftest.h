@@ -354,6 +354,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_downsampled_luma_vector_proof() noexcept;
 
 /*
+    Run the CMS07-P.5A signed-difference/table-lookup blend proof.
+
+    This is the fifth pixel-number proof after the C.14A cache-core milestone.
+    It composes signed current-minus-previous differences, the P.1A total
+    response-table lookup, the P.2A table geometry convention, and the P.3A
+    weighted chroma blend helper without adding frame traversal, scene-change,
+    or VapourSynth frame access.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_signed_difference_table_lookup_blend_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

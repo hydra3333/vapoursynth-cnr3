@@ -9460,6 +9460,391 @@ Cnr3Status cnr3_cache_core_selftest_downsampled_luma_vector_proof() noexcept {
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_signed_difference_table_lookup_blend_proof() noexcept {
+    /*
+        P.5A composes the already-proven scalar pixel helpers only. It proves
+        signed current-minus-previous differences, P.1A total lookup, P.2A table
+        geometry, and P.3A blend integration without walking frame buffers.
+    */
+    constexpr int bits_8 = 8;
+    constexpr int table_offset_8 = 255;
+    constexpr int table_size_8 = 511;
+
+    constexpr int bits_16 = 16;
+    constexpr int table_offset_16 = 65535;
+    constexpr int table_size_16 = 131071;
+
+    constexpr int expected_positive_luma_diff = 5;
+    constexpr int expected_negative_chroma_diff = -10;
+    constexpr int expected_positive_luma_response = 216;
+    constexpr int expected_negative_chroma_response = 254;
+    constexpr std::int64_t expected_positive_negative_weight = 54864;
+    constexpr int expected_positive_negative_output = 48;
+
+    constexpr int expected_negative_luma_diff = -10;
+    constexpr int expected_positive_chroma_diff = 10;
+    constexpr int expected_negative_luma_response = 127;
+    constexpr int expected_positive_chroma_response = 145;
+    constexpr std::int64_t expected_negative_positive_weight = 18415;
+    constexpr int expected_negative_positive_output = 57;
+
+    constexpr int expected_extreme_luma_diff = 255;
+    constexpr int expected_extreme_chroma_diff = -255;
+    constexpr std::int64_t expected_extreme_weight = 65025;
+    constexpr int expected_extreme_output = 253;
+
+    constexpr int expected_zero_response_output = 40;
+
+    constexpr int expected_16bit_luma_diff = 7000;
+    constexpr int expected_16bit_chroma_diff = -49000;
+    constexpr int expected_16bit_luma_response = 43872;
+    constexpr int expected_16bit_chroma_response = 51400;
+    constexpr std::int64_t expected_16bit_weight = 2255020800LL;
+    constexpr int expected_16bit_output = 26727;
+
+    static_assert(table_size_8 == (table_offset_8 * 2) + 1);
+    static_assert(table_size_16 == (table_offset_16 * 2) + 1);
+    static_assert(expected_positive_negative_weight == 216LL * 254LL);
+    static_assert(expected_negative_positive_weight == 127LL * 145LL);
+    static_assert(expected_extreme_weight == 255LL * 255LL);
+    static_assert(expected_16bit_weight == 43872LL * 51400LL);
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto result_matches = [](
+        const Cnr3ChromaBlendSampleResult& result,
+        int luma_signed_diff,
+        int chroma_signed_diff,
+        int y_response,
+        int chroma_response,
+        int output_sample
+    ) noexcept -> bool {
+        return result.luma_signed_diff == luma_signed_diff &&
+            result.chroma_signed_diff == chroma_signed_diff &&
+            result.y_response == y_response &&
+            result.chroma_response == chroma_response &&
+            result.output_sample == output_sample;
+    };
+
+    const auto sentinel_matches = [result_matches](
+        const Cnr3ChromaBlendSampleResult& result
+    ) noexcept -> bool {
+        return result_matches(result, 1, 2, 3, 4, 5);
+    };
+
+    const auto set_table_value = [](
+        std::vector<int>& table,
+        int table_offset,
+        int signed_diff,
+        int value
+    ) noexcept {
+        table[static_cast<std::size_t>(table_offset + signed_diff)] = value;
+    };
+
+    std::vector<int> y_table_8(static_cast<std::size_t>(table_size_8), 0);
+    std::vector<int> chroma_table_8(static_cast<std::size_t>(table_size_8), 0);
+
+    set_table_value(
+        y_table_8,
+        table_offset_8,
+        expected_positive_luma_diff,
+        expected_positive_luma_response
+    );
+    set_table_value(
+        chroma_table_8,
+        table_offset_8,
+        expected_negative_chroma_diff,
+        expected_negative_chroma_response
+    );
+    set_table_value(
+        y_table_8,
+        table_offset_8,
+        expected_negative_luma_diff,
+        expected_negative_luma_response
+    );
+    set_table_value(
+        chroma_table_8,
+        table_offset_8,
+        expected_positive_chroma_diff,
+        expected_positive_chroma_response
+    );
+    set_table_value(y_table_8, table_offset_8, expected_extreme_luma_diff, 255);
+    set_table_value(chroma_table_8, table_offset_8, expected_extreme_chroma_diff, 255);
+
+    {
+        Cnr3ChromaBlendSampleResult result{};
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                105,
+                100,
+                40,
+                50,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8,
+                bits_8,
+                result
+            ) != Cnr3Status::ok ||
+            !result_matches(
+                result,
+                expected_positive_luma_diff,
+                expected_negative_chroma_diff,
+                expected_positive_luma_response,
+                expected_negative_chroma_response,
+                expected_positive_negative_output
+            ) ||
+            cnr3_calculate_combined_blend_weight(result.y_response, result.chroma_response) !=
+                expected_positive_negative_weight
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3ChromaBlendSampleResult result{};
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                90,
+                100,
+                60,
+                50,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8,
+                bits_8,
+                result
+            ) != Cnr3Status::ok ||
+            !result_matches(
+                result,
+                expected_negative_luma_diff,
+                expected_positive_chroma_diff,
+                expected_negative_luma_response,
+                expected_positive_chroma_response,
+                expected_negative_positive_output
+            ) ||
+            cnr3_calculate_combined_blend_weight(result.y_response, result.chroma_response) !=
+                expected_negative_positive_weight
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3ChromaBlendSampleResult result{};
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                255,
+                0,
+                0,
+                255,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8,
+                bits_8,
+                result
+            ) != Cnr3Status::ok ||
+            !result_matches(
+                result,
+                expected_extreme_luma_diff,
+                expected_extreme_chroma_diff,
+                255,
+                255,
+                expected_extreme_output
+            ) ||
+            cnr3_calculate_combined_blend_weight(result.y_response, result.chroma_response) !=
+                expected_extreme_weight
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3ChromaBlendSampleResult result{};
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                120,
+                120,
+                40,
+                50,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8,
+                bits_8,
+                result
+            ) != Cnr3Status::ok ||
+            !result_matches(
+                result,
+                0,
+                expected_negative_chroma_diff,
+                0,
+                expected_negative_chroma_response,
+                expected_zero_response_output
+            )
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> y_table_16(static_cast<std::size_t>(table_size_16), 0);
+        std::vector<int> chroma_table_16(static_cast<std::size_t>(table_size_16), 0);
+        Cnr3ChromaBlendSampleResult result{};
+
+        set_table_value(
+            y_table_16,
+            table_offset_16,
+            expected_16bit_luma_diff,
+            expected_16bit_luma_response
+        );
+        set_table_value(
+            chroma_table_16,
+            table_offset_16,
+            expected_16bit_chroma_diff,
+            expected_16bit_chroma_response
+        );
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                40000,
+                33000,
+                1000,
+                50000,
+                y_table_16,
+                chroma_table_16,
+                table_offset_16,
+                bits_16,
+                result
+            ) != Cnr3Status::ok ||
+            !result_matches(
+                result,
+                expected_16bit_luma_diff,
+                expected_16bit_chroma_diff,
+                expected_16bit_luma_response,
+                expected_16bit_chroma_response,
+                expected_16bit_output
+            ) ||
+            cnr3_calculate_combined_blend_weight(result.y_response, result.chroma_response) !=
+                expected_16bit_weight
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3ChromaBlendSampleResult result{};
+        result.luma_signed_diff = 1;
+        result.chroma_signed_diff = 2;
+        result.y_response = 3;
+        result.chroma_response = 4;
+        result.output_sample = 5;
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                105,
+                100,
+                40,
+                50,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8 + 1,
+                bits_8,
+                result
+            ) != Cnr3Status::invalid_argument ||
+            !sentinel_matches(result)
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                105,
+                100,
+                40,
+                50,
+                std::vector<int>(static_cast<std::size_t>(table_size_8 - 1), 0),
+                chroma_table_8,
+                table_offset_8,
+                bits_8,
+                result
+            ) != Cnr3Status::invalid_argument ||
+            !sentinel_matches(result)
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                256,
+                100,
+                40,
+                50,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8,
+                bits_8,
+                result
+            ) != Cnr3Status::invalid_argument ||
+            !sentinel_matches(result)
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_chroma_sample_from_response_tables(
+                105,
+                100,
+                40,
+                50,
+                y_table_8,
+                chroma_table_8,
+                table_offset_8,
+                7,
+                result
+            ) != Cnr3Status::invalid_argument ||
+            !sentinel_matches(result)
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "P.5A signed-difference/table-lookup blend proof scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    signed current-minus-previous luma/chroma diffs feed P.1A total lookup"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    P.2A geometry proof requires table_offset=sample_peak and full signed-diff table size"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    positive luma plus negative chroma diff proves no unsigned wrap on table path"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    negative luma plus positive chroma diff proves signed lookup before blending"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    zero-response proof returns current source chroma after table lookup"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    16-bit vector proves signed lookup and P.3A int64 blend remain composed"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    invalid geometry/sample proofs preserve result sentinel without partial publish"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    frame traversal, source-frame access, and scene-change remain deferred to P.6A"
+    );
+
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -9588,6 +9973,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "downsampled_luma_vector_proof",
             cnr3_cache_core_selftest_downsampled_luma_vector_proof
+        },
+        {
+            "signed_difference_table_lookup_blend_proof",
+            cnr3_cache_core_selftest_signed_difference_table_lookup_blend_proof
         },
         {
             "lookup_addref_hit_and_miss",

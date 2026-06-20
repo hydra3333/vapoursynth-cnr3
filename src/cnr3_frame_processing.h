@@ -38,13 +38,22 @@
     VapourSynth frame access, source-frame request/retrieve lifecycle, explicit
     previous-output frame acquisition, scene-change handling, or cache integration.
 
+    CMS07-P.7A adds source-luma downsample traversal over scalar int buffers.
+    It applies the P.4A tap coordinate and four-tap average helpers across a
+    whole source luma plane to produce the downsampled-luma plane consumed by
+    P.6A. It preserves explicit stride handling, validates the expected chroma
+    grid dimensions from the luma dimensions and subsampling factors, and
+    publishes output only after the whole plane succeeds. It is still not real
+    VapourSynth frame memory, uint8_t/uint16_t byte-stride reinterpretation,
+    scene-change handling, or getFrame/cache integration.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
-        - frame-buffer downSampleLuma traversal from source luma planes;
+        - real frame-buffer byte-stride access and uint8_t/uint16_t reinterpretation;
         - scene-change/reset decisions;
         - explicit previous-output frame acquisition and ownership;
         - VapourSynth frame access and getFrame integration.
@@ -134,6 +143,16 @@ struct Cnr3ChromaPlaneProcessSummary {
     int last_output_sample = 0;
 };
 
+struct Cnr3DownsampledLumaPlaneProcessSummary {
+    int source_width = 0;
+    int source_height = 0;
+    int output_width = 0;
+    int output_height = 0;
+    int samples_processed = 0;
+    int first_output_sample = 0;
+    int last_output_sample = 0;
+};
+
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     int current_downsampled_luma_sample,
     int previous_downsampled_luma_sample,
@@ -144,6 +163,15 @@ struct Cnr3ChromaPlaneProcessSummary {
     int table_offset,
     int bits_per_sample,
     Cnr3ChromaBlendSampleResult& result
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(
+    const Cnr3ConstPlaneBufferView& source_luma_plane,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    int bits_per_sample,
+    Cnr3MutablePlaneBufferView& output_downsampled_luma_plane,
+    Cnr3DownsampledLumaPlaneProcessSummary& summary
 ) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_process_chroma_plane_from_downsampled_luma(

@@ -79,6 +79,32 @@ namespace {
     return view.width == width && view.height == height;
 }
 
+[[nodiscard]] Cnr3Status cnr3_expected_chroma_dimension_for_luma_dimension(
+    int luma_dimension,
+    int sub_sampling,
+    int& chroma_dimension
+) noexcept {
+    chroma_dimension = 0;
+
+    if (
+        luma_dimension <= 0 ||
+        sub_sampling < 0 ||
+        sub_sampling > 1
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int divisor = 1 << sub_sampling;
+    const int round_up = divisor - 1;
+
+    if (luma_dimension > std::numeric_limits<int>::max() - round_up) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    chroma_dimension = (luma_dimension + round_up) >> sub_sampling;
+    return Cnr3Status::ok;
+}
+
 [[nodiscard]] int cnr3_plane_sample_at(
     const Cnr3ConstPlaneBufferView& view,
     int x,
@@ -357,6 +383,129 @@ Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     resolved.output_sample = blended_sample;
 
     result = resolved;
+    return Cnr3Status::ok;
+}
+
+
+Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(
+    const Cnr3ConstPlaneBufferView& source_luma_plane,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    int bits_per_sample,
+    Cnr3MutablePlaneBufferView& output_downsampled_luma_plane,
+    Cnr3DownsampledLumaPlaneProcessSummary& summary
+) noexcept {
+    if (
+        !cnr3_const_plane_view_is_valid(source_luma_plane) ||
+        !cnr3_mutable_plane_view_is_valid(output_downsampled_luma_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    int expected_output_width = 0;
+    int expected_output_height = 0;
+
+    const Cnr3Status width_status =
+        cnr3_expected_chroma_dimension_for_luma_dimension(
+            source_luma_plane.width,
+            sub_sampling_w,
+            expected_output_width
+        );
+
+    if (width_status != Cnr3Status::ok) {
+        return width_status;
+    }
+
+    const Cnr3Status height_status =
+        cnr3_expected_chroma_dimension_for_luma_dimension(
+            source_luma_plane.height,
+            sub_sampling_h,
+            expected_output_height
+        );
+
+    if (height_status != Cnr3Status::ok) {
+        return height_status;
+    }
+
+    if (
+        !cnr3_mutable_plane_dimensions_match(
+            output_downsampled_luma_plane,
+            expected_output_width,
+            expected_output_height
+        )
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int sample_count = expected_output_width * expected_output_height;
+    std::vector<int> resolved_outputs;
+
+    try {
+        resolved_outputs.resize(static_cast<std::size_t>(sample_count));
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    for (int y = 0; y < expected_output_height; ++y) {
+        for (int x = 0; x < expected_output_width; ++x) {
+            Cnr3DownsampledLumaTapCoordinates taps{};
+
+            const Cnr3Status coordinate_status =
+                cnr3_downsample_luma_tap_coordinates(
+                    x,
+                    y,
+                    source_luma_plane.width,
+                    source_luma_plane.height,
+                    sub_sampling_w,
+                    sub_sampling_h,
+                    taps
+                );
+
+            if (coordinate_status != Cnr3Status::ok) {
+                return coordinate_status;
+            }
+
+            int output_sample = 0;
+
+            const Cnr3Status sample_status = cnr3_downsample_luma_sample(
+                cnr3_plane_sample_at(source_luma_plane, taps.x0, taps.y0),
+                cnr3_plane_sample_at(source_luma_plane, taps.x1, taps.y0),
+                cnr3_plane_sample_at(source_luma_plane, taps.x0, taps.y1),
+                cnr3_plane_sample_at(source_luma_plane, taps.x1, taps.y1),
+                bits_per_sample,
+                output_sample
+            );
+
+            if (sample_status != Cnr3Status::ok) {
+                return sample_status;
+            }
+
+            resolved_outputs[static_cast<std::size_t>((y * expected_output_width) + x)] =
+                output_sample;
+        }
+    }
+
+    for (int y = 0; y < expected_output_height; ++y) {
+        for (int x = 0; x < expected_output_width; ++x) {
+            cnr3_write_plane_sample(
+                output_downsampled_luma_plane,
+                x,
+                y,
+                resolved_outputs[static_cast<std::size_t>((y * expected_output_width) + x)]
+            );
+        }
+    }
+
+    Cnr3DownsampledLumaPlaneProcessSummary resolved_summary{};
+    resolved_summary.source_width = source_luma_plane.width;
+    resolved_summary.source_height = source_luma_plane.height;
+    resolved_summary.output_width = expected_output_width;
+    resolved_summary.output_height = expected_output_height;
+    resolved_summary.samples_processed = sample_count;
+    resolved_summary.first_output_sample = resolved_outputs.front();
+    resolved_summary.last_output_sample = resolved_outputs.back();
+
+    summary = resolved_summary;
     return Cnr3Status::ok;
 }
 

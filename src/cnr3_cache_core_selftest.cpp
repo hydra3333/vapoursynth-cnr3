@@ -10122,6 +10122,249 @@ Cnr3Status cnr3_cache_core_selftest_chroma_plane_traversal_vector_proof() noexce
 }
 
 
+
+Cnr3Status cnr3_cache_core_selftest_source_luma_downsample_plane_traversal_proof() noexcept {
+    /*
+        P.7A traverses scalar source-luma buffers and produces downsampled-luma
+        scalar buffers for the P.6A chroma-plane traversal. It still does not
+        access VapourSynth frames or real byte-strided frame memory.
+    */
+    constexpr int bits_10 = 10;
+    constexpr int source_width = 5;
+    constexpr int source_height = 5;
+    constexpr int source_stride = 7;
+    constexpr int output_width_420 = 3;
+    constexpr int output_height_420 = 3;
+    constexpr int output_stride_420 = 5;
+
+    constexpr int expected_420_first = 51;
+    constexpr int expected_420_mid = 253;
+    constexpr int expected_420_right_edge = 54;
+    constexpr int expected_420_bottom_edge = 401;
+    constexpr int expected_420_last = 404;
+    constexpr int expected_420_count = output_width_420 * output_height_420;
+
+    static_assert(expected_420_count == 9);
+    static_assert(expected_420_first == ((0 + 1 + 100 + 101 + 2) >> 2));
+    static_assert(expected_420_mid == ((202 + 203 + 302 + 303 + 2) >> 2));
+    static_assert(expected_420_right_edge == ((4 + 4 + 104 + 104 + 2) >> 2));
+    static_assert(expected_420_bottom_edge == ((400 + 401 + 400 + 401 + 2) >> 2));
+    static_assert(expected_420_last == ((404 + 404 + 404 + 404 + 2) >> 2));
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto make_source_plane = [](
+        int width,
+        int height,
+        int stride
+    ) noexcept -> std::vector<int> {
+        std::vector<int> samples(static_cast<std::size_t>(stride * height), -1);
+
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                samples[static_cast<std::size_t>((y * stride) + x)] = (y * 100) + x;
+            }
+        }
+
+        return samples;
+    };
+
+    const auto output_padding_is = [](
+        const std::vector<int>& output,
+        int width,
+        int height,
+        int stride,
+        int sentinel
+    ) noexcept -> bool {
+        for (int y = 0; y < height; ++y) {
+            for (int x = width; x < stride; ++x) {
+                if (output[static_cast<std::size_t>((y * stride) + x)] != sentinel) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    const auto summary_matches = [](
+        const Cnr3DownsampledLumaPlaneProcessSummary& summary,
+        int expected_source_width,
+        int expected_source_height,
+        int expected_output_width,
+        int expected_output_height,
+        int expected_count,
+        int expected_first,
+        int expected_last
+    ) noexcept -> bool {
+        return summary.source_width == expected_source_width &&
+            summary.source_height == expected_source_height &&
+            summary.output_width == expected_output_width &&
+            summary.output_height == expected_output_height &&
+            summary.samples_processed == expected_count &&
+            summary.first_output_sample == expected_first &&
+            summary.last_output_sample == expected_last;
+    };
+
+    {
+        const std::vector<int> source_luma = make_source_plane(source_width, source_height, source_stride);
+        const Cnr3ConstPlaneBufferView source_luma_plane{source_luma.data(), source_width, source_height, source_stride};
+        std::vector<int> output_luma(static_cast<std::size_t>(output_stride_420 * output_height_420), -700);
+        Cnr3MutablePlaneBufferView output_luma_plane{output_luma.data(), output_width_420, output_height_420, output_stride_420};
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+
+        if (
+            cnr3_downsample_luma_plane_to_chroma_grid(source_luma_plane, 1, 1, bits_10, output_luma_plane, summary) != Cnr3Status::ok ||
+            output_luma[0] != expected_420_first ||
+            output_luma[1] != 53 ||
+            output_luma[2] != expected_420_right_edge ||
+            output_luma[5] != 251 ||
+            output_luma[6] != expected_420_mid ||
+            output_luma[7] != 254 ||
+            output_luma[10] != expected_420_bottom_edge ||
+            output_luma[11] != 403 ||
+            output_luma[12] != expected_420_last ||
+            !output_padding_is(output_luma, output_width_420, output_height_420, output_stride_420, -700) ||
+            !summary_matches(summary, source_width, source_height, output_width_420, output_height_420, expected_420_count, expected_420_first, expected_420_last)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width_422 = 5;
+        constexpr int height_422 = 2;
+        constexpr int stride_422 = 6;
+        constexpr int output_width_422 = 3;
+        constexpr int output_height_422 = 2;
+        constexpr int output_stride_422 = 4;
+        const std::vector<int> source_luma = make_source_plane(width_422, height_422, stride_422);
+        const Cnr3ConstPlaneBufferView source_luma_plane{source_luma.data(), width_422, height_422, stride_422};
+        std::vector<int> output_luma(static_cast<std::size_t>(output_stride_422 * output_height_422), -710);
+        Cnr3MutablePlaneBufferView output_luma_plane{output_luma.data(), output_width_422, output_height_422, output_stride_422};
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+
+        if (
+            cnr3_downsample_luma_plane_to_chroma_grid(source_luma_plane, 1, 0, bits_10, output_luma_plane, summary) != Cnr3Status::ok ||
+            output_luma[0] != 1 || output_luma[1] != 3 || output_luma[2] != 4 ||
+            output_luma[4] != 101 || output_luma[5] != 103 || output_luma[6] != 104 ||
+            !output_padding_is(output_luma, output_width_422, output_height_422, output_stride_422, -710) ||
+            !summary_matches(summary, width_422, height_422, 3, 2, 6, 1, 104)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width_440 = 4;
+        constexpr int height_440 = 5;
+        constexpr int stride_440 = 6;
+        constexpr int output_width_440 = 4;
+        constexpr int output_height_440 = 3;
+        constexpr int output_stride_440 = 5;
+        const std::vector<int> source_luma = make_source_plane(width_440, height_440, stride_440);
+        const Cnr3ConstPlaneBufferView source_luma_plane{source_luma.data(), width_440, height_440, stride_440};
+        std::vector<int> output_luma(static_cast<std::size_t>(output_stride_440 * output_height_440), -720);
+        Cnr3MutablePlaneBufferView output_luma_plane{output_luma.data(), output_width_440, output_height_440, output_stride_440};
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+
+        if (
+            cnr3_downsample_luma_plane_to_chroma_grid(source_luma_plane, 0, 1, bits_10, output_luma_plane, summary) != Cnr3Status::ok ||
+            output_luma[0] != 51 || output_luma[3] != 53 ||
+            output_luma[5] != 251 || output_luma[8] != 253 ||
+            output_luma[10] != 401 || output_luma[13] != 403 ||
+            !output_padding_is(output_luma, output_width_440, output_height_440, output_stride_440, -720) ||
+            !summary_matches(summary, width_440, height_440, 4, 3, 12, 51, 403)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width_444 = 4;
+        constexpr int height_444 = 2;
+        constexpr int stride_444 = 6;
+        constexpr int output_width_444 = 4;
+        constexpr int output_height_444 = 2;
+        constexpr int output_stride_444 = 5;
+        const std::vector<int> source_luma = make_source_plane(width_444, height_444, stride_444);
+        const Cnr3ConstPlaneBufferView source_luma_plane{source_luma.data(), width_444, height_444, stride_444};
+        std::vector<int> output_luma(static_cast<std::size_t>(output_stride_444 * output_height_444), -730);
+        Cnr3MutablePlaneBufferView output_luma_plane{output_luma.data(), output_width_444, output_height_444, output_stride_444};
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+
+        if (
+            cnr3_downsample_luma_plane_to_chroma_grid(source_luma_plane, 0, 0, bits_10, output_luma_plane, summary) != Cnr3Status::ok ||
+            output_luma[0] != 1 || output_luma[1] != 2 || output_luma[3] != 3 ||
+            output_luma[5] != 101 || output_luma[8] != 103 ||
+            !output_padding_is(output_luma, output_width_444, output_height_444, output_stride_444, -730) ||
+            !summary_matches(summary, width_444, height_444, 4, 2, 8, 1, 103)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        std::vector<int> source_luma = make_source_plane(source_width, source_height, source_stride);
+        source_luma[static_cast<std::size_t>((4 * source_stride) + 4)] = 2000;
+        const Cnr3ConstPlaneBufferView source_luma_plane{source_luma.data(), source_width, source_height, source_stride};
+        std::vector<int> output_luma(static_cast<std::size_t>(output_stride_420 * output_height_420), -800);
+        Cnr3MutablePlaneBufferView output_luma_plane{output_luma.data(), output_width_420, output_height_420, output_stride_420};
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+        summary.source_width = 1;
+        summary.source_height = 2;
+        summary.output_width = 3;
+        summary.output_height = 4;
+        summary.samples_processed = 5;
+        summary.first_output_sample = 6;
+        summary.last_output_sample = 7;
+
+        if (
+            cnr3_downsample_luma_plane_to_chroma_grid(source_luma_plane, 1, 1, bits_10, output_luma_plane, summary) != Cnr3Status::invalid_argument ||
+            output_luma[0] != -800 || output_luma[1] != -800 || output_luma[2] != -800 ||
+            output_luma[10] != -800 || output_luma[11] != -800 || output_luma[12] != -800 ||
+            !output_padding_is(output_luma, output_width_420, output_height_420, output_stride_420, -800) ||
+            !summary_matches(summary, 1, 2, 3, 4, 5, 6, 7)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        const std::vector<int> source_luma = make_source_plane(source_width, source_height, source_stride);
+        const Cnr3ConstPlaneBufferView source_luma_plane{source_luma.data(), source_width, source_height, source_stride};
+        std::vector<int> output_luma(static_cast<std::size_t>(output_stride_420 * output_height_420), -810);
+        Cnr3MutablePlaneBufferView bad_output_luma_plane{output_luma.data(), output_width_420 - 1, output_height_420, output_stride_420};
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+        summary.source_width = 9;
+        summary.source_height = 8;
+        summary.output_width = 7;
+        summary.output_height = 6;
+        summary.samples_processed = 5;
+        summary.first_output_sample = 4;
+        summary.last_output_sample = 3;
+
+        if (
+            cnr3_downsample_luma_plane_to_chroma_grid(source_luma_plane, 1, 1, bits_10, bad_output_luma_plane, summary) != Cnr3Status::invalid_argument ||
+            output_luma[0] != -810 || output_luma[12] != -810 ||
+            !summary_matches(summary, 9, 8, 7, 6, 5, 4, 3)
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line("P.7A source-luma downsample plane traversal proof scenario");
+    cnr3_cache_core_selftest_trace_line("    scalar source-luma buffers are traversed with explicit strides");
+    cnr3_cache_core_selftest_trace_line("    expected chroma-grid dimensions are derived from luma size and subsampling");
+    cnr3_cache_core_selftest_trace_line("    4:2:0, 4:2:2, 4:4:0, and 4:4:4 traversal shapes are proven");
+    cnr3_cache_core_selftest_trace_line("    right/bottom edge taps are clamped during full-plane traversal");
+    cnr3_cache_core_selftest_trace_line("    output padding is preserved and invalid late-sample failure publishes no partial plane");
+    cnr3_cache_core_selftest_trace_line("    real frame-memory access, byte-stride reinterpretation, and scene-change remain deferred");
+
+    return Cnr3Status::ok;
+}
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -10258,6 +10501,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "chroma_plane_traversal_vector_proof",
             cnr3_cache_core_selftest_chroma_plane_traversal_vector_proof
+        },
+        {
+            "source_luma_downsample_plane_traversal_proof",
+            cnr3_cache_core_selftest_source_luma_downsample_plane_traversal_proof
         },
         {
             "lookup_addref_hit_and_miss",

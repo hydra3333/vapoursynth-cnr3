@@ -375,6 +375,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_chroma_plane_traversal_vector_proof() noexcept;
 
 /*
+    Run the CMS07-P.7A source-luma downsample plane traversal proof.
+
+    This applies the P.4A scalar downsampled-luma tap and sample helpers across
+    scalar source-luma buffers to produce the downsampled-luma planes consumed
+    by P.6A. It proves expected chroma-grid dimensions, stride handling, edge
+    clamping, padding preservation, and no-partial-publish invalid-input
+    behaviour without real frame memory, VapourSynth frame access, cache
+    authority, or scene-change handling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_source_luma_downsample_plane_traversal_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

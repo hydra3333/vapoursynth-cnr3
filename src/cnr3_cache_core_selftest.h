@@ -331,6 +331,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_response_table_config_surface_proof() noexcept;
 
 /*
+    Run the CMS07-P.3A weighted chroma blend vector proof.
+
+    This is the third pixel-number proof after the C.14A cache-core milestone.
+    It temporarily uses the existing selftest runner so the four-way harness,
+    count discipline, and forced-fail machinery remain unchanged. It proves
+    the source-confirmed vsCnr2 weighted chroma blend arithmetic with an
+    int64 accumulator, including the max-response convex-combination boundary.
+    P.2A native parameter scaling remains intentionally unchanged.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_weighted_chroma_blend_vector_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

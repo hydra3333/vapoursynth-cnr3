@@ -9,7 +9,8 @@ maths: P.3A weighted blend, P.4A downsampled luma, P.5A frame-processing core,
 P.6A scene change. Those phases must compute correctly at all supported bit depths
 and across the agreed colour spaces, and must stay bit-exact with the CNR2 source
 they are derived from. This note explains the facts that govern that, and then lists
-exactly what to watch for. None of this changes P.2A; it is the context for P.3A+.
+exactly what to watch for. Hopefully none of this changes P.2A; it is the context
+for P.3A+.
 
 At P.3A, the CNR2/vscnr2 source will be supplied so the blend can be verified
 line-by-line against it. Treat CNR2 as the pixel-maths reference of record. Do NOT

@@ -29,6 +29,9 @@
     <ClCompile Include="..\..\src\cnr3_response_tables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_frame_processing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\cnr3_build_config.h">
@@ -56,6 +59,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\cnr3_response_tables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_frame_processing.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

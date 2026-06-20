@@ -4,6 +4,8 @@
 
 #include "cnr3_diagnostics.h"
 
+#include "cnr3_frame_processing.h"
+
 #include "cnr3_response_tables.h"
 
 #include <cstdio>
@@ -8762,6 +8764,295 @@ Cnr3Status cnr3_cache_core_selftest_response_table_config_surface_proof() noexce
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_weighted_chroma_blend_vector_proof() noexcept {
+    /*
+        P.3A continues to host the pixel-number proof in the established runner.
+        A separate pixel selftest module remains deferred until VS project-file
+        wiring can be reviewed deliberately before P.4A/P.5A.
+    */
+    constexpr int bits_8 = 8;
+    constexpr int bits_16 = 16;
+
+    constexpr std::int64_t expected_shift_8bit = 65536;
+    constexpr std::int64_t expected_shift_16bit = 4294967296LL;
+
+    constexpr std::int64_t expected_weight_8bit_max_from_tables = 64516;
+    constexpr int expected_blend_8bit_max_cur10_prev200 = 197;
+    constexpr int expected_blend_8bit_narrow_mid = 104;
+    constexpr int expected_blend_8bit_wide_mid = 169;
+    constexpr int expected_blend_8bit_200_20_family = 142;
+
+    constexpr std::int64_t expected_weight_8bit_validation_max = 65025;
+    constexpr std::int64_t expected_shift_minus_weight_8bit_validation_max = 511;
+    constexpr int expected_blend_8bit_validation_max = 199;
+
+    constexpr int expected_blend_8bit_prev_high = 251;
+    constexpr int expected_blend_8bit_cur_high = 4;
+    constexpr int expected_blend_8bit_half_point = 1;
+
+    constexpr std::int64_t expected_weight_16bit_max_from_tables = 4294705156LL;
+    constexpr int expected_blend_16bit_max_from_tables = 49997;
+    constexpr int expected_blend_16bit_mid = 25499;
+    constexpr std::int64_t expected_weight_16bit_scaled_family = 2255020800LL;
+    constexpr int expected_blend_16bit_scaled_family = 26727;
+
+    constexpr std::int64_t expected_weight_16bit_validation_max = 4294836225LL;
+    constexpr std::int64_t expected_shift_minus_weight_16bit_validation_max = 131071;
+    constexpr int expected_blend_16bit_validation_max = 49999;
+
+    static_assert(expected_shift_8bit == (1LL << (bits_8 << 1)));
+    static_assert(expected_shift_16bit == (1LL << (bits_16 << 1)));
+
+    static_assert(expected_weight_8bit_max_from_tables == 64516);
+    static_assert(expected_blend_8bit_max_cur10_prev200 == 197);
+    static_assert(expected_blend_8bit_narrow_mid == 104);
+    static_assert(expected_blend_8bit_wide_mid == 169);
+    static_assert(expected_blend_8bit_200_20_family == 142);
+
+    static_assert(expected_weight_8bit_validation_max == 65025);
+    static_assert(expected_shift_minus_weight_8bit_validation_max == 511);
+    static_assert(expected_blend_8bit_validation_max == 199);
+
+    static_assert(expected_blend_8bit_prev_high == 251);
+    static_assert(expected_blend_8bit_cur_high == 4);
+    static_assert(expected_blend_8bit_half_point == 1);
+
+    static_assert(expected_weight_16bit_max_from_tables == 4294705156LL);
+    static_assert(expected_blend_16bit_max_from_tables == 49997);
+    static_assert(expected_blend_16bit_mid == 25499);
+    static_assert(expected_weight_16bit_scaled_family == 2255020800LL);
+    static_assert(expected_blend_16bit_scaled_family == 26727);
+
+    static_assert(expected_weight_16bit_validation_max == 4294836225LL);
+    static_assert(expected_shift_minus_weight_16bit_validation_max == 131071);
+    static_assert(expected_blend_16bit_validation_max == 49999);
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto expect_blend = [](
+        int bits_per_sample,
+        int current_source_sample,
+        int previous_filtered_sample,
+        int y_response,
+        int chroma_response,
+        int expected_output
+    ) noexcept -> bool {
+        int output_sample = -1;
+
+        if (
+            cnr3_blend_chroma_sample(
+                current_source_sample,
+                previous_filtered_sample,
+                y_response,
+                chroma_response,
+                bits_per_sample,
+                output_sample
+            ) != Cnr3Status::ok
+            ) {
+            return false;
+        }
+
+        return output_sample == expected_output;
+    };
+
+    {
+        std::int64_t blend_scale = 0;
+
+        if (
+            cnr3_blend_scale_for_bit_depth(bits_8, blend_scale) != Cnr3Status::ok ||
+            blend_scale != expected_shift_8bit
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_scale_for_bit_depth(bits_16, blend_scale) != Cnr3Status::ok ||
+            blend_scale != expected_shift_16bit
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_scale_for_bit_depth(7, blend_scale) != Cnr3Status::invalid_argument ||
+            blend_scale != 0
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_scale_for_bit_depth(17, blend_scale) != Cnr3Status::invalid_argument ||
+            blend_scale != 0
+            ) {
+            return fail();
+        }
+    }
+
+    if (
+        cnr3_calculate_combined_blend_weight(254, 254) !=
+            expected_weight_8bit_max_from_tables ||
+        cnr3_calculate_combined_blend_weight(255, 255) !=
+            expected_weight_8bit_validation_max ||
+        cnr3_calculate_combined_blend_weight(65535, 65535) !=
+            expected_weight_16bit_validation_max
+        ) {
+        return fail();
+    }
+
+    if (
+        (expected_shift_8bit - expected_weight_8bit_validation_max) !=
+            expected_shift_minus_weight_8bit_validation_max ||
+        (expected_shift_16bit - expected_weight_16bit_validation_max) !=
+            expected_shift_minus_weight_16bit_validation_max
+        ) {
+        return fail();
+    }
+
+    if (
+        !expect_blend(bits_8, 100, 200, 0, 254, 100) ||
+        !expect_blend(bits_8, 100, 200, 254, 0, 100)
+        ) {
+        return fail();
+    }
+
+    if (
+        !expect_blend(bits_8, 10, 200, 254, 254, expected_blend_8bit_max_cur10_prev200) ||
+        !expect_blend(bits_8, 10, 200, 127, 254, expected_blend_8bit_narrow_mid) ||
+        !expect_blend(bits_8, 10, 200, 216, 254, expected_blend_8bit_wide_mid)
+        ) {
+        return fail();
+    }
+
+    if (
+        !expect_blend(bits_8, 100, 200, 145, 192, expected_blend_8bit_200_20_family)
+        ) {
+        return fail();
+    }
+
+    if (
+        !expect_blend(bits_8, 100, 200, 255, 255, expected_blend_8bit_validation_max) ||
+        !expect_blend(bits_16, 1000, 50000, 65535, 65535, expected_blend_16bit_validation_max)
+        ) {
+        return fail();
+    }
+
+    if (
+        !expect_blend(bits_8, 0, 255, 254, 254, expected_blend_8bit_prev_high) ||
+        !expect_blend(bits_8, 255, 0, 254, 254, expected_blend_8bit_cur_high)
+        ) {
+        return fail();
+    }
+
+    if (!expect_blend(bits_8, 0, 2, 128, 128, expected_blend_8bit_half_point)) {
+        return fail();
+    }
+
+    if (
+        !expect_blend(bits_16, 1000, 50000, 65534, 65534, expected_blend_16bit_max_from_tables) ||
+        !expect_blend(bits_16, 1000, 50000, 32767, 65534, expected_blend_16bit_mid) ||
+        !expect_blend(bits_16, 1000, 50000, 43872, 51400, expected_blend_16bit_scaled_family)
+        ) {
+        return fail();
+    }
+
+    {
+        int output_sample = 12345;
+
+        if (
+            cnr3_blend_chroma_sample(
+                256,
+                0,
+                0,
+                0,
+                bits_8,
+                output_sample
+            ) != Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_chroma_sample(
+                0,
+                -1,
+                0,
+                0,
+                bits_8,
+                output_sample
+            ) != Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_chroma_sample(
+                0,
+                0,
+                -1,
+                0,
+                bits_8,
+                output_sample
+            ) != Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_blend_chroma_sample(
+                0,
+                0,
+                0,
+                256,
+                bits_8,
+                output_sample
+            ) != Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "P.3A weighted chroma blend vector proof scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    source check confirms shift2=depth<<1, shift=1LL<<shift2, shift1=shift>>1"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    compatibility claim is bit-exact blend/curve maths plus improved native parameter scaling"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    zero-weight proof returns current source chroma"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    max-weight proof keeps shift-weight positive at 8-bit and 16-bit bounds"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    half-point proof preserves vsCnr2 shift1 round-half-up behaviour"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    8-bit vectors prove response multiplication, shift1 rounding, and shift2 depth"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    directionality proof distinguishes current source from previous filtered output"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    16-bit vectors prove int64 accumulator safety for high-bit-depth chroma blend"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    invalid input proof preserves output sentinel without partial publish"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    signed-difference/table-lookup and downSampleLuma rules are carried forward to P.4A/P.5A"
+    );
+
+    return Cnr3Status::ok;
+}
+
 
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
@@ -8883,6 +9174,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "response_table_config_surface_proof",
             cnr3_cache_core_selftest_response_table_config_surface_proof
+        },
+        {
+            "weighted_chroma_blend_vector_proof",
+            cnr3_cache_core_selftest_weighted_chroma_blend_vector_proof
         },
         {
             "lookup_addref_hit_and_miss",

@@ -365,6 +365,16 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_signed_difference_table_lookup_blend_proof() noexcept;
 
 /*
+    Run the CMS07-P.6A chroma-plane traversal vector proof.
+
+    This composes P.5A over matching scalar sample buffers for one chroma
+    plane. It proves row/column traversal, stride handling, padding preservation,
+    and no-partial-publish invalid-input behaviour without VapourSynth frame
+    access, source-frame lifecycle, cache authority, or scene-change handling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_chroma_plane_traversal_vector_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

@@ -38,6 +38,64 @@ namespace {
     return Cnr3Status::ok;
 }
 
+[[nodiscard]] bool cnr3_plane_shape_is_valid(
+    int width,
+    int height,
+    int stride
+) noexcept {
+    return width > 0 &&
+        height > 0 &&
+        stride >= width &&
+        height <= (std::numeric_limits<int>::max() / stride);
+}
+
+[[nodiscard]] bool cnr3_const_plane_view_is_valid(
+    const Cnr3ConstPlaneBufferView& view
+) noexcept {
+    return view.samples != nullptr &&
+        cnr3_plane_shape_is_valid(view.width, view.height, view.stride);
+}
+
+[[nodiscard]] bool cnr3_mutable_plane_view_is_valid(
+    const Cnr3MutablePlaneBufferView& view
+) noexcept {
+    return view.samples != nullptr &&
+        cnr3_plane_shape_is_valid(view.width, view.height, view.stride);
+}
+
+[[nodiscard]] bool cnr3_const_plane_dimensions_match(
+    const Cnr3ConstPlaneBufferView& view,
+    int width,
+    int height
+) noexcept {
+    return view.width == width && view.height == height;
+}
+
+[[nodiscard]] bool cnr3_mutable_plane_dimensions_match(
+    const Cnr3MutablePlaneBufferView& view,
+    int width,
+    int height
+) noexcept {
+    return view.width == width && view.height == height;
+}
+
+[[nodiscard]] int cnr3_plane_sample_at(
+    const Cnr3ConstPlaneBufferView& view,
+    int x,
+    int y
+) noexcept {
+    return view.samples[(y * view.stride) + x];
+}
+
+void cnr3_write_plane_sample(
+    Cnr3MutablePlaneBufferView& view,
+    int x,
+    int y,
+    int value
+) noexcept {
+    view.samples[(y * view.stride) + x] = value;
+}
+
 } // namespace
 
 Cnr3Status cnr3_downsample_luma_tap_coordinates(
@@ -299,5 +357,97 @@ Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     resolved.output_sample = blended_sample;
 
     result = resolved;
+    return Cnr3Status::ok;
+}
+
+
+Cnr3Status cnr3_process_chroma_plane_from_downsampled_luma(
+    const Cnr3ConstPlaneBufferView& current_downsampled_luma_plane,
+    const Cnr3ConstPlaneBufferView& previous_downsampled_luma_plane,
+    const Cnr3ConstPlaneBufferView& current_source_chroma_plane,
+    const Cnr3ConstPlaneBufferView& previous_filtered_chroma_plane,
+    const std::vector<int>& y_response_table,
+    const std::vector<int>& chroma_response_table,
+    int table_offset,
+    int bits_per_sample,
+    Cnr3MutablePlaneBufferView& output_chroma_plane,
+    Cnr3ChromaPlaneProcessSummary& summary
+) noexcept {
+    if (
+        !cnr3_const_plane_view_is_valid(current_downsampled_luma_plane) ||
+        !cnr3_const_plane_view_is_valid(previous_downsampled_luma_plane) ||
+        !cnr3_const_plane_view_is_valid(current_source_chroma_plane) ||
+        !cnr3_const_plane_view_is_valid(previous_filtered_chroma_plane) ||
+        !cnr3_mutable_plane_view_is_valid(output_chroma_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int width = current_source_chroma_plane.width;
+    const int height = current_source_chroma_plane.height;
+
+    if (
+        !cnr3_const_plane_dimensions_match(current_downsampled_luma_plane, width, height) ||
+        !cnr3_const_plane_dimensions_match(previous_downsampled_luma_plane, width, height) ||
+        !cnr3_const_plane_dimensions_match(previous_filtered_chroma_plane, width, height) ||
+        !cnr3_mutable_plane_dimensions_match(output_chroma_plane, width, height)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int sample_count = width * height;
+    std::vector<int> resolved_outputs;
+
+    try {
+        resolved_outputs.resize(static_cast<std::size_t>(sample_count));
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            Cnr3ChromaBlendSampleResult sample_result{};
+
+            const Cnr3Status sample_status =
+                cnr3_blend_chroma_sample_from_response_tables(
+                    cnr3_plane_sample_at(current_downsampled_luma_plane, x, y),
+                    cnr3_plane_sample_at(previous_downsampled_luma_plane, x, y),
+                    cnr3_plane_sample_at(current_source_chroma_plane, x, y),
+                    cnr3_plane_sample_at(previous_filtered_chroma_plane, x, y),
+                    y_response_table,
+                    chroma_response_table,
+                    table_offset,
+                    bits_per_sample,
+                    sample_result
+                );
+
+            if (sample_status != Cnr3Status::ok) {
+                return sample_status;
+            }
+
+            resolved_outputs[static_cast<std::size_t>((y * width) + x)] =
+                sample_result.output_sample;
+        }
+    }
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            cnr3_write_plane_sample(
+                output_chroma_plane,
+                x,
+                y,
+                resolved_outputs[static_cast<std::size_t>((y * width) + x)]
+            );
+        }
+    }
+
+    Cnr3ChromaPlaneProcessSummary resolved_summary{};
+    resolved_summary.width = width;
+    resolved_summary.height = height;
+    resolved_summary.samples_processed = sample_count;
+    resolved_summary.first_output_sample = resolved_outputs.front();
+    resolved_summary.last_output_sample = resolved_outputs.back();
+
+    summary = resolved_summary;
     return Cnr3Status::ok;
 }

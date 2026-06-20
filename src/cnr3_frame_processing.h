@@ -28,8 +28,15 @@
     and weighted chroma blend decision. It keeps current-minus-previous
     differences signed end-to-end, uses the P.1A total table lookup, and requires
     the P.2A table geometry convention: table_offset = sample_peak and
-    table_size = sample_peak * 2 + 1. This is still scalar/vector proof only,
-    not frame traversal.
+    table_size = sample_peak * 2 + 1.
+
+    CMS07-P.6A adds bounded chroma-plane traversal over already-prepared scalar
+    sample buffers. It walks current source chroma, previous filtered chroma, and
+    current/previous downsampled-luma planes with matching dimensions and composes
+    the P.5A scalar bridge for each chroma sample. It publishes output only after
+    the whole plane has validated and computed successfully. It is still not
+    VapourSynth frame access, source-frame request/retrieve lifecycle, explicit
+    previous-output frame acquisition, scene-change handling, or cache integration.
 
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
@@ -37,10 +44,9 @@
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
-        - native-subsampling traversal;
-        - frame-buffer downSampleLuma traversal;
+        - frame-buffer downSampleLuma traversal from source luma planes;
         - scene-change/reset decisions;
-        - explicit previous-output frame processing;
+        - explicit previous-output frame acquisition and ownership;
         - VapourSynth frame access and getFrame integration.
 
     This module must not own or inspect cache slots, pins, checkpoints, hot zones,
@@ -106,6 +112,28 @@ struct Cnr3ChromaBlendSampleResult {
     int output_sample = 0;
 };
 
+struct Cnr3ConstPlaneBufferView {
+    const int* samples = nullptr;
+    int width = 0;
+    int height = 0;
+    int stride = 0;
+};
+
+struct Cnr3MutablePlaneBufferView {
+    int* samples = nullptr;
+    int width = 0;
+    int height = 0;
+    int stride = 0;
+};
+
+struct Cnr3ChromaPlaneProcessSummary {
+    int width = 0;
+    int height = 0;
+    int samples_processed = 0;
+    int first_output_sample = 0;
+    int last_output_sample = 0;
+};
+
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     int current_downsampled_luma_sample,
     int previous_downsampled_luma_sample,
@@ -116,4 +144,17 @@ struct Cnr3ChromaBlendSampleResult {
     int table_offset,
     int bits_per_sample,
     Cnr3ChromaBlendSampleResult& result
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_process_chroma_plane_from_downsampled_luma(
+    const Cnr3ConstPlaneBufferView& current_downsampled_luma_plane,
+    const Cnr3ConstPlaneBufferView& previous_downsampled_luma_plane,
+    const Cnr3ConstPlaneBufferView& current_source_chroma_plane,
+    const Cnr3ConstPlaneBufferView& previous_filtered_chroma_plane,
+    const std::vector<int>& y_response_table,
+    const std::vector<int>& chroma_response_table,
+    int table_offset,
+    int bits_per_sample,
+    Cnr3MutablePlaneBufferView& output_chroma_plane,
+    Cnr3ChromaPlaneProcessSummary& summary
 ) noexcept;

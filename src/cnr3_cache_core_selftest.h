@@ -343,6 +343,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_weighted_chroma_blend_vector_proof() noexcept;
 
 /*
+    Run the CMS07-P.4A downsampled-luma vector proof.
+
+    This is the fourth pixel-number proof after the C.14A cache-core milestone.
+    It proves the source-confirmed downSampleLuma scalar shape, tap-coordinate
+    mapping, degenerate 4:2:2/4:4:0/4:4:4 behaviour, right/bottom edge clamping,
+    and invalid-input preservation without adding frame traversal or VapourSynth
+    frame access.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_downsampled_luma_vector_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

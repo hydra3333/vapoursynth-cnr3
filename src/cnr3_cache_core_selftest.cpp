@@ -9054,6 +9054,412 @@ Cnr3Status cnr3_cache_core_selftest_weighted_chroma_blend_vector_proof() noexcep
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_downsampled_luma_vector_proof() noexcept {
+    /*
+        P.4A still uses the established selftest runner. It proves the scalar
+        downSampleLuma shape and coordinate mapping only; frame traversal and
+        VapourSynth frame access remain deferred.
+    */
+    constexpr int bits_8 = 8;
+    constexpr int bits_16 = 16;
+
+    constexpr int expected_sample_8bit_box = 25;
+    constexpr int expected_sample_8bit_half_point = 1;
+    constexpr int expected_sample_8bit_quarter_point = 0;
+    constexpr int expected_sample_16bit_peak = 65535;
+
+    constexpr int expected_420_x0 = 4;
+    constexpr int expected_420_x1 = 5;
+    constexpr int expected_420_y0 = 2;
+    constexpr int expected_420_y1 = 3;
+    constexpr int expected_420_sample = 255;
+
+    constexpr int expected_422_x0 = 4;
+    constexpr int expected_422_x1 = 5;
+    constexpr int expected_422_y0 = 3;
+    constexpr int expected_422_y1 = 3;
+    constexpr int expected_422_sample = 305;
+
+    constexpr int expected_440_x0 = 4;
+    constexpr int expected_440_x1 = 5;
+    constexpr int expected_440_y0 = 4;
+    constexpr int expected_440_y1 = 5;
+    constexpr int expected_440_sample = 455;
+
+    constexpr int expected_444_x0 = 4;
+    constexpr int expected_444_x1 = 5;
+    constexpr int expected_444_y0 = 3;
+    constexpr int expected_444_y1 = 3;
+    constexpr int expected_444_sample = 305;
+
+    constexpr int expected_444_right_edge_x0 = 5;
+    constexpr int expected_444_right_edge_x1 = 5;
+    constexpr int expected_444_right_edge_y0 = 2;
+    constexpr int expected_444_right_edge_y1 = 2;
+    constexpr int expected_444_right_edge_sample = 205;
+
+    constexpr int expected_420_bottom_right_x0 = 4;
+    constexpr int expected_420_bottom_right_x1 = 4;
+    constexpr int expected_420_bottom_right_y0 = 4;
+    constexpr int expected_420_bottom_right_y1 = 4;
+    constexpr int expected_420_bottom_right_sample = 404;
+
+    static_assert(expected_sample_8bit_box == ((10 + 20 + 30 + 40 + 2) >> 2));
+    static_assert(expected_sample_8bit_half_point == ((0 + 0 + 0 + 2 + 2) >> 2));
+    static_assert(expected_sample_8bit_quarter_point == ((0 + 0 + 0 + 1 + 2) >> 2));
+    static_assert(expected_sample_16bit_peak == ((65535 + 65535 + 65535 + 65535 + 2) >> 2));
+
+    static_assert(expected_420_sample == ((204 + 205 + 304 + 305 + 2) >> 2));
+    static_assert(expected_422_sample == ((304 + 305 + 304 + 305 + 2) >> 2));
+    static_assert(expected_440_sample == ((404 + 405 + 504 + 505 + 2) >> 2));
+    static_assert(expected_444_sample == ((304 + 305 + 304 + 305 + 2) >> 2));
+    static_assert(expected_444_right_edge_sample == ((205 + 205 + 205 + 205 + 2) >> 2));
+    static_assert(expected_420_bottom_right_sample == ((404 + 404 + 404 + 404 + 2) >> 2));
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto sample_value = [](int x, int y) noexcept -> int {
+        return y * 100 + x;
+    };
+
+    const auto coordinates_match = [](
+        const Cnr3DownsampledLumaTapCoordinates& coordinates,
+        int x0,
+        int x1,
+        int y0,
+        int y1
+    ) noexcept -> bool {
+        return coordinates.x0 == x0 &&
+            coordinates.x1 == x1 &&
+            coordinates.y0 == y0 &&
+            coordinates.y1 == y1;
+    };
+
+    const auto expect_coordinates = [coordinates_match](
+        int chroma_x,
+        int chroma_y,
+        int luma_width,
+        int luma_height,
+        int sub_sampling_w,
+        int sub_sampling_h,
+        int expected_x0,
+        int expected_x1,
+        int expected_y0,
+        int expected_y1
+    ) noexcept -> bool {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(
+                chroma_x,
+                chroma_y,
+                luma_width,
+                luma_height,
+                sub_sampling_w,
+                sub_sampling_h,
+                coordinates
+            ) != Cnr3Status::ok
+            ) {
+            return false;
+        }
+
+        return coordinates_match(
+            coordinates,
+            expected_x0,
+            expected_x1,
+            expected_y0,
+            expected_y1
+        );
+    };
+
+    const auto expect_downsample = [](
+        int top_left_sample,
+        int top_right_sample,
+        int bottom_left_sample,
+        int bottom_right_sample,
+        int bits_per_sample,
+        int expected_output
+    ) noexcept -> bool {
+        int output_sample = -1;
+
+        if (
+            cnr3_downsample_luma_sample(
+                top_left_sample,
+                top_right_sample,
+                bottom_left_sample,
+                bottom_right_sample,
+                bits_per_sample,
+                output_sample
+            ) != Cnr3Status::ok
+            ) {
+            return false;
+        }
+
+        return output_sample == expected_output;
+    };
+
+    const auto expect_coordinate_sample = [expect_downsample, sample_value](
+        int bits_per_sample,
+        const Cnr3DownsampledLumaTapCoordinates& coordinates,
+        int expected_output
+    ) noexcept -> bool {
+        return expect_downsample(
+            sample_value(coordinates.x0, coordinates.y0),
+            sample_value(coordinates.x1, coordinates.y0),
+            sample_value(coordinates.x0, coordinates.y1),
+            sample_value(coordinates.x1, coordinates.y1),
+            bits_per_sample,
+            expected_output
+        );
+    };
+
+    if (
+        !expect_downsample(10, 20, 30, 40, bits_8, expected_sample_8bit_box) ||
+        !expect_downsample(0, 0, 0, 2, bits_8, expected_sample_8bit_half_point) ||
+        !expect_downsample(0, 0, 0, 1, bits_8, expected_sample_8bit_quarter_point) ||
+        !expect_downsample(65535, 65535, 65535, 65535, bits_16, expected_sample_16bit_peak)
+        ) {
+        return fail();
+    }
+
+    if (
+        !expect_coordinates(
+            2,
+            1,
+            8,
+            6,
+            1,
+            1,
+            expected_420_x0,
+            expected_420_x1,
+            expected_420_y0,
+            expected_420_y1
+        )
+        ) {
+        return fail();
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(2, 1, 8, 6, 1, 1, coordinates) !=
+                Cnr3Status::ok ||
+            !coordinates_match(
+                coordinates,
+                expected_420_x0,
+                expected_420_x1,
+                expected_420_y0,
+                expected_420_y1
+            ) ||
+            !expect_coordinate_sample(bits_16, coordinates, expected_420_sample)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(2, 3, 8, 6, 1, 0, coordinates) !=
+                Cnr3Status::ok ||
+            !coordinates_match(
+                coordinates,
+                expected_422_x0,
+                expected_422_x1,
+                expected_422_y0,
+                expected_422_y1
+            ) ||
+            !expect_coordinate_sample(bits_16, coordinates, expected_422_sample)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(4, 2, 8, 6, 0, 1, coordinates) !=
+                Cnr3Status::ok ||
+            !coordinates_match(
+                coordinates,
+                expected_440_x0,
+                expected_440_x1,
+                expected_440_y0,
+                expected_440_y1
+            ) ||
+            !expect_coordinate_sample(bits_16, coordinates, expected_440_sample)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(4, 3, 8, 6, 0, 0, coordinates) !=
+                Cnr3Status::ok ||
+            !coordinates_match(
+                coordinates,
+                expected_444_x0,
+                expected_444_x1,
+                expected_444_y0,
+                expected_444_y1
+            ) ||
+            !expect_coordinate_sample(bits_16, coordinates, expected_444_sample)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(5, 2, 6, 4, 0, 0, coordinates) !=
+                Cnr3Status::ok ||
+            !coordinates_match(
+                coordinates,
+                expected_444_right_edge_x0,
+                expected_444_right_edge_x1,
+                expected_444_right_edge_y0,
+                expected_444_right_edge_y1
+            ) ||
+            !expect_coordinate_sample(bits_16, coordinates, expected_444_right_edge_sample)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(2, 2, 5, 5, 1, 1, coordinates) !=
+                Cnr3Status::ok ||
+            !coordinates_match(
+                coordinates,
+                expected_420_bottom_right_x0,
+                expected_420_bottom_right_x1,
+                expected_420_bottom_right_y0,
+                expected_420_bottom_right_y1
+            ) ||
+            !expect_coordinate_sample(bits_16, coordinates, expected_420_bottom_right_sample)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3DownsampledLumaTapCoordinates coordinates{};
+        coordinates.x0 = 7;
+        coordinates.x1 = 8;
+        coordinates.y0 = 9;
+        coordinates.y1 = 10;
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(-1, 0, 8, 6, 0, 0, coordinates) !=
+                Cnr3Status::invalid_argument ||
+            !coordinates_match(coordinates, 7, 8, 9, 10)
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(0, 0, 0, 6, 0, 0, coordinates) !=
+                Cnr3Status::invalid_argument ||
+            !coordinates_match(coordinates, 7, 8, 9, 10)
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(0, 0, 8, 6, 2, 0, coordinates) !=
+                Cnr3Status::invalid_argument ||
+            !coordinates_match(coordinates, 7, 8, 9, 10)
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_downsample_luma_tap_coordinates(3, 0, 4, 6, 1, 0, coordinates) !=
+                Cnr3Status::invalid_argument ||
+            !coordinates_match(coordinates, 7, 8, 9, 10)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        int output_sample = 12345;
+
+        if (
+            cnr3_downsample_luma_sample(0, 0, 0, 0, 7, output_sample) !=
+                Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_downsample_luma_sample(0, 0, 0, 0, 17, output_sample) !=
+                Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_downsample_luma_sample(-1, 0, 0, 0, bits_8, output_sample) !=
+                Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+
+        if (
+            cnr3_downsample_luma_sample(256, 0, 0, 0, bits_8, output_sample) !=
+                Cnr3Status::invalid_argument ||
+            output_sample != 12345
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "P.4A downsampled-luma vector proof scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    source check confirms x0=x<<subw, x1=x0+1, y0=y<<subh, y1=y0+subh"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    four-tap proof preserves (a+b+c+d+2)>>2 round-to-nearest behaviour"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    4:2:0 proof maps chroma samples to the expected 2x2 luma box"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    4:2:2, 4:4:0, and 4:4:4 proofs preserve vsCnr2 degenerate averages"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    right/bottom edge proof clamps taps instead of relying on frame padding"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    invalid coordinate and sample proofs preserve sentinels without partial publish"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    frame traversal, signed differences, table lookup, and scene-change remain deferred"
+    );
+
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -9178,6 +9584,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "weighted_chroma_blend_vector_proof",
             cnr3_cache_core_selftest_weighted_chroma_blend_vector_proof
+        },
+        {
+            "downsampled_luma_vector_proof",
+            cnr3_cache_core_selftest_downsampled_luma_vector_proof
         },
         {
             "lookup_addref_hit_and_miss",

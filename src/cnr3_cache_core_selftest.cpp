@@ -10806,6 +10806,450 @@ Cnr3Status cnr3_cache_core_selftest_native_byte_plane_access_vector_proof() noex
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_native_luma_downsample_bridge_proof() noexcept {
+    /*
+        P.9A composes the P.8A native byte-buffer access proof with the P.7A
+        scalar source-luma downsample traversal. It still does not access
+        VapourSynth frames or source-frame lifecycle state.
+    */
+    constexpr int bits_8 = 8;
+    constexpr int bits_10 = 10;
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto scalar_padding_is = [](
+        const std::vector<int>& output,
+        int width,
+        int height,
+        int stride,
+        int sentinel
+    ) noexcept -> bool {
+        for (int y = 0; y < height; ++y) {
+            for (int x = width; x < stride; ++x) {
+                if (output[static_cast<std::size_t>((y * stride) + x)] != sentinel) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    const auto scalar_plane_is = [](
+        const std::vector<int>& output,
+        int width,
+        int height,
+        int stride,
+        int sentinel
+    ) noexcept -> bool {
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < stride; ++x) {
+                if (output[static_cast<std::size_t>((y * stride) + x)] != sentinel) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    const auto summary_matches = [](
+        const Cnr3DownsampledLumaPlaneProcessSummary& summary,
+        int expected_source_width,
+        int expected_source_height,
+        int expected_output_width,
+        int expected_output_height,
+        int expected_count,
+        int expected_first,
+        int expected_last
+    ) noexcept -> bool {
+        return summary.source_width == expected_source_width &&
+            summary.source_height == expected_source_height &&
+            summary.output_width == expected_output_width &&
+            summary.output_height == expected_output_height &&
+            summary.samples_processed == expected_count &&
+            summary.first_output_sample == expected_first &&
+            summary.last_output_sample == expected_last;
+    };
+
+    const auto fill_native_plane = [](
+        Cnr3MutableNativePlaneByteView& native_plane,
+        int multiplier
+    ) noexcept -> Cnr3Status {
+        for (int y = 0; y < native_plane.height; ++y) {
+            for (int x = 0; x < native_plane.width; ++x) {
+                const int sample = (y * multiplier) + x;
+                const Cnr3Status status = cnr3_store_native_plane_sample(
+                    native_plane,
+                    x,
+                    y,
+                    sample
+                );
+
+                if (status != Cnr3Status::ok) {
+                    return status;
+                }
+            }
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    {
+        constexpr int width = 5;
+        constexpr int height = 5;
+        constexpr int stride_bytes = 14;
+        constexpr int output_width = 3;
+        constexpr int output_height = 3;
+        constexpr int output_stride = 5;
+        constexpr int expected_first = 51;
+        constexpr int expected_mid = 253;
+        constexpr int expected_right_edge = 54;
+        constexpr int expected_bottom_edge = 401;
+        constexpr int expected_last = 404;
+
+        static_assert(expected_first == ((0 + 1 + 100 + 101 + 2) >> 2));
+        static_assert(expected_mid == ((202 + 203 + 302 + 303 + 2) >> 2));
+        static_assert(expected_right_edge == ((4 + 4 + 104 + 104 + 2) >> 2));
+        static_assert(expected_bottom_edge == ((400 + 401 + 400 + 401 + 2) >> 2));
+        static_assert(expected_last == ((404 + 404 + 404 + 404 + 2) >> 2));
+
+        std::vector<std::uint8_t> native_bytes(
+            static_cast<std::size_t>(stride_bytes * height),
+            0xEEU
+        );
+        Cnr3MutableNativePlaneByteView native_luma_mutable{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_10
+        };
+
+        if (fill_native_plane(native_luma_mutable, 100) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        const Cnr3ConstNativePlaneByteView native_luma{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_10
+        };
+        std::vector<int> output_luma(
+            static_cast<std::size_t>(output_stride * output_height),
+            -800
+        );
+        Cnr3MutablePlaneBufferView output_luma_plane{
+            output_luma.data(),
+            output_width,
+            output_height,
+            output_stride
+        };
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+
+        if (
+            cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+                native_luma,
+                1,
+                1,
+                output_luma_plane,
+                summary
+            ) != Cnr3Status::ok ||
+            output_luma[0] != expected_first ||
+            output_luma[1] != 53 ||
+            output_luma[2] != expected_right_edge ||
+            output_luma[5] != 251 ||
+            output_luma[6] != expected_mid ||
+            output_luma[7] != 254 ||
+            output_luma[10] != expected_bottom_edge ||
+            output_luma[11] != 403 ||
+            output_luma[12] != expected_last ||
+            !scalar_padding_is(output_luma, output_width, output_height, output_stride, -800) ||
+            !summary_matches(
+                summary,
+                width,
+                height,
+                output_width,
+                output_height,
+                output_width * output_height,
+                expected_first,
+                expected_last
+            )
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width = 4;
+        constexpr int height = 2;
+        constexpr int stride_bytes = 6;
+        constexpr int output_width = 4;
+        constexpr int output_height = 2;
+        constexpr int output_stride = 5;
+
+        std::vector<std::uint8_t> native_bytes(
+            static_cast<std::size_t>(stride_bytes * height),
+            0xCCU
+        );
+        Cnr3MutableNativePlaneByteView native_luma_mutable{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_8
+        };
+
+        if (fill_native_plane(native_luma_mutable, 20) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        const Cnr3ConstNativePlaneByteView native_luma{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_8
+        };
+        std::vector<int> output_luma(
+            static_cast<std::size_t>(output_stride * output_height),
+            -810
+        );
+        Cnr3MutablePlaneBufferView output_luma_plane{
+            output_luma.data(),
+            output_width,
+            output_height,
+            output_stride
+        };
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+
+        if (
+            cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+                native_luma,
+                0,
+                0,
+                output_luma_plane,
+                summary
+            ) != Cnr3Status::ok ||
+            output_luma[0] != 1 ||
+            output_luma[1] != 2 ||
+            output_luma[2] != 3 ||
+            output_luma[3] != 3 ||
+            output_luma[5] != 21 ||
+            output_luma[6] != 22 ||
+            output_luma[7] != 23 ||
+            output_luma[8] != 23 ||
+            !scalar_padding_is(output_luma, output_width, output_height, output_stride, -810) ||
+            !summary_matches(summary, width, height, output_width, output_height, 8, 1, 23)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width = 5;
+        constexpr int height = 2;
+        constexpr int stride_bytes = 12;
+        constexpr int output_width = 3;
+        constexpr int output_height = 2;
+        constexpr int output_stride = 4;
+
+        std::vector<std::uint8_t> native_bytes(
+            static_cast<std::size_t>(stride_bytes * height),
+            0U
+        );
+        Cnr3MutableNativePlaneByteView native_luma_mutable{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_10
+        };
+
+        if (fill_native_plane(native_luma_mutable, 100) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        const std::uint16_t invalid_sample = 2048U;
+        const std::size_t invalid_offset =
+            static_cast<std::size_t>(1 * stride_bytes) +
+            (static_cast<std::size_t>(3) * static_cast<std::size_t>(2));
+        std::memcpy(native_bytes.data() + invalid_offset, &invalid_sample, sizeof(invalid_sample));
+
+        const Cnr3ConstNativePlaneByteView native_luma{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_10
+        };
+        std::vector<int> output_luma(
+            static_cast<std::size_t>(output_stride * output_height),
+            -820
+        );
+        Cnr3MutablePlaneBufferView output_luma_plane{
+            output_luma.data(),
+            output_width,
+            output_height,
+            output_stride
+        };
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+        summary.source_width = 9;
+        summary.source_height = 8;
+        summary.output_width = 7;
+        summary.output_height = 6;
+        summary.samples_processed = 5;
+        summary.first_output_sample = 4;
+        summary.last_output_sample = 3;
+
+        if (
+            cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+                native_luma,
+                1,
+                0,
+                output_luma_plane,
+                summary
+            ) != Cnr3Status::invalid_argument ||
+            !scalar_plane_is(output_luma, output_width, output_height, output_stride, -820) ||
+            !summary_matches(summary, 9, 8, 7, 6, 5, 4, 3)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width = 5;
+        constexpr int height = 2;
+        constexpr int stride_bytes = 12;
+        constexpr int output_width = 2;
+        constexpr int output_height = 2;
+        constexpr int output_stride = 3;
+
+        std::vector<std::uint8_t> native_bytes(
+            static_cast<std::size_t>(stride_bytes * height),
+            0U
+        );
+        Cnr3MutableNativePlaneByteView native_luma_mutable{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_10
+        };
+
+        if (fill_native_plane(native_luma_mutable, 100) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        const Cnr3ConstNativePlaneByteView native_luma{
+            native_bytes.data(),
+            width,
+            height,
+            stride_bytes,
+            bits_10
+        };
+        std::vector<int> output_luma(
+            static_cast<std::size_t>(output_stride * output_height),
+            -830
+        );
+        Cnr3MutablePlaneBufferView output_luma_plane{
+            output_luma.data(),
+            output_width,
+            output_height,
+            output_stride
+        };
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+        summary.source_width = 1;
+        summary.source_height = 2;
+        summary.output_width = 3;
+        summary.output_height = 4;
+        summary.samples_processed = 5;
+        summary.first_output_sample = 6;
+        summary.last_output_sample = 7;
+
+        if (
+            cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+                native_luma,
+                1,
+                0,
+                output_luma_plane,
+                summary
+            ) != Cnr3Status::invalid_argument ||
+            !scalar_plane_is(output_luma, output_width, output_height, output_stride, -830) ||
+            !summary_matches(summary, 1, 2, 3, 4, 5, 6, 7)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int width = 5;
+        constexpr int height = 2;
+        constexpr int bad_stride_bytes = 9;
+        constexpr int output_width = 3;
+        constexpr int output_height = 2;
+        constexpr int output_stride = 4;
+
+        std::vector<std::uint8_t> native_bytes(
+            static_cast<std::size_t>(10 * height),
+            0U
+        );
+        const Cnr3ConstNativePlaneByteView native_luma{
+            native_bytes.data(),
+            width,
+            height,
+            bad_stride_bytes,
+            bits_10
+        };
+        std::vector<int> output_luma(
+            static_cast<std::size_t>(output_stride * output_height),
+            -840
+        );
+        Cnr3MutablePlaneBufferView output_luma_plane{
+            output_luma.data(),
+            output_width,
+            output_height,
+            output_stride
+        };
+        Cnr3DownsampledLumaPlaneProcessSummary summary{};
+        summary.source_width = 4;
+        summary.source_height = 3;
+        summary.output_width = 2;
+        summary.output_height = 1;
+        summary.samples_processed = 9;
+        summary.first_output_sample = 8;
+        summary.last_output_sample = 7;
+
+        if (
+            cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+                native_luma,
+                1,
+                0,
+                output_luma_plane,
+                summary
+            ) != Cnr3Status::invalid_argument ||
+            !scalar_plane_is(output_luma, output_width, output_height, output_stride, -840) ||
+            !summary_matches(summary, 4, 3, 2, 1, 9, 8, 7)
+            ) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line("P.9A native luma downsample bridge proof scenario");
+    cnr3_cache_core_selftest_trace_line("    native source-luma byte buffers are copied through P.8A before P.7A downsample traversal");
+    cnr3_cache_core_selftest_trace_line("    10-bit native luma vector proves x*storage_bytes survives the composed downsample path");
+    cnr3_cache_core_selftest_trace_line("    8-bit native luma vector proves one-byte source-luma input path");
+    cnr3_cache_core_selftest_trace_line("    invalid late native sample and output geometry proofs publish no partial scalar plane");
+    cnr3_cache_core_selftest_trace_line("    VapourSynth frame ownership, source-frame lifecycle, scene-change, and getFrame/cache integration remain deferred");
+
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -10950,6 +11394,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "native_byte_plane_access_vector_proof",
             cnr3_cache_core_selftest_native_byte_plane_access_vector_proof
+        },
+        {
+            "native_luma_downsample_bridge_proof",
+            cnr3_cache_core_selftest_native_luma_downsample_bridge_proof
         },
         {
             "lookup_addref_hit_and_miss",

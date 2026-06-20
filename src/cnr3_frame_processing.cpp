@@ -735,6 +735,77 @@ Cnr3Status cnr3_copy_scalar_buffer_to_native_plane(
 
 
 
+Cnr3Status cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+    const Cnr3ConstNativePlaneByteView& source_luma_native_plane,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    Cnr3MutablePlaneBufferView& output_downsampled_luma_plane,
+    Cnr3DownsampledLumaPlaneProcessSummary& summary
+) noexcept {
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        source_luma_native_plane.bits_per_sample,
+        storage_bytes
+    );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    if (
+        !cnr3_const_native_plane_byte_view_is_valid(
+            source_luma_native_plane,
+            storage_bytes
+        ) ||
+        !cnr3_mutable_plane_view_is_valid(output_downsampled_luma_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int source_sample_count =
+        source_luma_native_plane.width * source_luma_native_plane.height;
+    std::vector<int> source_luma_scalar;
+
+    try {
+        source_luma_scalar.resize(static_cast<std::size_t>(source_sample_count));
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3MutablePlaneBufferView source_luma_scalar_plane{
+        source_luma_scalar.data(),
+        source_luma_native_plane.width,
+        source_luma_native_plane.height,
+        source_luma_native_plane.width
+    };
+
+    const Cnr3Status copy_status = cnr3_copy_native_plane_to_scalar_buffer(
+        source_luma_native_plane,
+        source_luma_scalar_plane
+    );
+
+    if (copy_status != Cnr3Status::ok) {
+        return copy_status;
+    }
+
+    const Cnr3ConstPlaneBufferView source_luma_scalar_const_plane{
+        source_luma_scalar.data(),
+        source_luma_native_plane.width,
+        source_luma_native_plane.height,
+        source_luma_native_plane.width
+    };
+
+    return cnr3_downsample_luma_plane_to_chroma_grid(
+        source_luma_scalar_const_plane,
+        sub_sampling_w,
+        sub_sampling_h,
+        source_luma_native_plane.bits_per_sample,
+        output_downsampled_luma_plane,
+        summary
+    );
+}
+
+
 Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(
     const Cnr3ConstPlaneBufferView& source_luma_plane,
     int sub_sampling_w,

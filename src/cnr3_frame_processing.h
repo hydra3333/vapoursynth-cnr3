@@ -56,6 +56,14 @@
     wiring, source-frame lifecycle, scene-change handling, or getFrame/cache
     integration.
 
+    CMS07-P.9A composes the P.8A native byte-plane access layer with the
+    P.7A scalar source-luma downsample traversal. It converts a synthetic
+    native byte-buffer source-luma plane into a scalar luma plane, then applies
+    the proven P.7A traversal to produce the downsampled-luma scalar plane
+    consumed by P.6A. It is still not VapourSynth frame ownership,
+    getReadPtr/getWritePtr/getStride wiring, source-frame lifecycle,
+    scene-change handling, or getFrame/cache integration.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
@@ -205,6 +213,14 @@ struct Cnr3MutableNativePlaneByteView {
 [[nodiscard]] Cnr3Status cnr3_copy_scalar_buffer_to_native_plane(
     const Cnr3ConstPlaneBufferView& scalar_plane,
     Cnr3MutableNativePlaneByteView& native_plane
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+    const Cnr3ConstNativePlaneByteView& source_luma_native_plane,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    Cnr3MutablePlaneBufferView& output_downsampled_luma_plane,
+    Cnr3DownsampledLumaPlaneProcessSummary& summary
 ) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(

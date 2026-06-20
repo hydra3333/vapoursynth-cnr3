@@ -399,6 +399,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_native_byte_plane_access_vector_proof() noexcept;
 
 /*
+    Run the CMS07-P.9A native luma downsample bridge proof.
+
+    This composes the P.8A synthetic native byte-plane access helpers with the
+    P.7A scalar source-luma downsample traversal. It proves that native 8-bit
+    and 10-bit source-luma byte buffers can produce the downsampled-luma scalar
+    planes consumed by P.6A without using VapourSynth frame pointers,
+    source-frame lifecycle, cache authority, or scene-change handling.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_native_luma_downsample_bridge_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

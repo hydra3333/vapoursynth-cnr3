@@ -451,6 +451,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_caller_supplied_scene_change_reset_proof() noexcept;
 
 /*
+    Run the CMS07-K.1A keystone request-plan and temporary KDT trace proof.
+
+    This proves only synthetic request-plan shape and KDT formatting support:
+    branch classification, holes-list / source-request-set representation, and
+    plan-driven [KDT] / [KDT-SUMMARY] formatting. It does not prove
+    predecessor pixel correctness, call requestFrameFilter()/getFrameFilter(),
+    call the pixel path, or modify cache-core semantics.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

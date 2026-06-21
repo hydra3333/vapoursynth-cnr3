@@ -6,6 +6,7 @@
 #include <mutex>
 #include <vector>
 
+#include "cnr3_build_config.h"
 #include "cnr3_cache_diagnostics.h"
 #include "cnr3_common.h"
 #include "cnr3_owned_frame_ref.h"
@@ -458,6 +459,114 @@ struct Cnr3CacheRecoverySearchPlan {
     bool requested_frame_is_in_hole_catalogue = false;
     std::vector<int> hole_frame_numbers{};
 };
+
+/*
+    Keystone request-plan branch.
+
+    CMS07-K.1A defines only the plan representation used by later getFrame
+    integration phases. It does not request, retrieve, compute, recover, store,
+    return, or call the pixel path.
+
+    The hard-status branch is a carrier for statuses produced by existing
+    guards in later phases, especially the C.13B recovery-plan guard. Defining
+    this carrier here must not be read as adding a second contiguity validator.
+*/
+enum class Cnr3KeystoneRequestPlanBranch : std::uint8_t {
+    invalid = 0,
+    direct_cached_output_return,
+    frame0_fresh_start,
+    predecessor_present,
+    bounded_recovery_exact_anchor,
+    bounded_recovery_floor_fresh_start,
+    hard_status
+};
+
+[[nodiscard]] constexpr const char* cnr3_keystone_request_plan_branch_name(
+    Cnr3KeystoneRequestPlanBranch branch
+) noexcept {
+    switch (branch) {
+    case Cnr3KeystoneRequestPlanBranch::direct_cached_output_return:
+        return "CACHE-HIT";
+    case Cnr3KeystoneRequestPlanBranch::frame0_fresh_start:
+        return "FRAME0-FRESH";
+    case Cnr3KeystoneRequestPlanBranch::predecessor_present:
+        return "PRED-PRESENT";
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_exact_anchor:
+        return "RECOVER";
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_floor_fresh_start:
+        return "RECOVER";
+    case Cnr3KeystoneRequestPlanBranch::hard_status:
+        return "HARD-STATUS";
+    case Cnr3KeystoneRequestPlanBranch::invalid:
+        break;
+    }
+
+    return "INVALID";
+}
+
+struct Cnr3KeystoneRequestPlan {
+    Cnr3KeystoneRequestPlanBranch branch =
+        Cnr3KeystoneRequestPlanBranch::invalid;
+    int requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    int floor_frame = CNR3_INVALID_FRAME_NUMBER;
+    int start_point_frame = CNR3_INVALID_FRAME_NUMBER;
+    int predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
+    bool floor_fresh_start_approximation = false;
+    Cnr3Status hard_status = Cnr3Status::ok;
+
+    /*
+        Output holes are explicit frame numbers, not an implied span.
+        Later getFrame phases derive source requests from this list so the
+        request set remains holes-only even if a future planner becomes sparse.
+
+        For the floor-fresh-start branch, the floor frame itself is included in
+        this list because it is an absent output that must be produced as the
+        fresh-start base before walking forward.
+    */
+    std::vector<int> hole_frame_numbers{};
+    std::vector<int> source_request_frame_numbers{};
+};
+
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+struct Cnr3KeystoneDevTraceSummary {
+    int total_plan_count = 0;
+    int direct_cached_output_return_count = 0;
+    int frame0_fresh_start_count = 0;
+    int predecessor_present_count = 0;
+    int bounded_recovery_exact_anchor_count = 0;
+    int bounded_recovery_floor_fresh_start_count = 0;
+    int hard_status_count = 0;
+    int max_recovery_span = 0;
+    bool floor_fresh_start_approximation_seen = false;
+};
+#endif
+
+void cnr3_keystone_request_plan_reset(
+    Cnr3KeystoneRequestPlan& plan
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_keystone_request_plan_rebuild_source_request_set(
+    Cnr3KeystoneRequestPlan& plan
+);
+
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+void cnr3_keystone_dev_trace_summary_observe_plan(
+    const Cnr3KeystoneRequestPlan& plan,
+    Cnr3KeystoneDevTraceSummary& summary
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_keystone_format_dev_trace_line(
+    const Cnr3KeystoneRequestPlan& plan,
+    char* out_buffer,
+    std::size_t out_buffer_size
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_keystone_format_dev_trace_summary(
+    const Cnr3KeystoneDevTraceSummary& summary,
+    char* out_buffer,
+    std::size_t out_buffer_size
+) noexcept;
+#endif
 
 /*
     Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune

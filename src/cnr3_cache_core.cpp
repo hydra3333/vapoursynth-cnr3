@@ -1,6 +1,7 @@
 #include "cnr3_cache_core.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <limits>
 #include <mutex>
 #include <new>
@@ -178,6 +179,244 @@ namespace {
     }
 
 } // namespace
+
+
+void cnr3_keystone_request_plan_reset(
+    Cnr3KeystoneRequestPlan& plan
+) noexcept {
+    plan.branch = Cnr3KeystoneRequestPlanBranch::invalid;
+    plan.requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    plan.floor_frame = CNR3_INVALID_FRAME_NUMBER;
+    plan.start_point_frame = CNR3_INVALID_FRAME_NUMBER;
+    plan.predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
+    plan.floor_fresh_start_approximation = false;
+    plan.hard_status = Cnr3Status::ok;
+    plan.hole_frame_numbers.clear();
+    plan.source_request_frame_numbers.clear();
+}
+
+Cnr3Status cnr3_keystone_request_plan_rebuild_source_request_set(
+    Cnr3KeystoneRequestPlan& plan
+) {
+    plan.source_request_frame_numbers.clear();
+
+    const auto append_source_request = [&plan](int frame_number) -> Cnr3Status {
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return Cnr3Status::invalid_argument;
+        }
+
+        plan.source_request_frame_numbers.push_back(frame_number);
+        return Cnr3Status::ok;
+    };
+
+    switch (plan.branch) {
+    case Cnr3KeystoneRequestPlanBranch::direct_cached_output_return:
+    case Cnr3KeystoneRequestPlanBranch::hard_status:
+        return Cnr3Status::ok;
+
+    case Cnr3KeystoneRequestPlanBranch::frame0_fresh_start:
+    case Cnr3KeystoneRequestPlanBranch::predecessor_present:
+        return append_source_request(plan.requested_frame);
+
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_exact_anchor:
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_floor_fresh_start:
+        for (int hole_frame_number : plan.hole_frame_numbers) {
+            const Cnr3Status hole_status = append_source_request(hole_frame_number);
+            if (!cnr3_status_is_ok(hole_status)) {
+                plan.source_request_frame_numbers.clear();
+                return hole_status;
+            }
+        }
+        return append_source_request(plan.requested_frame);
+
+    case Cnr3KeystoneRequestPlanBranch::invalid:
+        break;
+    }
+
+    return Cnr3Status::invalid_argument;
+}
+
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+void cnr3_keystone_dev_trace_summary_observe_plan(
+    const Cnr3KeystoneRequestPlan& plan,
+    Cnr3KeystoneDevTraceSummary& summary
+) noexcept {
+    ++summary.total_plan_count;
+
+    switch (plan.branch) {
+    case Cnr3KeystoneRequestPlanBranch::direct_cached_output_return:
+        ++summary.direct_cached_output_return_count;
+        break;
+    case Cnr3KeystoneRequestPlanBranch::frame0_fresh_start:
+        ++summary.frame0_fresh_start_count;
+        break;
+    case Cnr3KeystoneRequestPlanBranch::predecessor_present:
+        ++summary.predecessor_present_count;
+        break;
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_exact_anchor:
+        ++summary.bounded_recovery_exact_anchor_count;
+        if (static_cast<int>(plan.hole_frame_numbers.size()) > summary.max_recovery_span) {
+            summary.max_recovery_span = static_cast<int>(plan.hole_frame_numbers.size());
+        }
+        break;
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_floor_fresh_start:
+        ++summary.bounded_recovery_floor_fresh_start_count;
+        summary.floor_fresh_start_approximation_seen =
+            summary.floor_fresh_start_approximation_seen ||
+            plan.floor_fresh_start_approximation;
+        if (static_cast<int>(plan.hole_frame_numbers.size()) > summary.max_recovery_span) {
+            summary.max_recovery_span = static_cast<int>(plan.hole_frame_numbers.size());
+        }
+        break;
+    case Cnr3KeystoneRequestPlanBranch::hard_status:
+        ++summary.hard_status_count;
+        break;
+    case Cnr3KeystoneRequestPlanBranch::invalid:
+        break;
+    }
+}
+
+namespace {
+
+    [[nodiscard]] Cnr3Status cnr3_keystone_snprintf_status(
+        int written,
+        std::size_t out_buffer_size
+    ) noexcept {
+        if (written < 0) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (static_cast<std::size_t>(written) >= out_buffer_size) {
+            return Cnr3Status::capacity_exceeded;
+        }
+
+        return Cnr3Status::ok;
+    }
+
+} // namespace
+
+Cnr3Status cnr3_keystone_format_dev_trace_line(
+    const Cnr3KeystoneRequestPlan& plan,
+    char* out_buffer,
+    std::size_t out_buffer_size
+) noexcept {
+    if (out_buffer == nullptr || out_buffer_size == 0U) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    out_buffer[0] = '\0';
+
+    int written = 0;
+
+    switch (plan.branch) {
+    case Cnr3KeystoneRequestPlanBranch::direct_cached_output_return:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d CACHE-HIT",
+            plan.requested_frame
+        );
+        break;
+
+    case Cnr3KeystoneRequestPlanBranch::frame0_fresh_start:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d FRAME0-FRESH src=%zu",
+            plan.requested_frame,
+            plan.source_request_frame_numbers.size()
+        );
+        break;
+
+    case Cnr3KeystoneRequestPlanBranch::predecessor_present:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d PRED-PRESENT pred=%d src=%zu",
+            plan.requested_frame,
+            plan.predecessor_frame,
+            plan.source_request_frame_numbers.size()
+        );
+        break;
+
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_exact_anchor:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d RECOVER floor=%d anchor=%d holes=%zu src=%zu",
+            plan.requested_frame,
+            plan.floor_frame,
+            plan.start_point_frame,
+            plan.hole_frame_numbers.size(),
+            plan.source_request_frame_numbers.size()
+        );
+        break;
+
+    case Cnr3KeystoneRequestPlanBranch::bounded_recovery_floor_fresh_start:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d RECOVER floor=%d anchor=FLOOR holes=%zu src=%zu flag=APPROX",
+            plan.requested_frame,
+            plan.floor_frame,
+            plan.hole_frame_numbers.size(),
+            plan.source_request_frame_numbers.size()
+        );
+        break;
+
+    case Cnr3KeystoneRequestPlanBranch::hard_status:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d HARD-STATUS status=%s",
+            plan.requested_frame,
+            cnr3_status_name(plan.hard_status)
+        );
+        break;
+
+    case Cnr3KeystoneRequestPlanBranch::invalid:
+        written = std::snprintf(
+            out_buffer,
+            out_buffer_size,
+            "[KDT] N=%d INVALID",
+            plan.requested_frame
+        );
+        break;
+    }
+
+    return cnr3_keystone_snprintf_status(written, out_buffer_size);
+}
+
+Cnr3Status cnr3_keystone_format_dev_trace_summary(
+    const Cnr3KeystoneDevTraceSummary& summary,
+    char* out_buffer,
+    std::size_t out_buffer_size
+) noexcept {
+    if (out_buffer == nullptr || out_buffer_size == 0U) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    out_buffer[0] = '\0';
+
+    const int written = std::snprintf(
+        out_buffer,
+        out_buffer_size,
+        "[KDT-SUMMARY] total=%d cache_hit=%d frame0=%d pred_present=%d exact_recovery=%d floor_reset=%d hard=%d max_span=%d floor_approx=%s",
+        summary.total_plan_count,
+        summary.direct_cached_output_return_count,
+        summary.frame0_fresh_start_count,
+        summary.predecessor_present_count,
+        summary.bounded_recovery_exact_anchor_count,
+        summary.bounded_recovery_floor_fresh_start_count,
+        summary.hard_status_count,
+        summary.max_recovery_span,
+        summary.floor_fresh_start_approximation_seen ? "yes" : "no"
+    );
+
+    return cnr3_keystone_snprintf_status(written, out_buffer_size);
+}
+
+#endif
 
 Cnr3CacheSlotId Cnr3CacheSlotIdSource::allocate() noexcept {
     const std::uint64_t value_to_return = (next_value_ != 0U) ? next_value_ : 1U;

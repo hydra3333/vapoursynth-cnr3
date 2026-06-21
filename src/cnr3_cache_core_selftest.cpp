@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -12988,6 +12989,180 @@ Cnr3Status cnr3_cache_core_selftest_caller_supplied_scene_change_reset_proof() n
 
 
 
+Cnr3Status cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof() noexcept {
+    /*
+        K.1A proves request-plan shape and temporary KDT formatting only.
+        It does not request/retrieve frames, call the pixel path, prove
+        predecessor pixel correctness, or connect any functional getFrame path.
+    */
+#if !defined(CNR3_KEYSTONE_DEV_TRACE)
+    return Cnr3Status::lifecycle_violation;
+#else
+    const auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto text_is = [](
+        const char* actual,
+        const char* expected
+    ) noexcept -> bool {
+        return actual != nullptr &&
+            expected != nullptr &&
+            std::strcmp(actual, expected) == 0;
+    };
+
+    const auto vector_is = [](
+        const std::vector<int>& actual,
+        std::initializer_list<int> expected
+    ) noexcept -> bool {
+        if (actual.size() != expected.size()) {
+            return false;
+        }
+
+        std::size_t index = 0U;
+        for (int expected_value : expected) {
+            if (actual[index] != expected_value) {
+                return false;
+            }
+            ++index;
+        }
+
+        return true;
+    };
+
+    const auto expect_trace_line = [=](
+        const Cnr3KeystoneRequestPlan& plan,
+        const char* expected_line
+    ) noexcept -> bool {
+        char line[192] = {};
+        return cnr3_keystone_format_dev_trace_line(
+            plan,
+            line,
+            sizeof(line)
+        ) == Cnr3Status::ok &&
+            text_is(line, expected_line);
+    };
+
+    Cnr3KeystoneDevTraceSummary trace_summary{};
+    Cnr3KeystoneRequestPlan plan{};
+
+    plan.branch = Cnr3KeystoneRequestPlanBranch::direct_cached_output_return;
+    plan.requested_frame = 58;
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(plan) != Cnr3Status::ok ||
+        !plan.source_request_frame_numbers.empty() ||
+        !expect_trace_line(plan, "[KDT] N=58 CACHE-HIT")
+        ) {
+        return fail();
+    }
+    cnr3_keystone_dev_trace_summary_observe_plan(plan, trace_summary);
+
+    cnr3_keystone_request_plan_reset(plan);
+    plan.branch = Cnr3KeystoneRequestPlanBranch::frame0_fresh_start;
+    plan.requested_frame = 0;
+    plan.floor_frame = 0;
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(plan) != Cnr3Status::ok ||
+        !vector_is(plan.source_request_frame_numbers, {0}) ||
+        !expect_trace_line(plan, "[KDT] N=0 FRAME0-FRESH src=1")
+        ) {
+        return fail();
+    }
+    cnr3_keystone_dev_trace_summary_observe_plan(plan, trace_summary);
+
+    cnr3_keystone_request_plan_reset(plan);
+    plan.branch = Cnr3KeystoneRequestPlanBranch::predecessor_present;
+    plan.requested_frame = 43;
+    plan.predecessor_frame = 42;
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(plan) != Cnr3Status::ok ||
+        !vector_is(plan.source_request_frame_numbers, {43}) ||
+        !expect_trace_line(plan, "[KDT] N=43 PRED-PRESENT pred=42 src=1")
+        ) {
+        return fail();
+    }
+    cnr3_keystone_dev_trace_summary_observe_plan(plan, trace_summary);
+
+    cnr3_keystone_request_plan_reset(plan);
+    plan.branch = Cnr3KeystoneRequestPlanBranch::bounded_recovery_exact_anchor;
+    plan.requested_frame = 64;
+    plan.floor_frame = 14;
+    plan.start_point_frame = 59;
+    plan.hole_frame_numbers = {60, 61, 62, 63};
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(plan) != Cnr3Status::ok ||
+        !vector_is(plan.hole_frame_numbers, {60, 61, 62, 63}) ||
+        !vector_is(plan.source_request_frame_numbers, {60, 61, 62, 63, 64}) ||
+        !expect_trace_line(plan, "[KDT] N=64 RECOVER floor=14 anchor=59 holes=4 src=5")
+        ) {
+        return fail();
+    }
+    cnr3_keystone_dev_trace_summary_observe_plan(plan, trace_summary);
+
+    cnr3_keystone_request_plan_reset(plan);
+    plan.branch = Cnr3KeystoneRequestPlanBranch::bounded_recovery_floor_fresh_start;
+    plan.requested_frame = 2000;
+    plan.floor_frame = 1950;
+    plan.floor_fresh_start_approximation = true;
+    for (int frame_number = 1950; frame_number <= 1999; ++frame_number) {
+        plan.hole_frame_numbers.push_back(frame_number);
+    }
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(plan) != Cnr3Status::ok ||
+        plan.hole_frame_numbers.size() != 50U ||
+        plan.source_request_frame_numbers.size() != 51U ||
+        plan.source_request_frame_numbers.front() != 1950 ||
+        plan.source_request_frame_numbers.back() != 2000 ||
+        !expect_trace_line(
+            plan,
+            "[KDT] N=2000 RECOVER floor=1950 anchor=FLOOR holes=50 src=51 flag=APPROX"
+        )
+        ) {
+        return fail();
+    }
+    cnr3_keystone_dev_trace_summary_observe_plan(plan, trace_summary);
+
+    cnr3_keystone_request_plan_reset(plan);
+    plan.branch = Cnr3KeystoneRequestPlanBranch::hard_status;
+    plan.requested_frame = 77;
+    plan.hard_status = Cnr3Status::invariant_violation;
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(plan) != Cnr3Status::ok ||
+        !plan.source_request_frame_numbers.empty() ||
+        !expect_trace_line(plan, "[KDT] N=77 HARD-STATUS status=invariant_violation")
+        ) {
+        return fail();
+    }
+    cnr3_keystone_dev_trace_summary_observe_plan(plan, trace_summary);
+
+    char summary_line[256] = {};
+    if (
+        cnr3_keystone_format_dev_trace_summary(
+            trace_summary,
+            summary_line,
+            sizeof(summary_line)
+        ) != Cnr3Status::ok ||
+        !text_is(
+            summary_line,
+            "[KDT-SUMMARY] total=6 cache_hit=1 frame0=1 pred_present=1 exact_recovery=1 floor_reset=1 hard=1 max_span=50 floor_approx=yes"
+        )
+        ) {
+        return fail();
+    }
+
+    cnr3_cache_core_selftest_trace_line("K.1A keystone request-plan and temporary KDT trace proof scenario");
+    cnr3_cache_core_selftest_trace_line("    synthetic vectors prove plan branch shape, not predecessor pixel correctness");
+    cnr3_cache_core_selftest_trace_line("    recovery request representation is holes-list/source-set, never a blanket span");
+    cnr3_cache_core_selftest_trace_line("    hard-status branch is a carrier for existing C.13B guard results, not a new validator");
+    cnr3_cache_core_selftest_trace_line("    [KDT] and [KDT-SUMMARY] formatting is driven by the plan structure");
+    cnr3_cache_core_selftest_trace_line("    no getFrame wiring, source lifecycle, pixel-path call, cache semantic change, or VS header edit is introduced");
+
+    return Cnr3Status::ok;
+#endif
+}
+
+
+
 
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
@@ -13153,6 +13328,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "caller_supplied_scene_change_reset_proof",
             cnr3_cache_core_selftest_caller_supplied_scene_change_reset_proof
+        },
+        {
+            "keystone_request_plan_dev_trace_proof",
+            cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof
         },
         {
             "lookup_addref_hit_and_miss",

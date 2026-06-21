@@ -22,7 +22,24 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-P.11C-caller-supplied-scene-change-reset-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1A-keystone-request-plan-dev-trace-proof";
+
+
+/*
+    Temporary keystone development trace.
+
+    CMS07-K.1A introduces only request-plan structures and temporary
+    KeystoneDevTrace formatting support. This is deliberately outside the
+    permanent CNR3_DIAG_* / D-SUM framework: no D-SUM compute/print gate, no
+    R-PROCESS-19 macro-off obligation, and removed after the K.1G aggregate
+    out-of-order proof and cleanup.
+
+    Trace emission, when later connected, must use stderr only and must never
+    occur inside a cache lock or CMS atomic scope. The exact grep contract is:
+        per-frame lines:       [KDT]
+        end-of-run summary:    [KDT-SUMMARY]
+*/
+#define CNR3_KEYSTONE_DEV_TRACE 1
 
 /*
     Temporary proof scaffold convention.

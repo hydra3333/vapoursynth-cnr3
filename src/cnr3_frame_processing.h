@@ -71,12 +71,20 @@
     frames, acquire predecessors, touch cache state, process scene-change, or
     connect pixel processing to getFrame.
 
+    CMS07-P.11A validates and assembles caller-supplied current-source,
+    previous-filtered-output, and writable-destination VSFrame plane views. It
+    proves frame-triplet plane compatibility and stale-pointer-safe rejection
+    before full real-frame pixel composition. It still does not request or
+    retrieve frames, decide predecessor sourcing, process scene-change, or
+    connect pixel processing to getFrame/cache lifecycle.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
+        - real-frame pixel composition over the validated triplet;
         - source-frame request/retrieve lifecycle;
         - scene-change/reset decisions;
         - explicit previous-output frame acquisition and ownership;
@@ -207,6 +215,33 @@ struct Cnr3VapourSynthPlaneByteViewSummary {
     bool write_view_created = false;
 };
 
+struct Cnr3VapourSynthFrameTripletNativeViews {
+    Cnr3ConstNativePlaneByteView current_source_y{};
+    Cnr3ConstNativePlaneByteView current_source_u{};
+    Cnr3ConstNativePlaneByteView current_source_v{};
+    Cnr3ConstNativePlaneByteView previous_filtered_y{};
+    Cnr3ConstNativePlaneByteView previous_filtered_u{};
+    Cnr3ConstNativePlaneByteView previous_filtered_v{};
+    Cnr3MutableNativePlaneByteView destination_y{};
+    Cnr3MutableNativePlaneByteView destination_u{};
+    Cnr3MutableNativePlaneByteView destination_v{};
+};
+
+struct Cnr3VapourSynthFrameTripletViewSummary {
+    int bits_per_sample = 0;
+    int storage_bytes = 0;
+    int sub_sampling_w = -1;
+    int sub_sampling_h = -1;
+    int luma_width = 0;
+    int luma_height = 0;
+    int chroma_width = 0;
+    int chroma_height = 0;
+    bool current_source_views_created = false;
+    bool previous_filtered_views_created = false;
+    bool destination_views_created = false;
+    bool triplet_views_created = false;
+};
+
 [[nodiscard]] Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
     int bits_per_sample,
     int& storage_bytes
@@ -260,6 +295,18 @@ struct Cnr3VapourSynthPlaneByteViewSummary {
     int bits_per_sample,
     Cnr3MutableNativePlaneByteView& native_plane,
     Cnr3VapourSynthPlaneByteViewSummary& summary
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    Cnr3VapourSynthFrameTripletNativeViews& views,
+    Cnr3VapourSynthFrameTripletViewSummary& summary
 ) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(

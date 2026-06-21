@@ -422,6 +422,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_vapoursynth_plane_view_adapter_proof() noexcept;
 
 /*
+    Run the CMS07-P.11A caller-supplied VSFrame triplet view proof.
+
+    This validates and assembles current-source, previous-filtered-output, and
+    writable-destination plane views from already-supplied VSFrame pointers. It
+    proves plane compatibility and stale-pointer-safe rejection without adding
+    source-frame lifecycle, predecessor acquisition, scene-change, or getFrame
+    integration.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_caller_supplied_frame_triplet_view_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

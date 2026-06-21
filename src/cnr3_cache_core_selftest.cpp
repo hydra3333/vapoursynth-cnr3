@@ -20,6 +20,7 @@ namespace {
 
     constexpr int CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT = 8;
     constexpr int CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT = 3;
+    constexpr int CNR3_CACHE_CORE_SELFTEST_FAKE_FRAME_SLOT_COUNT = 3;
 
     struct Cnr3CacheCoreSelftestVsFramePlaneState {
         int width = 0;
@@ -27,6 +28,13 @@ namespace {
         ptrdiff_t stride = 0;
         const std::uint8_t* read_ptr = nullptr;
         std::uint8_t* write_ptr = nullptr;
+    };
+
+    struct Cnr3CacheCoreSelftestVsFrameState {
+        const VSFrame* frame = nullptr;
+        Cnr3CacheCoreSelftestVsFramePlaneState planes[
+            CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT
+        ] = {};
     };
 
     struct Cnr3CacheCoreSelftestVsApiState {
@@ -45,6 +53,9 @@ namespace {
         const VSFrame* fake_plane_frame = nullptr;
         Cnr3CacheCoreSelftestVsFramePlaneState fake_planes[
             CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT
+        ] = {};
+        Cnr3CacheCoreSelftestVsFrameState fake_frames[
+            CNR3_CACHE_CORE_SELFTEST_FAKE_FRAME_SLOT_COUNT
         ] = {};
 
         int get_stride_count = 0;
@@ -95,79 +106,111 @@ namespace {
         }
     }
 
-    [[nodiscard]] bool cnr3_cache_core_selftest_fake_plane_is_valid(
+    [[nodiscard]] Cnr3CacheCoreSelftestVsFramePlaneState* cnr3_cache_core_selftest_find_fake_plane(
         const VSFrame* frame,
         int plane
     ) noexcept {
-        return g_cnr3_cache_core_selftest_vsapi_state != nullptr &&
-            frame == g_cnr3_cache_core_selftest_vsapi_state->fake_plane_frame &&
-            plane >= 0 &&
-            plane < CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT;
+        if (
+            g_cnr3_cache_core_selftest_vsapi_state == nullptr ||
+            frame == nullptr ||
+            plane < 0 ||
+            plane >= CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT
+            ) {
+            return nullptr;
+        }
+
+        if (frame == g_cnr3_cache_core_selftest_vsapi_state->fake_plane_frame) {
+            return &g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane];
+        }
+
+        for (Cnr3CacheCoreSelftestVsFrameState& fake_frame :
+            g_cnr3_cache_core_selftest_vsapi_state->fake_frames) {
+            if (frame == fake_frame.frame) {
+                return &fake_frame.planes[plane];
+            }
+        }
+
+        return nullptr;
     }
 
     ptrdiff_t VS_CC cnr3_cache_core_selftest_get_stride(
         const VSFrame* frame,
         int plane
     ) noexcept {
-        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+        const Cnr3CacheCoreSelftestVsFramePlaneState* plane_state =
+            cnr3_cache_core_selftest_find_fake_plane(frame, plane);
+
+        if (plane_state == nullptr) {
             return 0;
         }
 
         ++g_cnr3_cache_core_selftest_vsapi_state->get_stride_count;
         g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
-        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].stride;
+        return plane_state->stride;
     }
 
     const std::uint8_t* VS_CC cnr3_cache_core_selftest_get_read_ptr(
         const VSFrame* frame,
         int plane
     ) noexcept {
-        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+        const Cnr3CacheCoreSelftestVsFramePlaneState* plane_state =
+            cnr3_cache_core_selftest_find_fake_plane(frame, plane);
+
+        if (plane_state == nullptr) {
             return nullptr;
         }
 
         ++g_cnr3_cache_core_selftest_vsapi_state->get_read_ptr_count;
         g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
-        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].read_ptr;
+        return plane_state->read_ptr;
     }
 
     std::uint8_t* VS_CC cnr3_cache_core_selftest_get_write_ptr(
         VSFrame* frame,
         int plane
     ) noexcept {
-        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+        const Cnr3CacheCoreSelftestVsFramePlaneState* plane_state =
+            cnr3_cache_core_selftest_find_fake_plane(frame, plane);
+
+        if (plane_state == nullptr) {
             return nullptr;
         }
 
         ++g_cnr3_cache_core_selftest_vsapi_state->get_write_ptr_count;
         g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
-        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].write_ptr;
+        return plane_state->write_ptr;
     }
 
     int VS_CC cnr3_cache_core_selftest_get_frame_width(
         const VSFrame* frame,
         int plane
     ) noexcept {
-        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+        const Cnr3CacheCoreSelftestVsFramePlaneState* plane_state =
+            cnr3_cache_core_selftest_find_fake_plane(frame, plane);
+
+        if (plane_state == nullptr) {
             return 0;
         }
 
         ++g_cnr3_cache_core_selftest_vsapi_state->get_frame_width_count;
         g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
-        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].width;
+        return plane_state->width;
     }
 
     int VS_CC cnr3_cache_core_selftest_get_frame_height(
         const VSFrame* frame,
         int plane
     ) noexcept {
-        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+        const Cnr3CacheCoreSelftestVsFramePlaneState* plane_state =
+            cnr3_cache_core_selftest_find_fake_plane(frame, plane);
+
+        if (plane_state == nullptr) {
             return 0;
         }
 
         ++g_cnr3_cache_core_selftest_vsapi_state->get_frame_height_count;
         g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
-        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].height;
+        return plane_state->height;
     }
 
     VSAPI cnr3_cache_core_selftest_make_vsapi() noexcept {
@@ -11609,6 +11652,335 @@ Cnr3Status cnr3_cache_core_selftest_vapoursynth_plane_view_adapter_proof() noexc
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_caller_supplied_frame_triplet_view_proof() noexcept {
+    /*
+        P.11A validates caller-supplied frame triplets only. It must not decide
+        source-frame lifecycle, predecessor acquisition, cache lookup, or getFrame
+        scheduling.
+    */
+    constexpr int bits_10 = 10;
+    constexpr int sub_sampling_w = 1;
+    constexpr int sub_sampling_h = 1;
+    constexpr int luma_width = 4;
+    constexpr int luma_height = 2;
+    constexpr int chroma_width = 2;
+    constexpr int chroma_height = 1;
+    constexpr int luma_stride = 10;
+    constexpr int chroma_stride = 6;
+
+    int current_source_storage = 10;
+    int previous_filtered_storage = 20;
+    int destination_storage = 30;
+    const VSFrame* current_source_frame =
+        reinterpret_cast<const VSFrame*>(&current_source_storage);
+    const VSFrame* previous_filtered_frame =
+        reinterpret_cast<const VSFrame*>(&previous_filtered_storage);
+    VSFrame* destination_frame = reinterpret_cast<VSFrame*>(&destination_storage);
+
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    vsapi_state.fake_frames[0].frame = current_source_frame;
+    vsapi_state.fake_frames[1].frame = previous_filtered_frame;
+    vsapi_state.fake_frames[2].frame = destination_frame;
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    const auto fail = [&]() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto summary_matches = [](
+        const Cnr3VapourSynthFrameTripletViewSummary& summary,
+        int expected_bits,
+        int expected_storage_bytes,
+        int expected_subw,
+        int expected_subh,
+        int expected_luma_width,
+        int expected_luma_height,
+        int expected_chroma_width,
+        int expected_chroma_height
+    ) noexcept -> bool {
+        return summary.bits_per_sample == expected_bits &&
+            summary.storage_bytes == expected_storage_bytes &&
+            summary.sub_sampling_w == expected_subw &&
+            summary.sub_sampling_h == expected_subh &&
+            summary.luma_width == expected_luma_width &&
+            summary.luma_height == expected_luma_height &&
+            summary.chroma_width == expected_chroma_width &&
+            summary.chroma_height == expected_chroma_height &&
+            summary.current_source_views_created &&
+            summary.previous_filtered_views_created &&
+            summary.destination_views_created &&
+            summary.triplet_views_created;
+    };
+
+    const auto triplet_views_are_clear = [](
+        const Cnr3VapourSynthFrameTripletNativeViews& views
+    ) noexcept -> bool {
+        return views.current_source_y.data == nullptr &&
+            views.current_source_u.data == nullptr &&
+            views.current_source_v.data == nullptr &&
+            views.previous_filtered_y.data == nullptr &&
+            views.previous_filtered_u.data == nullptr &&
+            views.previous_filtered_v.data == nullptr &&
+            views.destination_y.data == nullptr &&
+            views.destination_u.data == nullptr &&
+            views.destination_v.data == nullptr;
+    };
+
+    const auto summary_is_clear = [](
+        const Cnr3VapourSynthFrameTripletViewSummary& summary
+    ) noexcept -> bool {
+        return summary.bits_per_sample == 0 &&
+            summary.storage_bytes == 0 &&
+            summary.sub_sampling_w == -1 &&
+            summary.sub_sampling_h == -1 &&
+            summary.luma_width == 0 &&
+            summary.luma_height == 0 &&
+            summary.chroma_width == 0 &&
+            summary.chroma_height == 0 &&
+            !summary.current_source_views_created &&
+            !summary.previous_filtered_views_created &&
+            !summary.destination_views_created &&
+            !summary.triplet_views_created;
+    };
+
+    std::vector<std::uint8_t> current_y(static_cast<std::size_t>(luma_stride * luma_height), 0xA0U);
+    std::vector<std::uint8_t> current_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xA1U);
+    std::vector<std::uint8_t> current_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xA2U);
+    std::vector<std::uint8_t> previous_y(static_cast<std::size_t>(luma_stride * luma_height), 0xB0U);
+    std::vector<std::uint8_t> previous_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB1U);
+    std::vector<std::uint8_t> previous_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB2U);
+    std::vector<std::uint8_t> destination_y(static_cast<std::size_t>(luma_stride * luma_height), 0xC0U);
+    std::vector<std::uint8_t> destination_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC1U);
+    std::vector<std::uint8_t> destination_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC2U);
+
+    cnr3_cache_core_selftest_write_u16_sample(current_y.data(), 12, 111U);
+    cnr3_cache_core_selftest_write_u16_sample(previous_u.data(), 2, 222U);
+
+    const auto configure_read_frame = [&](
+        Cnr3CacheCoreSelftestVsFrameState& frame_state,
+        const std::vector<std::uint8_t>& y_plane,
+        const std::vector<std::uint8_t>& u_plane,
+        const std::vector<std::uint8_t>& v_plane
+    ) noexcept {
+        frame_state.planes[0].width = luma_width;
+        frame_state.planes[0].height = luma_height;
+        frame_state.planes[0].stride = luma_stride;
+        frame_state.planes[0].read_ptr = y_plane.data();
+
+        frame_state.planes[1].width = chroma_width;
+        frame_state.planes[1].height = chroma_height;
+        frame_state.planes[1].stride = chroma_stride;
+        frame_state.planes[1].read_ptr = u_plane.data();
+
+        frame_state.planes[2].width = chroma_width;
+        frame_state.planes[2].height = chroma_height;
+        frame_state.planes[2].stride = chroma_stride;
+        frame_state.planes[2].read_ptr = v_plane.data();
+    };
+
+    const auto configure_write_frame = [&](
+        Cnr3CacheCoreSelftestVsFrameState& frame_state,
+        std::vector<std::uint8_t>& y_plane,
+        std::vector<std::uint8_t>& u_plane,
+        std::vector<std::uint8_t>& v_plane
+    ) noexcept {
+        frame_state.planes[0].width = luma_width;
+        frame_state.planes[0].height = luma_height;
+        frame_state.planes[0].stride = luma_stride;
+        frame_state.planes[0].write_ptr = y_plane.data();
+
+        frame_state.planes[1].width = chroma_width;
+        frame_state.planes[1].height = chroma_height;
+        frame_state.planes[1].stride = chroma_stride;
+        frame_state.planes[1].write_ptr = u_plane.data();
+
+        frame_state.planes[2].width = chroma_width;
+        frame_state.planes[2].height = chroma_height;
+        frame_state.planes[2].stride = chroma_stride;
+        frame_state.planes[2].write_ptr = v_plane.data();
+    };
+
+    configure_read_frame(vsapi_state.fake_frames[0], current_y, current_u, current_v);
+    configure_read_frame(vsapi_state.fake_frames[1], previous_y, previous_u, previous_v);
+    configure_write_frame(vsapi_state.fake_frames[2], destination_y, destination_u, destination_v);
+
+    Cnr3VapourSynthFrameTripletNativeViews views{};
+    Cnr3VapourSynthFrameTripletViewSummary summary{};
+
+    if (
+        cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+            current_source_frame,
+            previous_filtered_frame,
+            destination_frame,
+            &vsapi,
+            bits_10,
+            sub_sampling_w,
+            sub_sampling_h,
+            views,
+            summary
+        ) != Cnr3Status::ok ||
+        views.current_source_y.data != current_y.data() ||
+        views.previous_filtered_u.data != previous_u.data() ||
+        views.destination_v.data != destination_v.data() ||
+        !summary_matches(
+            summary,
+            bits_10,
+            2,
+            sub_sampling_w,
+            sub_sampling_h,
+            luma_width,
+            luma_height,
+            chroma_width,
+            chroma_height
+        )
+        ) {
+        return fail();
+    }
+
+    int current_y_sample = -1;
+    int previous_u_sample = -1;
+    const Cnr3ConstNativePlaneByteView destination_v_readback{
+        destination_v.data(),
+        chroma_width,
+        chroma_height,
+        chroma_stride,
+        bits_10
+    };
+    int destination_v_sample = -1;
+
+    if (
+        cnr3_load_native_plane_sample(
+            views.current_source_y,
+            1,
+            1,
+            current_y_sample
+        ) != Cnr3Status::ok ||
+        current_y_sample != 111 ||
+        cnr3_load_native_plane_sample(
+            views.previous_filtered_u,
+            1,
+            0,
+            previous_u_sample
+        ) != Cnr3Status::ok ||
+        previous_u_sample != 222 ||
+        cnr3_store_native_plane_sample(
+            views.destination_v,
+            1,
+            0,
+            333
+        ) != Cnr3Status::ok ||
+        cnr3_load_native_plane_sample(
+            destination_v_readback,
+            1,
+            0,
+            destination_v_sample
+        ) != Cnr3Status::ok ||
+        destination_v_sample != 333 ||
+        vsapi_state.get_read_ptr_count != 6 ||
+        vsapi_state.get_write_ptr_count != 3
+        ) {
+        return fail();
+    }
+
+    {
+        Cnr3VapourSynthFrameTripletNativeViews rejected_views{};
+        rejected_views.current_source_y.data = reinterpret_cast<const void*>(0x1);
+        rejected_views.previous_filtered_y.data = reinterpret_cast<const void*>(0x2);
+        rejected_views.destination_y.data = reinterpret_cast<void*>(0x3);
+        Cnr3VapourSynthFrameTripletViewSummary rejected_summary{};
+        rejected_summary.bits_per_sample = 99;
+        rejected_summary.sub_sampling_w = 9;
+
+        vsapi_state.fake_frames[1].planes[2].height = 2;
+
+        if (
+            cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_10,
+                sub_sampling_w,
+                sub_sampling_h,
+                rejected_views,
+                rejected_summary
+            ) != Cnr3Status::invalid_argument ||
+            !triplet_views_are_clear(rejected_views) ||
+            !summary_is_clear(rejected_summary)
+            ) {
+            return fail();
+        }
+
+        vsapi_state.fake_frames[1].planes[2].height = chroma_height;
+    }
+
+    {
+        Cnr3VapourSynthFrameTripletNativeViews rejected_views{};
+        Cnr3VapourSynthFrameTripletViewSummary rejected_summary{};
+
+        vsapi_state.fake_frames[0].planes[0].width = 5;
+
+        if (
+            cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_10,
+                sub_sampling_w,
+                sub_sampling_h,
+                rejected_views,
+                rejected_summary
+            ) != Cnr3Status::invalid_argument ||
+            !triplet_views_are_clear(rejected_views) ||
+            !summary_is_clear(rejected_summary)
+            ) {
+            return fail();
+        }
+
+        vsapi_state.fake_frames[0].planes[0].width = luma_width;
+    }
+
+    {
+        Cnr3VapourSynthFrameTripletNativeViews rejected_views{};
+        Cnr3VapourSynthFrameTripletViewSummary rejected_summary{};
+
+        if (
+            cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+                current_source_frame,
+                nullptr,
+                destination_frame,
+                &vsapi,
+                bits_10,
+                sub_sampling_w,
+                sub_sampling_h,
+                rejected_views,
+                rejected_summary
+            ) != Cnr3Status::invalid_argument ||
+            !triplet_views_are_clear(rejected_views) ||
+            !summary_is_clear(rejected_summary)
+            ) {
+            return fail();
+        }
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    cnr3_cache_core_selftest_trace_line("P.11A caller-supplied frame-triplet view proof scenario");
+    cnr3_cache_core_selftest_trace_line("    current source, previous filtered output, and destination VSFrames are caller supplied");
+    cnr3_cache_core_selftest_trace_line("    triplet validation composes P.10A read/write plane adapters without lifecycle decisions");
+    cnr3_cache_core_selftest_trace_line("    4:2:0 real-frame dimensions require exact luma divisibility and matching U/V triplets");
+    cnr3_cache_core_selftest_trace_line("    stale triplet views are cleared on plane mismatch or invalid real-frame dimensions");
+    cnr3_cache_core_selftest_trace_line("    source-frame lifecycle, predecessor sourcing, scene-change, pixel composition, and getFrame/cache integration remain deferred");
+
+    return Cnr3Status::ok;
+}
+
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -11761,6 +12133,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "vapoursynth_plane_view_adapter_proof",
             cnr3_cache_core_selftest_vapoursynth_plane_view_adapter_proof
+        },
+        {
+            "caller_supplied_frame_triplet_view_proof",
+            cnr3_cache_core_selftest_caller_supplied_frame_triplet_view_proof
         },
         {
             "lookup_addref_hit_and_miss",

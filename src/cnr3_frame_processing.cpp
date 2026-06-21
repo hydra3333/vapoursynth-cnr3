@@ -271,6 +271,125 @@ void cnr3_publish_vapoursynth_plane_summary(
     summary = local;
 }
 
+[[nodiscard]] bool cnr3_subsampling_factor_is_valid(
+    int sub_sampling
+) noexcept {
+    return sub_sampling >= 0 && sub_sampling <= 1;
+}
+
+[[nodiscard]] bool cnr3_luma_chroma_dimensions_match_subsampling(
+    int luma_dimension,
+    int chroma_dimension,
+    int sub_sampling
+) noexcept {
+    if (
+        luma_dimension <= 0 ||
+        chroma_dimension <= 0 ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling)
+        ) {
+        return false;
+    }
+
+    const int divisor = 1 << sub_sampling;
+    return (luma_dimension % divisor) == 0 &&
+        chroma_dimension == (luma_dimension / divisor);
+}
+
+[[nodiscard]] bool cnr3_const_native_plane_dimensions_match(
+    const Cnr3ConstNativePlaneByteView& left,
+    const Cnr3ConstNativePlaneByteView& right
+) noexcept {
+    return left.width == right.width &&
+        left.height == right.height &&
+        left.bits_per_sample == right.bits_per_sample;
+}
+
+[[nodiscard]] bool cnr3_const_mutable_native_plane_dimensions_match(
+    const Cnr3ConstNativePlaneByteView& left,
+    const Cnr3MutableNativePlaneByteView& right
+) noexcept {
+    return left.width == right.width &&
+        left.height == right.height &&
+        left.bits_per_sample == right.bits_per_sample;
+}
+
+[[nodiscard]] bool cnr3_triplet_plane_dimensions_are_compatible(
+    const Cnr3VapourSynthFrameTripletNativeViews& views,
+    int sub_sampling_w,
+    int sub_sampling_h
+) noexcept {
+    if (
+        !cnr3_const_native_plane_dimensions_match(
+            views.current_source_y,
+            views.previous_filtered_y
+        ) ||
+        !cnr3_const_mutable_native_plane_dimensions_match(
+            views.current_source_y,
+            views.destination_y
+        ) ||
+        !cnr3_const_native_plane_dimensions_match(
+            views.current_source_u,
+            views.previous_filtered_u
+        ) ||
+        !cnr3_const_mutable_native_plane_dimensions_match(
+            views.current_source_u,
+            views.destination_u
+        ) ||
+        !cnr3_const_native_plane_dimensions_match(
+            views.current_source_v,
+            views.previous_filtered_v
+        ) ||
+        !cnr3_const_mutable_native_plane_dimensions_match(
+            views.current_source_v,
+            views.destination_v
+        ) ||
+        !cnr3_const_native_plane_dimensions_match(
+            views.current_source_u,
+            views.current_source_v
+        )
+        ) {
+        return false;
+    }
+
+    return cnr3_luma_chroma_dimensions_match_subsampling(
+        views.current_source_y.width,
+        views.current_source_u.width,
+        sub_sampling_w
+    ) &&
+        cnr3_luma_chroma_dimensions_match_subsampling(
+            views.current_source_y.height,
+            views.current_source_u.height,
+            sub_sampling_h
+        );
+}
+
+void cnr3_publish_vapoursynth_frame_triplet_summary(
+    int bits_per_sample,
+    int storage_bytes,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    int luma_width,
+    int luma_height,
+    int chroma_width,
+    int chroma_height,
+    Cnr3VapourSynthFrameTripletViewSummary& summary
+) noexcept {
+    Cnr3VapourSynthFrameTripletViewSummary local{};
+    local.bits_per_sample = bits_per_sample;
+    local.storage_bytes = storage_bytes;
+    local.sub_sampling_w = sub_sampling_w;
+    local.sub_sampling_h = sub_sampling_h;
+    local.luma_width = luma_width;
+    local.luma_height = luma_height;
+    local.chroma_width = chroma_width;
+    local.chroma_height = chroma_height;
+    local.current_source_views_created = true;
+    local.previous_filtered_views_created = true;
+    local.destination_views_created = true;
+    local.triplet_views_created = true;
+    summary = local;
+}
+
 
 } // namespace
 
@@ -592,6 +711,177 @@ Cnr3Status cnr3_make_vapoursynth_write_plane_byte_view(
 
     return Cnr3Status::ok;
 }
+
+Cnr3Status cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    Cnr3VapourSynthFrameTripletNativeViews& views,
+    Cnr3VapourSynthFrameTripletViewSummary& summary
+) noexcept {
+    views = Cnr3VapourSynthFrameTripletNativeViews{};
+    summary = Cnr3VapourSynthFrameTripletViewSummary{};
+
+    int storage_bytes = 0;
+
+    if (
+        current_source_frame == nullptr ||
+        previous_filtered_output_frame == nullptr ||
+        destination_frame == nullptr ||
+        vsapi == nullptr ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling_w) ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling_h) ||
+        cnr3_native_storage_bytes_for_bit_depth(bits_per_sample, storage_bytes) !=
+            Cnr3Status::ok
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    Cnr3VapourSynthFrameTripletNativeViews local{};
+    Cnr3VapourSynthPlaneByteViewSummary plane_summary{};
+
+    Cnr3Status status = cnr3_make_vapoursynth_read_plane_byte_view(
+        current_source_frame,
+        vsapi,
+        0,
+        bits_per_sample,
+        local.current_source_y,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_read_plane_byte_view(
+        current_source_frame,
+        vsapi,
+        1,
+        bits_per_sample,
+        local.current_source_u,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_read_plane_byte_view(
+        current_source_frame,
+        vsapi,
+        2,
+        bits_per_sample,
+        local.current_source_v,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_read_plane_byte_view(
+        previous_filtered_output_frame,
+        vsapi,
+        0,
+        bits_per_sample,
+        local.previous_filtered_y,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_read_plane_byte_view(
+        previous_filtered_output_frame,
+        vsapi,
+        1,
+        bits_per_sample,
+        local.previous_filtered_u,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_read_plane_byte_view(
+        previous_filtered_output_frame,
+        vsapi,
+        2,
+        bits_per_sample,
+        local.previous_filtered_v,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_write_plane_byte_view(
+        destination_frame,
+        vsapi,
+        0,
+        bits_per_sample,
+        local.destination_y,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_write_plane_byte_view(
+        destination_frame,
+        vsapi,
+        1,
+        bits_per_sample,
+        local.destination_u,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_make_vapoursynth_write_plane_byte_view(
+        destination_frame,
+        vsapi,
+        2,
+        bits_per_sample,
+        local.destination_v,
+        plane_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    if (!cnr3_triplet_plane_dimensions_are_compatible(local, sub_sampling_w, sub_sampling_h)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    views = local;
+
+    cnr3_publish_vapoursynth_frame_triplet_summary(
+        bits_per_sample,
+        storage_bytes,
+        sub_sampling_w,
+        sub_sampling_h,
+        local.current_source_y.width,
+        local.current_source_y.height,
+        local.current_source_u.width,
+        local.current_source_u.height,
+        summary
+    );
+
+    return Cnr3Status::ok;
+}
+
 
 Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     int current_downsampled_luma_sample,

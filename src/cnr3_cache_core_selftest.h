@@ -462,6 +462,17 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof() noexcept;
 
 /*
+    Run the CMS07-K.1B direct cached-output return ownership proof.
+
+    This is still synthetic: it proves the direct cached-output branch
+    accounting by using the real Cnr3OwnedFrameRef type, real cache
+    lookup/addref, real transfer_to_caller(), and real release operations.
+    Only the final VapourSynth getFrame return sink is stubbed. Real
+    VSFrame return integration remains owed by a later keystone wiring step.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

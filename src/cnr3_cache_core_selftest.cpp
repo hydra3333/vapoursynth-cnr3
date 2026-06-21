@@ -13158,9 +13158,320 @@ Cnr3Status cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof() noex
     cnr3_cache_core_selftest_trace_line("    no getFrame wiring, source lifecycle, pixel-path call, cache semantic change, or VS header edit is introduced");
 
     return Cnr3Status::ok;
+
 #endif
 }
 
+
+Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof() noexcept {
+    /*
+        K.1B proves direct cached-output return ownership accounting only.
+        It uses the real cache lookup/addref operation and the real
+        Cnr3OwnedFrameRef release/transfer operations. The final return sink is
+        synthetic and represents VapourSynth receiving the getFrame return.
+        Real VSFrame return integration remains owed by a later keystone phase.
+    */
+#if !defined(CNR3_KEYSTONE_DEV_TRACE)
+    return Cnr3Status::lifecycle_violation;
+#else
+    struct Cnr3CacheCoreSelftestKeystoneReturnAccounting {
+        int lookup_refs_acquired = 0;
+        int lookup_refs_released = 0;
+        int lookup_refs_transferred = 0;
+
+        [[nodiscard]] int balance() const noexcept {
+            return lookup_refs_acquired - lookup_refs_released - lookup_refs_transferred;
+        }
+    };
+
+    struct Cnr3CacheCoreSelftestGetFrameReturnSink {
+        const VSFrame* returned_frame = nullptr;
+
+        [[nodiscard]] Cnr3Status accept_getframe_return(
+            const VSFrame* frame
+        ) noexcept {
+            if (frame == nullptr || returned_frame != nullptr) {
+                return Cnr3Status::invalid_argument;
+            }
+
+            returned_frame = frame;
+            return Cnr3Status::ok;
+        }
+
+        void release_as_vapoursynth_owner(
+            const VSAPI& vsapi
+        ) noexcept {
+            const VSFrame* frame_to_release = returned_frame;
+            returned_frame = nullptr;
+
+            if (frame_to_release != nullptr && vsapi.freeFrame != nullptr) {
+                vsapi.freeFrame(frame_to_release);
+            }
+        }
+    };
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto text_is = [](
+        const char* actual,
+        const char* expected
+    ) noexcept -> bool {
+        return actual != nullptr &&
+            expected != nullptr &&
+            std::strcmp(actual, expected) == 0;
+    };
+
+    const auto reset_vsapi_state = [](
+        Cnr3CacheCoreSelftestVsApiState& vsapi_state
+    ) noexcept {
+        vsapi_state = Cnr3CacheCoreSelftestVsApiState{};
+        g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+    };
+
+    const auto store_cached_frame = [](
+        Cnr3OutputCacheCore& cache,
+        int frame_number,
+        const VSFrame* frame,
+        const VSAPI& vsapi
+    ) noexcept -> Cnr3Status {
+        Cnr3OwnedFrameRef cached_owned_frame{};
+
+        const Cnr3Status adopt_status = cached_owned_frame.reset_to_owned_frame(
+            frame,
+            &vsapi
+        );
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        return cache.store_noncheckpoint_owned_frame(
+            frame_number,
+            std::move(cached_owned_frame)
+        );
+    };
+
+    const auto observe_acquired_lookup_ref = [](
+        const Cnr3OwnedFrameRef& owned_frame,
+        Cnr3CacheCoreSelftestKeystoneReturnAccounting& accounting
+    ) noexcept -> Cnr3Status {
+        if (!owned_frame.has_frame()) {
+            return Cnr3Status::ownership_violation;
+        }
+
+        ++accounting.lookup_refs_acquired;
+        return Cnr3Status::ok;
+    };
+
+    const auto release_lookup_ref = [](
+        Cnr3OwnedFrameRef& owned_frame,
+        Cnr3CacheCoreSelftestKeystoneReturnAccounting& accounting
+    ) noexcept -> Cnr3Status {
+        if (!owned_frame.has_frame()) {
+            return Cnr3Status::ownership_violation;
+        }
+
+        owned_frame.reset();
+        ++accounting.lookup_refs_released;
+        return Cnr3Status::ok;
+    };
+
+    const auto transfer_lookup_ref_to_getframe_sink = [](
+        Cnr3OwnedFrameRef& owned_frame,
+        Cnr3CacheCoreSelftestGetFrameReturnSink& return_sink,
+        Cnr3CacheCoreSelftestKeystoneReturnAccounting& accounting
+    ) noexcept -> Cnr3Status {
+        if (!owned_frame.has_frame()) {
+            return Cnr3Status::ownership_violation;
+        }
+
+        const VSFrame* frame_for_vapoursynth = owned_frame.transfer_to_caller();
+
+        const Cnr3Status sink_status =
+            return_sink.accept_getframe_return(frame_for_vapoursynth);
+
+        if (!cnr3_status_is_ok(sink_status)) {
+            return sink_status;
+        }
+
+        ++accounting.lookup_refs_transferred;
+        return Cnr3Status::ok;
+    };
+
+    const auto direct_return_balance_is_clean = [](
+        const Cnr3CacheCoreSelftestKeystoneReturnAccounting& accounting
+    ) noexcept -> bool {
+        return accounting.balance() == 0;
+    };
+
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    Cnr3KeystoneRequestPlan direct_return_plan{};
+    direct_return_plan.branch = Cnr3KeystoneRequestPlanBranch::direct_cached_output_return;
+    direct_return_plan.requested_frame = 58;
+
+    char trace_line[192] = {};
+    if (
+        cnr3_keystone_request_plan_rebuild_source_request_set(direct_return_plan) != Cnr3Status::ok ||
+        !direct_return_plan.hole_frame_numbers.empty() ||
+        !direct_return_plan.source_request_frame_numbers.empty() ||
+        cnr3_keystone_format_dev_trace_line(
+            direct_return_plan,
+            trace_line,
+            sizeof(trace_line)
+        ) != Cnr3Status::ok ||
+        !text_is(trace_line, "[KDT] N=58 CACHE-HIT")
+        ) {
+        return fail();
+    }
+
+    {
+        reset_vsapi_state(vsapi_state);
+
+        int cached_frame_storage = 58;
+        const VSFrame* cached_frame =
+            reinterpret_cast<const VSFrame*>(&cached_frame_storage);
+
+        Cnr3OutputCacheCore cache{};
+
+        if (store_cached_frame(cache, 58, cached_frame, vsapi) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef lookup_owned_frame{};
+        Cnr3CacheCoreSelftestKeystoneReturnAccounting accounting{};
+        Cnr3CacheCoreSelftestGetFrameReturnSink getframe_return_sink{};
+
+        if (
+            cache.lookup_frame_and_add_ref(58, &vsapi, lookup_owned_frame) != Cnr3Status::ok ||
+            observe_acquired_lookup_ref(lookup_owned_frame, accounting) != Cnr3Status::ok ||
+            vsapi_state.add_frame_ref_count != 1 ||
+            vsapi_state.last_add_ref_frame != cached_frame ||
+            vsapi_state.free_frame_count != 0
+            ) {
+            return fail();
+        }
+
+        if (
+            transfer_lookup_ref_to_getframe_sink(
+                lookup_owned_frame,
+                getframe_return_sink,
+                accounting
+            ) != Cnr3Status::ok ||
+            lookup_owned_frame.has_frame() ||
+            getframe_return_sink.returned_frame != cached_frame ||
+            !direct_return_balance_is_clean(accounting) ||
+            accounting.lookup_refs_acquired != 1 ||
+            accounting.lookup_refs_released != 0 ||
+            accounting.lookup_refs_transferred != 1 ||
+            vsapi_state.free_frame_count != 0
+            ) {
+            return fail();
+        }
+
+        getframe_return_sink.release_as_vapoursynth_owner(vsapi);
+
+        if (
+            vsapi_state.free_frame_count != 1 ||
+            vsapi_state.last_freed_frame != cached_frame
+            ) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (vsapi_state.free_frame_count != 2) {
+            return fail();
+        }
+    }
+
+    {
+        reset_vsapi_state(vsapi_state);
+
+        int cached_frame_storage = 104;
+        const VSFrame* cached_frame =
+            reinterpret_cast<const VSFrame*>(&cached_frame_storage);
+
+        Cnr3OutputCacheCore cache{};
+
+        if (store_cached_frame(cache, 104, cached_frame, vsapi) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef lookup_owned_frame{};
+        Cnr3CacheCoreSelftestKeystoneReturnAccounting accounting{};
+
+        if (
+            cache.lookup_frame_and_add_ref(104, &vsapi, lookup_owned_frame) != Cnr3Status::ok ||
+            observe_acquired_lookup_ref(lookup_owned_frame, accounting) != Cnr3Status::ok ||
+            vsapi_state.add_frame_ref_count != 1 ||
+            vsapi_state.free_frame_count != 0
+            ) {
+            return fail();
+        }
+
+        if (
+            release_lookup_ref(lookup_owned_frame, accounting) != Cnr3Status::ok ||
+            lookup_owned_frame.has_frame() ||
+            !direct_return_balance_is_clean(accounting) ||
+            accounting.lookup_refs_acquired != 1 ||
+            accounting.lookup_refs_released != 1 ||
+            accounting.lookup_refs_transferred != 0 ||
+            vsapi_state.free_frame_count != 1 ||
+            vsapi_state.last_freed_frame != cached_frame
+            ) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (vsapi_state.free_frame_count != 2) {
+            return fail();
+        }
+    }
+
+    {
+        reset_vsapi_state(vsapi_state);
+
+        Cnr3OutputCacheCore cache{};
+        Cnr3OwnedFrameRef lookup_owned_frame{};
+        Cnr3CacheCoreSelftestKeystoneReturnAccounting accounting{};
+
+        if (
+            cache.lookup_frame_and_add_ref(999, &vsapi, lookup_owned_frame) != Cnr3Status::not_found ||
+            lookup_owned_frame.has_frame() ||
+            !direct_return_balance_is_clean(accounting) ||
+            accounting.lookup_refs_acquired != 0 ||
+            accounting.lookup_refs_released != 0 ||
+            accounting.lookup_refs_transferred != 0 ||
+            vsapi_state.add_frame_ref_count != 0 ||
+            vsapi_state.free_frame_count != 0
+            ) {
+            return fail();
+        }
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    cnr3_cache_core_selftest_trace_line("K.1B direct cached-output return ownership proof scenario");
+    cnr3_cache_core_selftest_trace_line("    synthetic proof uses real Cnr3OwnedFrameRef and real cache lookup/addref operations");
+    cnr3_cache_core_selftest_trace_line("    success path transfers lookup ref once to a getFrame-return sink and releases zero");
+    cnr3_cache_core_selftest_trace_line("    cleanup-before-transfer path releases the lookup ref once and transfers zero");
+    cnr3_cache_core_selftest_trace_line("    no-acquire miss path acquires, releases, and transfers zero lookup refs");
+    cnr3_cache_core_selftest_trace_line("    real VSFrame return-to-VapourSynth integration remains owed by a later keystone wiring step");
+
+    return Cnr3Status::ok;
+#endif
+}
 
 
 
@@ -13332,6 +13643,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "keystone_request_plan_dev_trace_proof",
             cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof
+        },
+        {
+            "keystone_direct_cached_output_return_proof",
+            cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof
         },
         {
             "lookup_addref_hit_and_miss",

@@ -233,14 +233,79 @@ Please add, for the keystone phases (K.1A-K.1G), per-frame trace diagnostics tha
 Constraints on these diagnostics:
   - OUTSIDE the formal diagnostic framework: do NOT use CNR3_DIAG_* names (those are the
     permanent, compile-time-gated, observe-only framework with the R-PROCESS-19 macro-off
-    obligation). Use a clearly-temporary marker, e.g. CNR3_KEYSTONE_DEV_TRACE_*, so it is
-    visibly NOT part of the durable diagnostics and carries NO macro-off obligation.
+    obligation). Use the dedicated keystone-dev-trace marker (see "MARKER CONTRACT" below),
+    so it is visibly NOT part of the durable diagnostics and carries NO macro-off obligation.
   - stderr, never stdout; never inside a lock/atomic scope (consistent with the standing
     rules).
   - REMOVED in a post-proven cleanup patch: once K.1G's aggregate out-of-order proof is green
     and committed, a follow-up patch strips the dev-trace, leaving only whatever permanent
     observation the formal framework genuinely needs. This keeps the durable codebase clean
     while giving development the visibility this phase needs.
+
+VOLUME / FORMAT (important — keep the trace cheap to read and to paste back for review):
+  - ONE COMPACT LINE PER FRAME, not a multi-line block. Fixed terse format, ~80 chars, e.g.
+        [KDT] N=2000 RECOVER floor=1950 anchor=FLOOR holes=50 flag=APPROX
+        [KDT] N=43   PRED-PRESENT
+        [KDT] N=58   CACHE-HIT
+    An in-order frame is one short line; a recovery frame is one slightly longer line. A
+    multi-line-per-frame dump is what turns a run into tens of thousands of lines — avoid it.
+  - END-OF-RUN SUMMARY LINE (always, regardless of detail level): totals by branch
+    (in-order / pred-present / cache-hit / exact-recovery / floor-reset), max recovery span,
+    and whether the floor flag ever fired. For review this single line is usually the whole
+    result — it is what gets pasted back, not the per-frame lines.
+  - The test scenarios are deliberately sized SMALL (see the test-harness note below):
+    segment lengths ~10-200, recovery bounded to ~50, so a run reads at most ~1,000 frames.
+    At one compact line per frame that is at most ~1,000 short lines — manageable. So heavy
+    verbosity-gating is NOT required now. (If a full-length ~5,500-frame clip is ever run, an
+    events-only filter — emit a line only for recovery / floor-reset / checkpoint, stay silent
+    on routine in-order frames — is the lever to add THEN. Not needed for the scenario set.)
+
+MARKER CONTRACT (pin these EXACT tokens — they are requirements, NOT examples):
+  - Per-frame trace lines MUST be prefixed [KDT] (KeystoneDevTrace), as shown in the
+    VOLUME/FORMAT examples above. A reader greps stderr for "[KDT]" to isolate the trace and
+    diffs [KDT] lines between runs (the -r 1 determinism makes this diff meaningful).
+  - The end-of-run summary line MUST be prefixed [KDT-SUMMARY] so it is part of the same
+    greppable trace and is the one line pasted back for review.
+  - The compile-time guard/macro MUST be named CNR3_KEYSTONE_DEV_TRACE (sub-symbols under
+    that prefix, e.g. CNR3_KEYSTONE_DEV_TRACE_LEVEL). This is the temporary marker referred
+    to in the constraints above.
+  - The .vpy test harness's "Dev-trace watch" notes are written against these exact tokens.
+    If you change [KDT], [KDT-SUMMARY], or CNR3_KEYSTONE_DEV_TRACE, it MUST change in the
+    harness too, or the watch-points and the diff workflow break. Do not substitute your own
+    marker name.
+
+TEST HARNESS — plan to validate against it as each phase lands:
+  A VapourSynth .vpy test harness drives controlled request orders into CNR3's getFrame (it
+  remaps an output clip so that VapourSynth's backward pull delivers in-order / out-of-order /
+  jumping / in-zone-shuffled requests to CNR3). It is run single-threaded (vspipe -r 1), so it
+  validates the RECOVERY / predecessor logic deterministically (concurrency races are a later
+  exercise — num_threads>1 + fmParallel). It carries labelled scenarios:
+    S1..S8 functional   — in-order baselines; in-zone shuffle; small in-bound jump (exact
+                          recovery); hot-zone-move-then-far-jump and deep-cold-seek (floor
+                          reset NOT from frame 0; clip-length independence); repeated realistic
+                          jumping [0,3000,1000,2000].
+    B1..B5 boundary/stress — frame-0 clamp (N<B); a bound-straddle pair (gap 49 -> exact vs
+                          gap 52 -> floor reset, proving the crossover sits at ~50); backward
+                          re-request (cache-hit path); heavy wide-zone out-of-order; and a
+                          7-region hot-zone-cap/eviction stress (MAX_HOT_ZONES=5).
+    B6..B7 end-of-clip   — the forward-looking calcs (hot-zone FORWARD radius ~10, prune) reason
+                          about frames AHEAD of the current one; near the last frame those are
+                          PAST end-of-clip (null space). B6 runs in-sequence INTO the last frame;
+                          B7 JUMPS to the last frame from cold (recovery's backward floor search
+                          AND the forward edge at once), in two variants (last-frame-exactly and
+                          a few-frames-at-the-edge). EOF targets use the ORIGINAL source frame
+                          count (CNR3-independent), so they hit the true last frame on any source.
+  Plan to run the subset each phase makes live and confirm the dev-trace matches each
+  scenario's expected branch (each scenario states what to watch). So that this works, make
+  the per-frame line carry exactly the fields those checks need: the branch, the start
+  point / floor, the hole count, and the floor flag. The boundary scenarios (B1/B2 especially)
+  are there to expose an off-by-one at the bound or the N<B clamp — the trace must show the
+  anchor frame vs the floor clearly enough to tell which side a jump fell on. The end-of-clip
+  scenarios (B6/B7) are there to expose forward reach into null space — the trace (and the code)
+  must show the forward hot-zone span and the prune calc CLAMPED to the last frame, never
+  computing or indexing into frames beyond it. These are exactly the cheap boundary cases that
+  do not show mid-clip and then bite (crash or silent mis-prune) on the one run that fetches the
+  last frame.
 
 ================================================================================
 SECTION E — STATUS / NEXT STEP

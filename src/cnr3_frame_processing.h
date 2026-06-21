@@ -64,16 +64,23 @@
     getReadPtr/getWritePtr/getStride wiring, source-frame lifecycle,
     scene-change handling, or getFrame/cache integration.
 
+    CMS07-P.10A adds a narrow VapourSynth frame plane-view adapter proof. It
+    converts VSAPI getFrameWidth/getFrameHeight/getStride/getReadPtr/getWritePtr
+    results into the P.8A native byte-plane views, with storage-byte and stride
+    validation before a view is published. It does not request or retrieve
+    frames, acquire predecessors, touch cache state, process scene-change, or
+    connect pixel processing to getFrame.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
-        - real VapourSynth frame ownership and pointer/stride acquisition;
+        - source-frame request/retrieve lifecycle;
         - scene-change/reset decisions;
         - explicit previous-output frame acquisition and ownership;
-        - VapourSynth frame access and getFrame integration.
+        - cache/getFrame integration and return-transfer.
 
     This module must not own or inspect cache slots, pins, checkpoints, hot zones,
     prune, recovery state, VapourSynth request lifecycle state, per-instance
@@ -84,6 +91,9 @@
 
 #include <cstdint>
 #include <vector>
+
+struct VSAPI;
+struct VSFrame;
 
 struct Cnr3DownsampledLumaTapCoordinates {
     int x0 = 0;
@@ -186,6 +196,17 @@ struct Cnr3MutableNativePlaneByteView {
     int bits_per_sample = 0;
 };
 
+struct Cnr3VapourSynthPlaneByteViewSummary {
+    int plane = -1;
+    int width = 0;
+    int height = 0;
+    int stride_bytes = 0;
+    int bits_per_sample = 0;
+    int storage_bytes = 0;
+    bool read_view_created = false;
+    bool write_view_created = false;
+};
+
 [[nodiscard]] Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
     int bits_per_sample,
     int& storage_bytes
@@ -221,6 +242,24 @@ struct Cnr3MutableNativePlaneByteView {
     int sub_sampling_h,
     Cnr3MutablePlaneBufferView& output_downsampled_luma_plane,
     Cnr3DownsampledLumaPlaneProcessSummary& summary
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_make_vapoursynth_read_plane_byte_view(
+    const VSFrame* frame,
+    const VSAPI* vsapi,
+    int plane,
+    int bits_per_sample,
+    Cnr3ConstNativePlaneByteView& native_plane,
+    Cnr3VapourSynthPlaneByteViewSummary& summary
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_make_vapoursynth_write_plane_byte_view(
+    VSFrame* frame,
+    const VSAPI* vsapi,
+    int plane,
+    int bits_per_sample,
+    Cnr3MutableNativePlaneByteView& native_plane,
+    Cnr3VapourSynthPlaneByteViewSummary& summary
 ) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(

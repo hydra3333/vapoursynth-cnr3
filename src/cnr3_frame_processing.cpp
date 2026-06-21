@@ -2,6 +2,8 @@
 
 #include "cnr3_response_tables.h"
 
+#include "VapourSynth4.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -200,6 +202,75 @@ void cnr3_write_plane_sample(
         (static_cast<std::size_t>(x) * static_cast<std::size_t>(storage_bytes));
 }
 
+[[nodiscard]] bool cnr3_vapoursynth_plane_number_is_supported(
+    int plane
+) noexcept {
+    return plane >= 0 && plane < 3;
+}
+
+[[nodiscard]] bool cnr3_vapoursynth_stride_is_valid_for_storage(
+    ptrdiff_t stride,
+    int storage_bytes,
+    int& stride_bytes
+) noexcept {
+    stride_bytes = 0;
+
+    if (
+        storage_bytes <= 0 ||
+        stride <= 0 ||
+        stride > static_cast<ptrdiff_t>(std::numeric_limits<int>::max()) ||
+        (stride % static_cast<ptrdiff_t>(storage_bytes)) != 0
+        ) {
+        return false;
+    }
+
+    stride_bytes = static_cast<int>(stride);
+    return true;
+}
+
+[[nodiscard]] bool cnr3_vapoursynth_plane_api_is_valid_for_read(
+    const VSAPI* vsapi
+) noexcept {
+    return vsapi != nullptr &&
+        vsapi->getFrameWidth != nullptr &&
+        vsapi->getFrameHeight != nullptr &&
+        vsapi->getStride != nullptr &&
+        vsapi->getReadPtr != nullptr;
+}
+
+[[nodiscard]] bool cnr3_vapoursynth_plane_api_is_valid_for_write(
+    const VSAPI* vsapi
+) noexcept {
+    return vsapi != nullptr &&
+        vsapi->getFrameWidth != nullptr &&
+        vsapi->getFrameHeight != nullptr &&
+        vsapi->getStride != nullptr &&
+        vsapi->getWritePtr != nullptr;
+}
+
+void cnr3_publish_vapoursynth_plane_summary(
+    int plane,
+    int width,
+    int height,
+    int stride_bytes,
+    int bits_per_sample,
+    int storage_bytes,
+    bool read_view_created,
+    bool write_view_created,
+    Cnr3VapourSynthPlaneByteViewSummary& summary
+) noexcept {
+    Cnr3VapourSynthPlaneByteViewSummary local{};
+    local.plane = plane;
+    local.width = width;
+    local.height = height;
+    local.stride_bytes = stride_bytes;
+    local.bits_per_sample = bits_per_sample;
+    local.storage_bytes = storage_bytes;
+    local.read_view_created = read_view_created;
+    local.write_view_created = write_view_created;
+    summary = local;
+}
+
 
 } // namespace
 
@@ -370,6 +441,154 @@ Cnr3Status cnr3_blend_chroma_sample(
     ) >> shift2;
 
     output_sample = static_cast<int>(blended_sample);
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_make_vapoursynth_read_plane_byte_view(
+    const VSFrame* frame,
+    const VSAPI* vsapi,
+    int plane,
+    int bits_per_sample,
+    Cnr3ConstNativePlaneByteView& native_plane,
+    Cnr3VapourSynthPlaneByteViewSummary& summary
+) noexcept {
+    native_plane = Cnr3ConstNativePlaneByteView{};
+    summary = Cnr3VapourSynthPlaneByteViewSummary{};
+
+    int storage_bytes = 0;
+
+    if (
+        frame == nullptr ||
+        !cnr3_vapoursynth_plane_api_is_valid_for_read(vsapi) ||
+        !cnr3_vapoursynth_plane_number_is_supported(plane) ||
+        cnr3_native_storage_bytes_for_bit_depth(bits_per_sample, storage_bytes) !=
+            Cnr3Status::ok
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int width = vsapi->getFrameWidth(frame, plane);
+    const int height = vsapi->getFrameHeight(frame, plane);
+
+    int stride_bytes = 0;
+
+    if (
+        !cnr3_vapoursynth_stride_is_valid_for_storage(
+            vsapi->getStride(frame, plane),
+            storage_bytes,
+            stride_bytes
+        ) ||
+        !cnr3_native_plane_byte_shape_is_valid(
+            width,
+            height,
+            stride_bytes,
+            storage_bytes
+        )
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::uint8_t* read_ptr = vsapi->getReadPtr(frame, plane);
+
+    if (read_ptr == nullptr) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    Cnr3ConstNativePlaneByteView local{};
+    local.data = read_ptr;
+    local.width = width;
+    local.height = height;
+    local.stride_bytes = stride_bytes;
+    local.bits_per_sample = bits_per_sample;
+
+    native_plane = local;
+
+    cnr3_publish_vapoursynth_plane_summary(
+        plane,
+        width,
+        height,
+        stride_bytes,
+        bits_per_sample,
+        storage_bytes,
+        true,
+        false,
+        summary
+    );
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_make_vapoursynth_write_plane_byte_view(
+    VSFrame* frame,
+    const VSAPI* vsapi,
+    int plane,
+    int bits_per_sample,
+    Cnr3MutableNativePlaneByteView& native_plane,
+    Cnr3VapourSynthPlaneByteViewSummary& summary
+) noexcept {
+    native_plane = Cnr3MutableNativePlaneByteView{};
+    summary = Cnr3VapourSynthPlaneByteViewSummary{};
+
+    int storage_bytes = 0;
+
+    if (
+        frame == nullptr ||
+        !cnr3_vapoursynth_plane_api_is_valid_for_write(vsapi) ||
+        !cnr3_vapoursynth_plane_number_is_supported(plane) ||
+        cnr3_native_storage_bytes_for_bit_depth(bits_per_sample, storage_bytes) !=
+            Cnr3Status::ok
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const int width = vsapi->getFrameWidth(frame, plane);
+    const int height = vsapi->getFrameHeight(frame, plane);
+
+    int stride_bytes = 0;
+
+    if (
+        !cnr3_vapoursynth_stride_is_valid_for_storage(
+            vsapi->getStride(frame, plane),
+            storage_bytes,
+            stride_bytes
+        ) ||
+        !cnr3_native_plane_byte_shape_is_valid(
+            width,
+            height,
+            stride_bytes,
+            storage_bytes
+        )
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    std::uint8_t* write_ptr = vsapi->getWritePtr(frame, plane);
+
+    if (write_ptr == nullptr) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    Cnr3MutableNativePlaneByteView local{};
+    local.data = write_ptr;
+    local.width = width;
+    local.height = height;
+    local.stride_bytes = stride_bytes;
+    local.bits_per_sample = bits_per_sample;
+
+    native_plane = local;
+
+    cnr3_publish_vapoursynth_plane_summary(
+        plane,
+        width,
+        height,
+        stride_bytes,
+        bits_per_sample,
+        storage_bytes,
+        false,
+        true,
+        summary
+    );
 
     return Cnr3Status::ok;
 }

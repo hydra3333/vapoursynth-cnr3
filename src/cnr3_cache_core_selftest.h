@@ -410,6 +410,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_native_luma_downsample_bridge_proof() noexcept;
 
 /*
+    Run the CMS07-P.10A VapourSynth plane-view adapter proof.
+
+    This converts VSAPI per-plane width, height, stride, read pointer, and
+    write pointer callbacks into the native byte-plane views proven by P.8A.
+    It verifies two-byte stride alignment, x * storage_bytes composition,
+    read/write view separation, and failure before view publication. It does
+    not request or retrieve frames, acquire predecessors, connect to cache
+    authority, process scene-change, or integrate with getFrame.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_vapoursynth_plane_view_adapter_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

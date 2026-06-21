@@ -19,6 +19,15 @@
 namespace {
 
     constexpr int CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT = 8;
+    constexpr int CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT = 3;
+
+    struct Cnr3CacheCoreSelftestVsFramePlaneState {
+        int width = 0;
+        int height = 0;
+        ptrdiff_t stride = 0;
+        const std::uint8_t* read_ptr = nullptr;
+        std::uint8_t* write_ptr = nullptr;
+    };
 
     struct Cnr3CacheCoreSelftestVsApiState {
         int add_frame_ref_count = 0;
@@ -32,6 +41,18 @@ namespace {
         int tracked_release_counts[
             CNR3_CACHE_CORE_SELFTEST_TRACKED_RELEASE_FRAME_COUNT
         ] = {};
+
+        const VSFrame* fake_plane_frame = nullptr;
+        Cnr3CacheCoreSelftestVsFramePlaneState fake_planes[
+            CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT
+        ] = {};
+
+        int get_stride_count = 0;
+        int get_read_ptr_count = 0;
+        int get_write_ptr_count = 0;
+        int get_frame_width_count = 0;
+        int get_frame_height_count = 0;
+        int last_plane = -1;
     };
 
     /*
@@ -74,11 +95,91 @@ namespace {
         }
     }
 
+    [[nodiscard]] bool cnr3_cache_core_selftest_fake_plane_is_valid(
+        const VSFrame* frame,
+        int plane
+    ) noexcept {
+        return g_cnr3_cache_core_selftest_vsapi_state != nullptr &&
+            frame == g_cnr3_cache_core_selftest_vsapi_state->fake_plane_frame &&
+            plane >= 0 &&
+            plane < CNR3_CACHE_CORE_SELFTEST_FAKE_PLANE_COUNT;
+    }
+
+    ptrdiff_t VS_CC cnr3_cache_core_selftest_get_stride(
+        const VSFrame* frame,
+        int plane
+    ) noexcept {
+        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+            return 0;
+        }
+
+        ++g_cnr3_cache_core_selftest_vsapi_state->get_stride_count;
+        g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
+        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].stride;
+    }
+
+    const std::uint8_t* VS_CC cnr3_cache_core_selftest_get_read_ptr(
+        const VSFrame* frame,
+        int plane
+    ) noexcept {
+        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+            return nullptr;
+        }
+
+        ++g_cnr3_cache_core_selftest_vsapi_state->get_read_ptr_count;
+        g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
+        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].read_ptr;
+    }
+
+    std::uint8_t* VS_CC cnr3_cache_core_selftest_get_write_ptr(
+        VSFrame* frame,
+        int plane
+    ) noexcept {
+        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+            return nullptr;
+        }
+
+        ++g_cnr3_cache_core_selftest_vsapi_state->get_write_ptr_count;
+        g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
+        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].write_ptr;
+    }
+
+    int VS_CC cnr3_cache_core_selftest_get_frame_width(
+        const VSFrame* frame,
+        int plane
+    ) noexcept {
+        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+            return 0;
+        }
+
+        ++g_cnr3_cache_core_selftest_vsapi_state->get_frame_width_count;
+        g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
+        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].width;
+    }
+
+    int VS_CC cnr3_cache_core_selftest_get_frame_height(
+        const VSFrame* frame,
+        int plane
+    ) noexcept {
+        if (!cnr3_cache_core_selftest_fake_plane_is_valid(frame, plane)) {
+            return 0;
+        }
+
+        ++g_cnr3_cache_core_selftest_vsapi_state->get_frame_height_count;
+        g_cnr3_cache_core_selftest_vsapi_state->last_plane = plane;
+        return g_cnr3_cache_core_selftest_vsapi_state->fake_planes[plane].height;
+    }
+
     VSAPI cnr3_cache_core_selftest_make_vsapi() noexcept {
         VSAPI vsapi{};
 
         vsapi.addFrameRef = cnr3_cache_core_selftest_add_frame_ref;
         vsapi.freeFrame = cnr3_cache_core_selftest_free_frame;
+        vsapi.getStride = cnr3_cache_core_selftest_get_stride;
+        vsapi.getReadPtr = cnr3_cache_core_selftest_get_read_ptr;
+        vsapi.getWritePtr = cnr3_cache_core_selftest_get_write_ptr;
+        vsapi.getFrameWidth = cnr3_cache_core_selftest_get_frame_width;
+        vsapi.getFrameHeight = cnr3_cache_core_selftest_get_frame_height;
 
         return vsapi;
     }
@@ -181,6 +282,14 @@ namespace {
             message[sizeof(message) - 1U] = '\0';
             cnr3_cache_core_selftest_trace_line(message);
         }
+    }
+
+    void cnr3_cache_core_selftest_write_u16_sample(
+        std::uint8_t* storage,
+        int offset,
+        std::uint16_t value
+    ) noexcept {
+        std::memcpy(storage + offset, &value, sizeof(value));
     }
 
 } // namespace
@@ -11250,6 +11359,256 @@ Cnr3Status cnr3_cache_core_selftest_native_luma_downsample_bridge_proof() noexce
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_vapoursynth_plane_view_adapter_proof() noexcept {
+    /*
+        P.10A is the real-frame-memory adapter trigger, but still not getFrame
+        lifecycle integration. It proves only VSAPI plane pointer/stride metadata
+        conversion into the P.8A native byte-plane views.
+    */
+    constexpr int bits_8 = 8;
+    constexpr int bits_10 = 10;
+    constexpr int width = 3;
+    constexpr int height = 2;
+    constexpr int stride_10bit = 8;
+
+    int fake_frame_storage = 0;
+    VSFrame* fake_frame = reinterpret_cast<VSFrame*>(&fake_frame_storage);
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    vsapi_state.fake_plane_frame = fake_frame;
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    const auto fail = [&]() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto summary_matches = [](
+        const Cnr3VapourSynthPlaneByteViewSummary& summary,
+        int expected_plane,
+        int expected_width,
+        int expected_height,
+        int expected_stride_bytes,
+        int expected_bits_per_sample,
+        int expected_storage_bytes,
+        bool expected_read,
+        bool expected_write
+    ) noexcept -> bool {
+        return summary.plane == expected_plane &&
+            summary.width == expected_width &&
+            summary.height == expected_height &&
+            summary.stride_bytes == expected_stride_bytes &&
+            summary.bits_per_sample == expected_bits_per_sample &&
+            summary.storage_bytes == expected_storage_bytes &&
+            summary.read_view_created == expected_read &&
+            summary.write_view_created == expected_write;
+    };
+
+    std::vector<std::uint8_t> read_storage(static_cast<std::size_t>(stride_10bit * height), 0xEEU);
+    cnr3_cache_core_selftest_write_u16_sample(read_storage.data(), 0, 0);
+    cnr3_cache_core_selftest_write_u16_sample(read_storage.data(), 2, 1);
+    cnr3_cache_core_selftest_write_u16_sample(read_storage.data(), 4, 2);
+    cnr3_cache_core_selftest_write_u16_sample(read_storage.data(), 8, 100);
+    cnr3_cache_core_selftest_write_u16_sample(read_storage.data(), 10, 101);
+    cnr3_cache_core_selftest_write_u16_sample(read_storage.data(), 12, 102);
+
+    vsapi_state.fake_planes[0].width = width;
+    vsapi_state.fake_planes[0].height = height;
+    vsapi_state.fake_planes[0].stride = stride_10bit;
+    vsapi_state.fake_planes[0].read_ptr = read_storage.data();
+
+    Cnr3ConstNativePlaneByteView read_view{};
+    Cnr3VapourSynthPlaneByteViewSummary read_summary{};
+    int read_sample = -1;
+
+    if (
+        cnr3_make_vapoursynth_read_plane_byte_view(
+            fake_frame,
+            &vsapi,
+            0,
+            bits_10,
+            read_view,
+            read_summary
+        ) != Cnr3Status::ok ||
+        read_view.data != read_storage.data() ||
+        read_view.width != width ||
+        read_view.height != height ||
+        read_view.stride_bytes != stride_10bit ||
+        read_view.bits_per_sample != bits_10 ||
+        !summary_matches(read_summary, 0, width, height, stride_10bit, bits_10, 2, true, false) ||
+        cnr3_load_native_plane_sample(read_view, 2, 1, read_sample) != Cnr3Status::ok ||
+        read_sample != 102 ||
+        vsapi_state.get_frame_width_count != 1 ||
+        vsapi_state.get_frame_height_count != 1 ||
+        vsapi_state.get_stride_count != 1 ||
+        vsapi_state.get_read_ptr_count != 1 ||
+        vsapi_state.get_write_ptr_count != 0
+        ) {
+        return fail();
+    }
+
+    std::vector<std::uint8_t> write_storage(static_cast<std::size_t>(stride_10bit * height), 0xAAU);
+    vsapi_state.fake_planes[1].width = width;
+    vsapi_state.fake_planes[1].height = height;
+    vsapi_state.fake_planes[1].stride = stride_10bit;
+    vsapi_state.fake_planes[1].write_ptr = write_storage.data();
+
+    Cnr3MutableNativePlaneByteView write_view{};
+    Cnr3VapourSynthPlaneByteViewSummary write_summary{};
+
+    if (
+        cnr3_make_vapoursynth_write_plane_byte_view(
+            fake_frame,
+            &vsapi,
+            1,
+            bits_10,
+            write_view,
+            write_summary
+        ) != Cnr3Status::ok ||
+        write_view.data != write_storage.data() ||
+        write_view.width != width ||
+        write_view.height != height ||
+        write_view.stride_bytes != stride_10bit ||
+        write_view.bits_per_sample != bits_10 ||
+        !summary_matches(write_summary, 1, width, height, stride_10bit, bits_10, 2, false, true) ||
+        vsapi_state.get_read_ptr_count != 1 ||
+        vsapi_state.get_write_ptr_count != 1
+        ) {
+        return fail();
+    }
+
+    if (cnr3_store_native_plane_sample(write_view, 2, 1, 777) != Cnr3Status::ok) {
+        return fail();
+    }
+
+    const Cnr3ConstNativePlaneByteView written_const_view{
+        write_storage.data(),
+        width,
+        height,
+        stride_10bit,
+        bits_10
+    };
+    int written_sample = -1;
+
+    if (
+        cnr3_load_native_plane_sample(written_const_view, 2, 1, written_sample) != Cnr3Status::ok ||
+        written_sample != 777 ||
+        write_storage[6] != 0xAAU ||
+        write_storage[7] != 0xAAU ||
+        write_storage[14] != 0xAAU ||
+        write_storage[15] != 0xAAU
+        ) {
+        return fail();
+    }
+
+    std::vector<std::uint8_t> read_8bit_storage{ 3U, 4U, 5U, 0xCCU, 6U, 7U, 8U, 0xCCU };
+    vsapi_state.fake_planes[2].width = width;
+    vsapi_state.fake_planes[2].height = height;
+    vsapi_state.fake_planes[2].stride = 4;
+    vsapi_state.fake_planes[2].read_ptr = read_8bit_storage.data();
+
+    Cnr3ConstNativePlaneByteView read_8bit_view{};
+    Cnr3VapourSynthPlaneByteViewSummary read_8bit_summary{};
+    int read_8bit_sample = -1;
+
+    if (
+        cnr3_make_vapoursynth_read_plane_byte_view(
+            fake_frame,
+            &vsapi,
+            2,
+            bits_8,
+            read_8bit_view,
+            read_8bit_summary
+        ) != Cnr3Status::ok ||
+        !summary_matches(read_8bit_summary, 2, width, height, 4, bits_8, 1, true, false) ||
+        cnr3_load_native_plane_sample(read_8bit_view, 1, 1, read_8bit_sample) != Cnr3Status::ok ||
+        read_8bit_sample != 7
+        ) {
+        return fail();
+    }
+
+    {
+        vsapi_state.fake_planes[2].stride = 7;
+        Cnr3ConstNativePlaneByteView rejected_view{
+            reinterpret_cast<const void*>(0x1),
+            9,
+            8,
+            7,
+            bits_10
+        };
+        Cnr3VapourSynthPlaneByteViewSummary rejected_summary{};
+        rejected_summary.plane = 99;
+
+        if (
+            cnr3_make_vapoursynth_read_plane_byte_view(
+                fake_frame,
+                &vsapi,
+                2,
+                bits_10,
+                rejected_view,
+                rejected_summary
+            ) != Cnr3Status::invalid_argument ||
+            rejected_view.data != nullptr ||
+            rejected_summary.plane != -1
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        VSAPI missing_read_api = vsapi;
+        missing_read_api.getReadPtr = nullptr;
+        Cnr3ConstNativePlaneByteView rejected_view{};
+        Cnr3VapourSynthPlaneByteViewSummary rejected_summary{};
+
+        if (
+            cnr3_make_vapoursynth_read_plane_byte_view(
+                fake_frame,
+                &missing_read_api,
+                0,
+                bits_10,
+                rejected_view,
+                rejected_summary
+            ) != Cnr3Status::invalid_argument
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        Cnr3MutableNativePlaneByteView rejected_write_view{};
+        Cnr3VapourSynthPlaneByteViewSummary rejected_summary{};
+
+        if (
+            cnr3_make_vapoursynth_write_plane_byte_view(
+                fake_frame,
+                &vsapi,
+                3,
+                bits_10,
+                rejected_write_view,
+                rejected_summary
+            ) != Cnr3Status::invalid_argument ||
+            rejected_write_view.data != nullptr ||
+            rejected_summary.plane != -1
+            ) {
+            return fail();
+        }
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    cnr3_cache_core_selftest_trace_line("P.10A VapourSynth plane-view adapter proof scenario");
+    cnr3_cache_core_selftest_trace_line("    VSAPI getFrameWidth/getFrameHeight/getStride/getReadPtr build read native byte views");
+    cnr3_cache_core_selftest_trace_line("    VSAPI getWritePtr builds write native byte views without calling getReadPtr again");
+    cnr3_cache_core_selftest_trace_line("    10-bit read/write vectors prove VS stride and x*storage_bytes composition");
+    cnr3_cache_core_selftest_trace_line("    two-byte VS strides must be storage-byte aligned before a view is published");
+    cnr3_cache_core_selftest_trace_line("    source-frame lifecycle, predecessor acquisition, scene-change, and getFrame/cache integration remain deferred");
+
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -11398,6 +11757,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "native_luma_downsample_bridge_proof",
             cnr3_cache_core_selftest_native_luma_downsample_bridge_proof
+        },
+        {
+            "vapoursynth_plane_view_adapter_proof",
+            cnr3_cache_core_selftest_vapoursynth_plane_view_adapter_proof
         },
         {
             "lookup_addref_hit_and_miss",

@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-P.9A-native-luma-downsample-bridge-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-P.10A-vapoursynth-plane-view-adapter-proof";
 
 /*
     Temporary proof scaffold convention.

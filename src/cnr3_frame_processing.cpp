@@ -594,6 +594,183 @@ void cnr3_publish_caller_supplied_frame_process_summary(
 }
 
 
+struct Cnr3SceneChangeStats {
+    std::int64_t diff_total = 0;
+    std::int64_t scene_change_threshold = 0;
+    int samples_examined = 0;
+    bool scene_chroma = false;
+    bool scene_change = false;
+};
+
+[[nodiscard]] std::int64_t cnr3_abs_int64(
+    std::int64_t value
+) noexcept {
+    return (value < 0) ? -value : value;
+}
+
+[[nodiscard]] Cnr3Status cnr3_add_scene_diff(
+    std::int64_t diff,
+    std::int64_t& diff_total
+) noexcept {
+    if (diff < 0 || diff > (std::numeric_limits<std::int64_t>::max() - diff_total)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    diff_total += diff;
+    return Cnr3Status::ok;
+}
+
+[[nodiscard]] Cnr3Status cnr3_detect_scene_change_from_scalar_planes(
+    const Cnr3ConstPlaneBufferView& current_downsampled_luma_plane,
+    const Cnr3ConstPlaneBufferView& previous_downsampled_luma_plane,
+    const Cnr3ConstPlaneBufferView& current_source_u_plane,
+    const Cnr3ConstPlaneBufferView& previous_filtered_u_plane,
+    const Cnr3ConstPlaneBufferView& current_source_v_plane,
+    const Cnr3ConstPlaneBufferView& previous_filtered_v_plane,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    int bits_per_sample,
+    const Cnr3SceneChangeConfig& config,
+    Cnr3SceneChangeStats& stats
+) noexcept {
+    stats = Cnr3SceneChangeStats{};
+
+    int sample_peak = 0;
+
+    if (
+        config.scene_change_threshold < 0 ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling_w) ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling_h) ||
+        cnr3_sample_peak_for_bit_depth(bits_per_sample, sample_peak) != Cnr3Status::ok ||
+        !cnr3_const_plane_view_is_valid(current_downsampled_luma_plane) ||
+        !cnr3_const_plane_view_is_valid(previous_downsampled_luma_plane) ||
+        !cnr3_const_plane_view_is_valid(current_source_u_plane) ||
+        !cnr3_const_plane_view_is_valid(previous_filtered_u_plane) ||
+        !cnr3_const_plane_view_is_valid(current_source_v_plane) ||
+        !cnr3_const_plane_view_is_valid(previous_filtered_v_plane) ||
+        !cnr3_const_plane_dimensions_match(
+            previous_downsampled_luma_plane,
+            current_downsampled_luma_plane.width,
+            current_downsampled_luma_plane.height
+        ) ||
+        !cnr3_const_plane_dimensions_match(
+            current_source_u_plane,
+            current_downsampled_luma_plane.width,
+            current_downsampled_luma_plane.height
+        ) ||
+        !cnr3_const_plane_dimensions_match(
+            previous_filtered_u_plane,
+            current_downsampled_luma_plane.width,
+            current_downsampled_luma_plane.height
+        ) ||
+        !cnr3_const_plane_dimensions_match(
+            current_source_v_plane,
+            current_downsampled_luma_plane.width,
+            current_downsampled_luma_plane.height
+        ) ||
+        !cnr3_const_plane_dimensions_match(
+            previous_filtered_v_plane,
+            current_downsampled_luma_plane.width,
+            current_downsampled_luma_plane.height
+        )
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    stats.scene_change_threshold = config.scene_change_threshold;
+    stats.scene_chroma = config.scene_chroma;
+
+    const int luma_scale_shift = sub_sampling_w + sub_sampling_h;
+
+    for (int y = 0; y < current_downsampled_luma_plane.height; ++y) {
+        for (int x = 0; x < current_downsampled_luma_plane.width; ++x) {
+            const int current_luma = cnr3_plane_sample_at(current_downsampled_luma_plane, x, y);
+            const int previous_luma = cnr3_plane_sample_at(previous_downsampled_luma_plane, x, y);
+            const int current_u = cnr3_plane_sample_at(current_source_u_plane, x, y);
+            const int previous_u = cnr3_plane_sample_at(previous_filtered_u_plane, x, y);
+            const int current_v = cnr3_plane_sample_at(current_source_v_plane, x, y);
+            const int previous_v = cnr3_plane_sample_at(previous_filtered_v_plane, x, y);
+
+            if (
+                !cnr3_value_is_inclusive_range(current_luma, 0, sample_peak) ||
+                !cnr3_value_is_inclusive_range(previous_luma, 0, sample_peak) ||
+                !cnr3_value_is_inclusive_range(current_u, 0, sample_peak) ||
+                !cnr3_value_is_inclusive_range(previous_u, 0, sample_peak) ||
+                !cnr3_value_is_inclusive_range(current_v, 0, sample_peak) ||
+                !cnr3_value_is_inclusive_range(previous_v, 0, sample_peak)
+                ) {
+                return Cnr3Status::invalid_argument;
+            }
+
+            const std::int64_t luma_diff =
+                (static_cast<std::int64_t>(current_luma) -
+                    static_cast<std::int64_t>(previous_luma)) << luma_scale_shift;
+
+            Cnr3Status status = cnr3_add_scene_diff(
+                cnr3_abs_int64(luma_diff),
+                stats.diff_total
+            );
+
+            if (status != Cnr3Status::ok) {
+                return status;
+            }
+
+            if (config.scene_chroma) {
+                status = cnr3_add_scene_diff(
+                    cnr3_abs_int64(
+                        static_cast<std::int64_t>(current_u) -
+                        static_cast<std::int64_t>(previous_u)
+                    ),
+                    stats.diff_total
+                );
+
+                if (status != Cnr3Status::ok) {
+                    return status;
+                }
+
+                status = cnr3_add_scene_diff(
+                    cnr3_abs_int64(
+                        static_cast<std::int64_t>(current_v) -
+                        static_cast<std::int64_t>(previous_v)
+                    ),
+                    stats.diff_total
+                );
+
+                if (status != Cnr3Status::ok) {
+                    return status;
+                }
+            }
+
+            ++stats.samples_examined;
+
+            if (stats.diff_total > config.scene_change_threshold) {
+                stats.scene_change = true;
+                return Cnr3Status::ok;
+            }
+        }
+    }
+
+    return Cnr3Status::ok;
+}
+
+void cnr3_publish_chroma_copy_summary_from_scalar_plane(
+    const Cnr3ConstPlaneBufferView& plane,
+    Cnr3ChromaPlaneProcessSummary& summary
+) noexcept {
+    Cnr3ChromaPlaneProcessSummary local{};
+    local.width = plane.width;
+    local.height = plane.height;
+    local.samples_processed = plane.width * plane.height;
+    local.first_output_sample = cnr3_plane_sample_at(plane, 0, 0);
+    local.last_output_sample = cnr3_plane_sample_at(
+        plane,
+        plane.width - 1,
+        plane.height - 1
+    );
+    summary = local;
+}
+
+
 } // namespace
 
 Cnr3Status cnr3_downsample_luma_tap_coordinates(
@@ -1086,7 +1263,9 @@ Cnr3Status cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
 }
 
 
-Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+namespace {
+
+Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet_impl(
     const VSFrame* current_source_frame,
     const VSFrame* previous_filtered_output_frame,
     VSFrame* destination_frame,
@@ -1095,6 +1274,7 @@ Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
     int sub_sampling_w,
     int sub_sampling_h,
     const Cnr3ResponseTables& response_tables,
+    const Cnr3SceneChangeConfig* scene_config,
     Cnr3CallerSuppliedFrameProcessSummary& summary
 ) noexcept {
     summary = Cnr3CallerSuppliedFrameProcessSummary{};
@@ -1382,42 +1562,73 @@ Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
         triplet_summary.chroma_width
     };
 
-    Cnr3ChromaPlaneProcessSummary u_summary{};
+    Cnr3SceneChangeStats scene_stats{};
+    bool scene_change_detection_used = false;
 
-    status = cnr3_process_chroma_plane_from_downsampled_luma(
-        current_downsampled_luma,
-        previous_downsampled_luma,
-        current_u,
-        previous_u,
-        response_tables.y,
-        response_tables.u,
-        response_tables.table_offset,
-        bits_per_sample,
-        output_u_mutable,
-        u_summary
-    );
+    if (scene_config != nullptr) {
+        scene_change_detection_used = true;
 
-    if (status != Cnr3Status::ok) {
-        return status;
+        status = cnr3_detect_scene_change_from_scalar_planes(
+            current_downsampled_luma,
+            previous_downsampled_luma,
+            current_u,
+            previous_u,
+            current_v,
+            previous_v,
+            sub_sampling_w,
+            sub_sampling_h,
+            bits_per_sample,
+            *scene_config,
+            scene_stats
+        );
+
+        if (status != Cnr3Status::ok) {
+            return status;
+        }
     }
 
+    Cnr3ChromaPlaneProcessSummary u_summary{};
     Cnr3ChromaPlaneProcessSummary v_summary{};
 
-    status = cnr3_process_chroma_plane_from_downsampled_luma(
-        current_downsampled_luma,
-        previous_downsampled_luma,
-        current_v,
-        previous_v,
-        response_tables.y,
-        response_tables.v,
-        response_tables.table_offset,
-        bits_per_sample,
-        output_v_mutable,
-        v_summary
-    );
+    if (scene_change_detection_used && scene_stats.scene_change) {
+        output_u_storage = current_u_storage;
+        output_v_storage = current_v_storage;
+        cnr3_publish_chroma_copy_summary_from_scalar_plane(current_u, u_summary);
+        cnr3_publish_chroma_copy_summary_from_scalar_plane(current_v, v_summary);
+    } else {
+        status = cnr3_process_chroma_plane_from_downsampled_luma(
+            current_downsampled_luma,
+            previous_downsampled_luma,
+            current_u,
+            previous_u,
+            response_tables.y,
+            response_tables.u,
+            response_tables.table_offset,
+            bits_per_sample,
+            output_u_mutable,
+            u_summary
+        );
 
-    if (status != Cnr3Status::ok) {
-        return status;
+        if (status != Cnr3Status::ok) {
+            return status;
+        }
+
+        status = cnr3_process_chroma_plane_from_downsampled_luma(
+            current_downsampled_luma,
+            previous_downsampled_luma,
+            current_v,
+            previous_v,
+            response_tables.y,
+            response_tables.v,
+            response_tables.table_offset,
+            bits_per_sample,
+            output_v_mutable,
+            v_summary
+        );
+
+        if (status != Cnr3Status::ok) {
+            return status;
+        }
     }
 
     std::vector<std::uint8_t> staged_y;
@@ -1494,9 +1705,74 @@ Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
         summary
     );
 
+    if (scene_change_detection_used) {
+        summary.scene_change_detection_used = true;
+        summary.scene_chroma_used = scene_stats.scene_chroma;
+        summary.scene_change_detected = scene_stats.scene_change;
+        summary.scene_change_reset_output_used = scene_stats.scene_change;
+        summary.recursive_chroma_blend_used = !scene_stats.scene_change;
+        summary.scene_change_threshold = scene_stats.scene_change_threshold;
+        summary.scene_change_diff_total = scene_stats.diff_total;
+        summary.scene_change_samples_examined = scene_stats.samples_examined;
+    } else {
+        summary.recursive_chroma_blend_used = true;
+    }
+
     return Cnr3Status::ok;
 }
 
+} // namespace
+
+Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    const Cnr3ResponseTables& response_tables,
+    Cnr3CallerSuppliedFrameProcessSummary& summary
+) noexcept {
+    return cnr3_process_caller_supplied_vapoursynth_frame_triplet_impl(
+        current_source_frame,
+        previous_filtered_output_frame,
+        destination_frame,
+        vsapi,
+        bits_per_sample,
+        sub_sampling_w,
+        sub_sampling_h,
+        response_tables,
+        nullptr,
+        summary
+    );
+}
+
+Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    const Cnr3ResponseTables& response_tables,
+    const Cnr3SceneChangeConfig& scene_config,
+    Cnr3CallerSuppliedFrameProcessSummary& summary
+) noexcept {
+    return cnr3_process_caller_supplied_vapoursynth_frame_triplet_impl(
+        current_source_frame,
+        previous_filtered_output_frame,
+        destination_frame,
+        vsapi,
+        bits_per_sample,
+        sub_sampling_w,
+        sub_sampling_h,
+        response_tables,
+        &scene_config,
+        summary
+    );
+}
 
 Cnr3Status cnr3_blend_chroma_sample_from_response_tables(
     int current_downsampled_luma_sample,

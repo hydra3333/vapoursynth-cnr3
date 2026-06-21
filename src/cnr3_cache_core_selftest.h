@@ -442,6 +442,15 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_caller_supplied_real_frame_pixel_composition_proof() noexcept;
 
 /*
+    Run the CMS07-P.11C caller-supplied scene-change/reset proof.
+
+    This composes scene-change detection with the caller-supplied real-frame
+    pixel path. It accepts an already-computed integer threshold and still does
+    not request, retrieve, acquire, cache, recover, or return frames.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_caller_supplied_scene_change_reset_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

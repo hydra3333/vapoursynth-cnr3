@@ -86,16 +86,23 @@
     Destination writes are all-or-nothing across Y, U, and V after all staging
     succeeds. Two-byte samples deliberately stay on the proven memcpy byte-view
     path; typed row-pointer optimization is deferred to a measured fmParallel
-    performance phase. Scene-change and getFrame/cache lifecycle remain
-    deferred.
+    performance phase.
+
+    CMS07-P.11C adds caller-supplied scene-change/reset proof on the same
+    real-frame pixel path. It accepts an already-computed integer scene-change
+    threshold, accumulates the vscnr2-style luma and optional chroma difference
+    metric over the chroma grid, and when diff_total > threshold stages current
+    source chroma unchanged instead of recursive chroma blend. It still does
+    not parse instance options, calculate the plugin threshold from scdthr,
+    request/retrieve frames, source predecessors, promote checkpoints, or
+    connect to getFrame/cache lifecycle.
 
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
-    Still deliberately deferred to later pixel phases:
-        - scene-change/reset decisions;
+    Still deliberately deferred to later integration phases:
         - source-frame request/retrieve lifecycle;
         - explicit previous-output frame acquisition and ownership;
         - cache/getFrame integration and return-transfer.
@@ -271,7 +278,20 @@ struct Cnr3CallerSuppliedFrameProcessSummary {
     int last_v_output_sample = 0;
     bool memcpy_byte_view_path_used = false;
     bool typed_row_pointer_optimization_deferred = false;
+    bool scene_change_detection_used = false;
+    bool scene_chroma_used = false;
+    bool scene_change_detected = false;
+    bool scene_change_reset_output_used = false;
+    bool recursive_chroma_blend_used = false;
+    std::int64_t scene_change_threshold = 0;
+    std::int64_t scene_change_diff_total = 0;
+    int scene_change_samples_examined = 0;
     bool frame_processed = false;
+};
+
+struct Cnr3SceneChangeConfig {
+    std::int64_t scene_change_threshold = 0;
+    bool scene_chroma = false;
 };
 
 [[nodiscard]] Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
@@ -350,6 +370,19 @@ struct Cnr3CallerSuppliedFrameProcessSummary {
     int sub_sampling_w,
     int sub_sampling_h,
     const Cnr3ResponseTables& response_tables,
+    Cnr3CallerSuppliedFrameProcessSummary& summary
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    const Cnr3ResponseTables& response_tables,
+    const Cnr3SceneChangeConfig& scene_config,
     Cnr3CallerSuppliedFrameProcessSummary& summary
 ) noexcept;
 

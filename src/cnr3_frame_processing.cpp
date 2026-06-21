@@ -390,6 +390,209 @@ void cnr3_publish_vapoursynth_frame_triplet_summary(
     summary = local;
 }
 
+[[nodiscard]] bool cnr3_plane_sample_count_is_valid(
+    int width,
+    int height,
+    int& sample_count
+) noexcept {
+    sample_count = 0;
+
+    if (
+        width <= 0 ||
+        height <= 0 ||
+        width > (std::numeric_limits<int>::max() / height)
+        ) {
+        return false;
+    }
+
+    sample_count = width * height;
+    return true;
+}
+
+[[nodiscard]] Cnr3Status cnr3_allocate_scalar_plane_storage(
+    int width,
+    int height,
+    std::vector<int>& storage
+) noexcept {
+    int sample_count = 0;
+
+    if (!cnr3_plane_sample_count_is_valid(width, height, sample_count)) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    try {
+        storage.assign(static_cast<std::size_t>(sample_count), 0);
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    return Cnr3Status::ok;
+}
+
+[[nodiscard]] Cnr3Status cnr3_validate_response_tables_for_frame_process(
+    int bits_per_sample,
+    const Cnr3ResponseTables& tables
+) noexcept {
+    int sample_peak = 0;
+
+    const Cnr3Status peak_status = cnr3_sample_peak_for_bit_depth(
+        bits_per_sample,
+        sample_peak
+    );
+
+    if (peak_status != Cnr3Status::ok) {
+        return peak_status;
+    }
+
+    int expected_table_offset = 0;
+    int expected_table_size = 0;
+
+    const Cnr3Status geometry_status =
+        cnr3_response_table_geometry_for_sample_peak(
+            sample_peak,
+            expected_table_offset,
+            expected_table_size
+        );
+
+    if (geometry_status != Cnr3Status::ok) {
+        return geometry_status;
+    }
+
+    if (
+        tables.sample_peak != sample_peak ||
+        tables.table_offset != expected_table_offset ||
+        tables.table_size != expected_table_size ||
+        tables.y.size() != static_cast<std::size_t>(expected_table_size) ||
+        tables.u.size() != static_cast<std::size_t>(expected_table_size) ||
+        tables.v.size() != static_cast<std::size_t>(expected_table_size)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    return Cnr3Status::ok;
+}
+
+[[nodiscard]] Cnr3Status cnr3_stage_scalar_plane_to_native_bytes(
+    const Cnr3ConstPlaneBufferView& scalar_plane,
+    const Cnr3MutableNativePlaneByteView& destination_shape,
+    std::vector<std::uint8_t>& staged_bytes
+) noexcept {
+    if (
+        destination_shape.stride_bytes <= 0 ||
+        destination_shape.height <= 0 ||
+        destination_shape.height >
+            (std::numeric_limits<int>::max() / destination_shape.stride_bytes)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    try {
+        staged_bytes.assign(
+            static_cast<std::size_t>(destination_shape.stride_bytes) *
+                static_cast<std::size_t>(destination_shape.height),
+            std::uint8_t{0}
+        );
+    } catch (...) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3MutableNativePlaneByteView staged_plane{
+        staged_bytes.data(),
+        destination_shape.width,
+        destination_shape.height,
+        destination_shape.stride_bytes,
+        destination_shape.bits_per_sample
+    };
+
+    return cnr3_copy_scalar_buffer_to_native_plane(scalar_plane, staged_plane);
+}
+
+[[nodiscard]] bool cnr3_staged_native_active_copy_is_valid(
+    const std::vector<std::uint8_t>& staged_bytes,
+    const Cnr3MutableNativePlaneByteView& destination
+) noexcept {
+    int storage_bytes = 0;
+
+    if (
+        cnr3_native_storage_bytes_for_bit_depth(
+            destination.bits_per_sample,
+            storage_bytes
+        ) != Cnr3Status::ok ||
+        !cnr3_mutable_native_plane_byte_view_is_valid(destination, storage_bytes)
+        ) {
+        return false;
+    }
+
+    const std::size_t required_size =
+        static_cast<std::size_t>(destination.stride_bytes) *
+        static_cast<std::size_t>(destination.height);
+
+    return staged_bytes.size() >= required_size;
+}
+
+void cnr3_commit_staged_native_active_samples(
+    const std::vector<std::uint8_t>& staged_bytes,
+    Cnr3MutableNativePlaneByteView& destination
+) noexcept {
+    int storage_bytes = 0;
+
+    if (
+        cnr3_native_storage_bytes_for_bit_depth(
+            destination.bits_per_sample,
+            storage_bytes
+        ) != Cnr3Status::ok
+        ) {
+        return;
+    }
+
+    auto* destination_bytes = static_cast<std::uint8_t*>(destination.data);
+
+    for (int y = 0; y < destination.height; ++y) {
+        for (int x = 0; x < destination.width; ++x) {
+            const std::size_t offset = cnr3_native_plane_byte_offset(
+                x,
+                y,
+                destination.stride_bytes,
+                storage_bytes
+            );
+
+            if (storage_bytes == 1) {
+                destination_bytes[offset] = staged_bytes[offset];
+            } else {
+                std::memcpy(destination_bytes + offset, staged_bytes.data() + offset, 2U);
+            }
+        }
+    }
+}
+
+void cnr3_publish_caller_supplied_frame_process_summary(
+    const Cnr3VapourSynthFrameTripletViewSummary& triplet_summary,
+    const Cnr3ChromaPlaneProcessSummary& u_summary,
+    const Cnr3ChromaPlaneProcessSummary& v_summary,
+    Cnr3CallerSuppliedFrameProcessSummary& summary
+) noexcept {
+    Cnr3CallerSuppliedFrameProcessSummary local{};
+    local.bits_per_sample = triplet_summary.bits_per_sample;
+    local.storage_bytes = triplet_summary.storage_bytes;
+    local.sub_sampling_w = triplet_summary.sub_sampling_w;
+    local.sub_sampling_h = triplet_summary.sub_sampling_h;
+    local.luma_width = triplet_summary.luma_width;
+    local.luma_height = triplet_summary.luma_height;
+    local.chroma_width = triplet_summary.chroma_width;
+    local.chroma_height = triplet_summary.chroma_height;
+    local.luma_samples_copied = triplet_summary.luma_width * triplet_summary.luma_height;
+    local.chroma_u_samples_processed = u_summary.samples_processed;
+    local.chroma_v_samples_processed = v_summary.samples_processed;
+    local.first_u_output_sample = u_summary.first_output_sample;
+    local.last_u_output_sample = u_summary.last_output_sample;
+    local.first_v_output_sample = v_summary.first_output_sample;
+    local.last_v_output_sample = v_summary.last_output_sample;
+    local.memcpy_byte_view_path_used = true;
+    local.typed_row_pointer_optimization_deferred = true;
+    local.frame_processed = true;
+    summary = local;
+}
+
 
 } // namespace
 
@@ -876,6 +1079,418 @@ Cnr3Status cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
         local.current_source_y.height,
         local.current_source_u.width,
         local.current_source_u.height,
+        summary
+    );
+
+    return Cnr3Status::ok;
+}
+
+
+Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    const Cnr3ResponseTables& response_tables,
+    Cnr3CallerSuppliedFrameProcessSummary& summary
+) noexcept {
+    summary = Cnr3CallerSuppliedFrameProcessSummary{};
+
+    Cnr3VapourSynthFrameTripletNativeViews views{};
+    Cnr3VapourSynthFrameTripletViewSummary triplet_summary{};
+
+    Cnr3Status status = cnr3_make_caller_supplied_vapoursynth_frame_triplet_views(
+        current_source_frame,
+        previous_filtered_output_frame,
+        destination_frame,
+        vsapi,
+        bits_per_sample,
+        sub_sampling_w,
+        sub_sampling_h,
+        views,
+        triplet_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_validate_response_tables_for_frame_process(
+        bits_per_sample,
+        response_tables
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    std::vector<int> current_luma_storage;
+    std::vector<int> current_downsampled_luma_storage;
+    std::vector<int> previous_downsampled_luma_storage;
+    std::vector<int> current_u_storage;
+    std::vector<int> current_v_storage;
+    std::vector<int> previous_u_storage;
+    std::vector<int> previous_v_storage;
+    std::vector<int> output_u_storage;
+    std::vector<int> output_v_storage;
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.luma_width,
+        triplet_summary.luma_height,
+        current_luma_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        current_downsampled_luma_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        previous_downsampled_luma_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        current_u_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        current_v_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        previous_u_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        previous_v_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        output_u_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_allocate_scalar_plane_storage(
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        output_v_storage
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    Cnr3MutablePlaneBufferView current_luma_mutable{
+        current_luma_storage.data(),
+        triplet_summary.luma_width,
+        triplet_summary.luma_height,
+        triplet_summary.luma_width
+    };
+
+    status = cnr3_copy_native_plane_to_scalar_buffer(
+        views.current_source_y,
+        current_luma_mutable
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    Cnr3MutablePlaneBufferView current_downsampled_luma_mutable{
+        current_downsampled_luma_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    Cnr3DownsampledLumaPlaneProcessSummary current_luma_summary{};
+
+    status = cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+        views.current_source_y,
+        sub_sampling_w,
+        sub_sampling_h,
+        current_downsampled_luma_mutable,
+        current_luma_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    Cnr3MutablePlaneBufferView previous_downsampled_luma_mutable{
+        previous_downsampled_luma_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    Cnr3DownsampledLumaPlaneProcessSummary previous_luma_summary{};
+
+    status = cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+        views.previous_filtered_y,
+        sub_sampling_w,
+        sub_sampling_h,
+        previous_downsampled_luma_mutable,
+        previous_luma_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    Cnr3MutablePlaneBufferView current_u_mutable{
+        current_u_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    Cnr3MutablePlaneBufferView current_v_mutable{
+        current_v_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    Cnr3MutablePlaneBufferView previous_u_mutable{
+        previous_u_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    Cnr3MutablePlaneBufferView previous_v_mutable{
+        previous_v_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+
+    status = cnr3_copy_native_plane_to_scalar_buffer(views.current_source_u, current_u_mutable);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_copy_native_plane_to_scalar_buffer(views.current_source_v, current_v_mutable);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_copy_native_plane_to_scalar_buffer(views.previous_filtered_u, previous_u_mutable);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    status = cnr3_copy_native_plane_to_scalar_buffer(views.previous_filtered_v, previous_v_mutable);
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    const Cnr3ConstPlaneBufferView current_downsampled_luma{
+        current_downsampled_luma_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    const Cnr3ConstPlaneBufferView previous_downsampled_luma{
+        previous_downsampled_luma_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    const Cnr3ConstPlaneBufferView current_u{
+        current_u_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    const Cnr3ConstPlaneBufferView current_v{
+        current_v_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    const Cnr3ConstPlaneBufferView previous_u{
+        previous_u_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    const Cnr3ConstPlaneBufferView previous_v{
+        previous_v_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+
+    Cnr3MutablePlaneBufferView output_u_mutable{
+        output_u_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+    Cnr3MutablePlaneBufferView output_v_mutable{
+        output_v_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+
+    Cnr3ChromaPlaneProcessSummary u_summary{};
+
+    status = cnr3_process_chroma_plane_from_downsampled_luma(
+        current_downsampled_luma,
+        previous_downsampled_luma,
+        current_u,
+        previous_u,
+        response_tables.y,
+        response_tables.u,
+        response_tables.table_offset,
+        bits_per_sample,
+        output_u_mutable,
+        u_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    Cnr3ChromaPlaneProcessSummary v_summary{};
+
+    status = cnr3_process_chroma_plane_from_downsampled_luma(
+        current_downsampled_luma,
+        previous_downsampled_luma,
+        current_v,
+        previous_v,
+        response_tables.y,
+        response_tables.v,
+        response_tables.table_offset,
+        bits_per_sample,
+        output_v_mutable,
+        v_summary
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    std::vector<std::uint8_t> staged_y;
+    std::vector<std::uint8_t> staged_u;
+    std::vector<std::uint8_t> staged_v;
+
+    const Cnr3ConstPlaneBufferView current_luma{
+        current_luma_storage.data(),
+        triplet_summary.luma_width,
+        triplet_summary.luma_height,
+        triplet_summary.luma_width
+    };
+
+    status = cnr3_stage_scalar_plane_to_native_bytes(
+        current_luma,
+        views.destination_y,
+        staged_y
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    const Cnr3ConstPlaneBufferView output_u{
+        output_u_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+
+    status = cnr3_stage_scalar_plane_to_native_bytes(
+        output_u,
+        views.destination_u,
+        staged_u
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    const Cnr3ConstPlaneBufferView output_v{
+        output_v_storage.data(),
+        triplet_summary.chroma_width,
+        triplet_summary.chroma_height,
+        triplet_summary.chroma_width
+    };
+
+    status = cnr3_stage_scalar_plane_to_native_bytes(
+        output_v,
+        views.destination_v,
+        staged_v
+    );
+
+    if (status != Cnr3Status::ok) {
+        return status;
+    }
+
+    if (
+        !cnr3_staged_native_active_copy_is_valid(staged_y, views.destination_y) ||
+        !cnr3_staged_native_active_copy_is_valid(staged_u, views.destination_u) ||
+        !cnr3_staged_native_active_copy_is_valid(staged_v, views.destination_v)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    cnr3_commit_staged_native_active_samples(staged_y, views.destination_y);
+    cnr3_commit_staged_native_active_samples(staged_u, views.destination_u);
+    cnr3_commit_staged_native_active_samples(staged_v, views.destination_v);
+
+    cnr3_publish_caller_supplied_frame_process_summary(
+        triplet_summary,
+        u_summary,
+        v_summary,
         summary
     );
 

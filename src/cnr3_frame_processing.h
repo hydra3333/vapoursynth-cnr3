@@ -78,15 +78,25 @@
     retrieve frames, decide predecessor sourcing, process scene-change, or
     connect pixel processing to getFrame/cache lifecycle.
 
+    CMS07-P.11B composes the caller-supplied frame triplet into the first
+    real-frame pixel output. The caller supplies current source, previous
+    filtered output, and writable destination frames; this module still does
+    not decide where any frame came from. P.11B copies luma from current source
+    unchanged and blends chroma against the previous filtered output argument.
+    Destination writes are all-or-nothing across Y, U, and V after all staging
+    succeeds. Two-byte samples deliberately stay on the proven memcpy byte-view
+    path; typed row-pointer optimization is deferred to a measured fmParallel
+    performance phase. Scene-change and getFrame/cache lifecycle remain
+    deferred.
+
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
     keeps shift2 = depth << 1, shift = 1LL << shift2, shift1 = shift >> 1, and
     the int64 accumulator form exactly.
 
     Still deliberately deferred to later pixel phases:
-        - real-frame pixel composition over the validated triplet;
-        - source-frame request/retrieve lifecycle;
         - scene-change/reset decisions;
+        - source-frame request/retrieve lifecycle;
         - explicit previous-output frame acquisition and ownership;
         - cache/getFrame integration and return-transfer.
 
@@ -102,6 +112,7 @@
 
 struct VSAPI;
 struct VSFrame;
+struct Cnr3ResponseTables;
 
 struct Cnr3DownsampledLumaTapCoordinates {
     int x0 = 0;
@@ -242,6 +253,27 @@ struct Cnr3VapourSynthFrameTripletViewSummary {
     bool triplet_views_created = false;
 };
 
+struct Cnr3CallerSuppliedFrameProcessSummary {
+    int bits_per_sample = 0;
+    int storage_bytes = 0;
+    int sub_sampling_w = -1;
+    int sub_sampling_h = -1;
+    int luma_width = 0;
+    int luma_height = 0;
+    int chroma_width = 0;
+    int chroma_height = 0;
+    int luma_samples_copied = 0;
+    int chroma_u_samples_processed = 0;
+    int chroma_v_samples_processed = 0;
+    int first_u_output_sample = 0;
+    int last_u_output_sample = 0;
+    int first_v_output_sample = 0;
+    int last_v_output_sample = 0;
+    bool memcpy_byte_view_path_used = false;
+    bool typed_row_pointer_optimization_deferred = false;
+    bool frame_processed = false;
+};
+
 [[nodiscard]] Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
     int bits_per_sample,
     int& storage_bytes
@@ -307,6 +339,18 @@ struct Cnr3VapourSynthFrameTripletViewSummary {
     int sub_sampling_h,
     Cnr3VapourSynthFrameTripletNativeViews& views,
     Cnr3VapourSynthFrameTripletViewSummary& summary
+) noexcept;
+
+[[nodiscard]] Cnr3Status cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+    const VSFrame* current_source_frame,
+    const VSFrame* previous_filtered_output_frame,
+    VSFrame* destination_frame,
+    const VSAPI* vsapi,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    const Cnr3ResponseTables& response_tables,
+    Cnr3CallerSuppliedFrameProcessSummary& summary
 ) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_blend_chroma_sample_from_response_tables(

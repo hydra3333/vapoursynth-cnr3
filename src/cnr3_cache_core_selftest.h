@@ -433,6 +433,15 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_caller_supplied_frame_triplet_view_proof() noexcept;
 
 /*
+    Run the CMS07-P.11B caller-supplied real-frame pixel-composition proof.
+
+    This composes the validated caller-supplied frame triplet with the proven
+    pixel pipeline. It still does not request, retrieve, acquire, cache, recover,
+    or return frames.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_caller_supplied_real_frame_pixel_composition_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

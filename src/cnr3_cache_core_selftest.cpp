@@ -11980,6 +11980,592 @@ Cnr3Status cnr3_cache_core_selftest_caller_supplied_frame_triplet_view_proof() n
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_caller_supplied_real_frame_pixel_composition_proof() noexcept {
+    /*
+        P.11B proves real-frame pixel composition only for frames supplied by
+        the caller. It must not request, retrieve, acquire, cache, recover, or
+        return frames, and it must write destination Y/U/V only after all staging
+        succeeds.
+    */
+    constexpr int bits_8 = 8;
+    constexpr int bits_10 = 10;
+    constexpr int sub_sampling_w = 1;
+    constexpr int sub_sampling_h = 1;
+    constexpr int luma_width = 4;
+    constexpr int luma_height = 4;
+    constexpr int chroma_width = 2;
+    constexpr int chroma_height = 2;
+
+    int current_source_storage = 11;
+    int previous_filtered_storage = 12;
+    int destination_storage = 13;
+
+    const VSFrame* current_source_frame = reinterpret_cast<const VSFrame*>(&current_source_storage);
+    const VSFrame* previous_filtered_frame = reinterpret_cast<const VSFrame*>(&previous_filtered_storage);
+    VSFrame* destination_frame = reinterpret_cast<VSFrame*>(&destination_storage);
+
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    vsapi_state.fake_frames[0].frame = current_source_frame;
+    vsapi_state.fake_frames[1].frame = previous_filtered_frame;
+    vsapi_state.fake_frames[2].frame = destination_frame;
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    const auto fail = [&]() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto make_tables = [](
+        int bits_per_sample,
+        int y_signed_diff,
+        int u_signed_diff,
+        int v_signed_diff
+    ) noexcept -> Cnr3ResponseTables {
+        const int sample_peak = (1 << bits_per_sample) - 1;
+        Cnr3ResponseTables tables{};
+        tables.sample_peak = sample_peak;
+
+        if (
+            cnr3_response_table_geometry_for_sample_peak(
+                sample_peak,
+                tables.table_offset,
+                tables.table_size
+            ) != Cnr3Status::ok
+            ) {
+            return tables;
+        }
+
+        try {
+            tables.y.assign(static_cast<std::size_t>(tables.table_size), 0);
+            tables.u.assign(static_cast<std::size_t>(tables.table_size), 0);
+            tables.v.assign(static_cast<std::size_t>(tables.table_size), 0);
+        } catch (...) {
+            return Cnr3ResponseTables{};
+        }
+
+        tables.y[static_cast<std::size_t>(tables.table_offset + y_signed_diff)] =
+            sample_peak;
+        tables.u[static_cast<std::size_t>(tables.table_offset + u_signed_diff)] =
+            sample_peak;
+        tables.v[static_cast<std::size_t>(tables.table_offset + v_signed_diff)] =
+            sample_peak;
+        return tables;
+    };
+
+    const auto expected_blend = [](
+        int bits_per_sample,
+        int current_sample,
+        int previous_sample
+    ) noexcept -> int {
+        const int sample_peak = (1 << bits_per_sample) - 1;
+        const std::int64_t weight =
+            static_cast<std::int64_t>(sample_peak) * static_cast<std::int64_t>(sample_peak);
+        const int shift2 = bits_per_sample << 1;
+        const std::int64_t shift = std::int64_t{1} << shift2;
+        const std::int64_t shift1 = shift >> 1;
+
+        return static_cast<int>(
+            (
+                (weight * static_cast<std::int64_t>(previous_sample)) +
+                ((shift - weight) * static_cast<std::int64_t>(current_sample)) +
+                shift1
+            ) >> shift2
+        );
+    };
+
+    const auto configure_read_frame = [](
+        Cnr3CacheCoreSelftestVsFrameState& frame_state,
+        const std::vector<std::uint8_t>& y_plane,
+        const std::vector<std::uint8_t>& u_plane,
+        const std::vector<std::uint8_t>& v_plane,
+        int luma_stride,
+        int chroma_stride
+    ) noexcept {
+        frame_state.planes[0].width = luma_width;
+        frame_state.planes[0].height = luma_height;
+        frame_state.planes[0].stride = luma_stride;
+        frame_state.planes[0].read_ptr = y_plane.data();
+
+        frame_state.planes[1].width = chroma_width;
+        frame_state.planes[1].height = chroma_height;
+        frame_state.planes[1].stride = chroma_stride;
+        frame_state.planes[1].read_ptr = u_plane.data();
+
+        frame_state.planes[2].width = chroma_width;
+        frame_state.planes[2].height = chroma_height;
+        frame_state.planes[2].stride = chroma_stride;
+        frame_state.planes[2].read_ptr = v_plane.data();
+    };
+
+    const auto configure_write_frame = [](
+        Cnr3CacheCoreSelftestVsFrameState& frame_state,
+        std::vector<std::uint8_t>& y_plane,
+        std::vector<std::uint8_t>& u_plane,
+        std::vector<std::uint8_t>& v_plane,
+        int luma_stride,
+        int chroma_stride
+    ) noexcept {
+        frame_state.planes[0].width = luma_width;
+        frame_state.planes[0].height = luma_height;
+        frame_state.planes[0].stride = luma_stride;
+        frame_state.planes[0].write_ptr = y_plane.data();
+
+        frame_state.planes[1].width = chroma_width;
+        frame_state.planes[1].height = chroma_height;
+        frame_state.planes[1].stride = chroma_stride;
+        frame_state.planes[1].write_ptr = u_plane.data();
+
+        frame_state.planes[2].width = chroma_width;
+        frame_state.planes[2].height = chroma_height;
+        frame_state.planes[2].stride = chroma_stride;
+        frame_state.planes[2].write_ptr = v_plane.data();
+    };
+
+    const auto active_padding_is = [](
+        const std::vector<std::uint8_t>& bytes,
+        int width,
+        int height,
+        int stride_bytes,
+        int storage_bytes,
+        std::uint8_t sentinel
+    ) noexcept -> bool {
+        const int active_row_bytes = width * storage_bytes;
+
+        for (int y = 0; y < height; ++y) {
+            for (int byte_index = active_row_bytes; byte_index < stride_bytes; ++byte_index) {
+                if (bytes[static_cast<std::size_t>((y * stride_bytes) + byte_index)] != sentinel) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    const auto all_bytes_are = [](
+        const std::vector<std::uint8_t>& bytes,
+        std::uint8_t value
+    ) noexcept -> bool {
+        for (std::uint8_t byte : bytes) {
+            if (byte != value) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    const auto fill_u8_active = [](
+        std::vector<std::uint8_t>& bytes,
+        int width,
+        int height,
+        int stride_bytes,
+        std::uint8_t value
+    ) noexcept {
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                bytes[static_cast<std::size_t>((y * stride_bytes) + x)] = value;
+            }
+        }
+    };
+
+    const auto fill_u8_luma = [](
+        std::vector<std::uint8_t>& bytes,
+        int stride_bytes
+    ) noexcept {
+        for (int y = 0; y < luma_height; ++y) {
+            for (int x = 0; x < luma_width; ++x) {
+                bytes[static_cast<std::size_t>((y * stride_bytes) + x)] =
+                    static_cast<std::uint8_t>((y * 10) + x);
+            }
+        }
+    };
+
+    const auto put_u16_active = [](
+        std::vector<std::uint8_t>& bytes,
+        int stride_bytes,
+        int width,
+        int height,
+        std::uint16_t value
+    ) noexcept {
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const std::size_t offset =
+                    (static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_bytes)) +
+                    (static_cast<std::size_t>(x) * 2U);
+                cnr3_cache_core_selftest_write_u16_sample(bytes.data(), static_cast<int>(offset), value);
+            }
+        }
+    };
+
+    const auto get_u16_active = [](
+        const std::vector<std::uint8_t>& bytes,
+        int stride_bytes,
+        int x,
+        int y
+    ) noexcept -> int {
+        const std::size_t offset =
+            (static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_bytes)) +
+            (static_cast<std::size_t>(x) * 2U);
+        std::uint16_t value = 0;
+        std::memcpy(&value, bytes.data() + offset, sizeof(value));
+        return static_cast<int>(value);
+    };
+
+    const auto fill_u16_luma = [&put_u16_active](
+        std::vector<std::uint8_t>& bytes,
+        int stride_bytes
+    ) noexcept {
+        for (int y = 0; y < luma_height; ++y) {
+            for (int x = 0; x < luma_width; ++x) {
+                const int value = (y * 10) + x;
+                const std::size_t offset =
+                    (static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_bytes)) +
+                    (static_cast<std::size_t>(x) * 2U);
+                cnr3_cache_core_selftest_write_u16_sample(
+                    bytes.data(),
+                    static_cast<int>(offset),
+                    static_cast<std::uint16_t>(value)
+                );
+            }
+        }
+    };
+
+    {
+        constexpr int luma_stride = 6;
+        constexpr int chroma_stride = 4;
+        constexpr int current_chroma_u = 120;
+        constexpr int filtered_chroma_u = 20;
+        constexpr int decoy_source_previous_u = 220;
+        constexpr int current_chroma_v = 130;
+        constexpr int filtered_chroma_v = 30;
+        constexpr int decoy_source_previous_v = 230;
+        constexpr int expected_u = 21;
+        constexpr int expected_v = 31;
+        constexpr int decoy_u = 219;
+        constexpr int decoy_v = 229;
+
+        static_assert(expected_u == 21);
+        static_assert(expected_v == 31);
+        static_assert(decoy_u == 219);
+        static_assert(decoy_v == 229);
+
+        std::vector<std::uint8_t> current_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEEU);
+        std::vector<std::uint8_t> previous_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEDU);
+        std::vector<std::uint8_t> current_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xECU);
+        std::vector<std::uint8_t> current_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEBU);
+        std::vector<std::uint8_t> previous_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEAU);
+        std::vector<std::uint8_t> previous_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xE9U);
+        std::vector<std::uint8_t> destination_y(static_cast<std::size_t>(luma_stride * luma_height), 0xA5U);
+        std::vector<std::uint8_t> destination_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB5U);
+        std::vector<std::uint8_t> destination_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC5U);
+
+        fill_u8_luma(current_y, luma_stride);
+        fill_u8_luma(previous_y, luma_stride);
+        fill_u8_active(current_u, chroma_width, chroma_height, chroma_stride, current_chroma_u);
+        fill_u8_active(current_v, chroma_width, chroma_height, chroma_stride, current_chroma_v);
+        fill_u8_active(previous_u, chroma_width, chroma_height, chroma_stride, filtered_chroma_u);
+        fill_u8_active(previous_v, chroma_width, chroma_height, chroma_stride, filtered_chroma_v);
+
+        configure_read_frame(vsapi_state.fake_frames[0], current_y, current_u, current_v, luma_stride, chroma_stride);
+        configure_read_frame(vsapi_state.fake_frames[1], previous_y, previous_u, previous_v, luma_stride, chroma_stride);
+        configure_write_frame(vsapi_state.fake_frames[2], destination_y, destination_u, destination_v, luma_stride, chroma_stride);
+
+        const Cnr3ResponseTables tables = make_tables(bits_8, 0, 100, 100);
+        Cnr3CallerSuppliedFrameProcessSummary summary{};
+
+        if (
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_8,
+                sub_sampling_w,
+                sub_sampling_h,
+                tables,
+                summary
+            ) != Cnr3Status::ok ||
+            summary.luma_samples_copied != 16 ||
+            summary.chroma_u_samples_processed != 4 ||
+            summary.chroma_v_samples_processed != 4 ||
+            summary.first_u_output_sample != expected_u ||
+            summary.last_u_output_sample != expected_u ||
+            summary.first_v_output_sample != expected_v ||
+            summary.last_v_output_sample != expected_v ||
+            !summary.memcpy_byte_view_path_used ||
+            !summary.typed_row_pointer_optimization_deferred ||
+            !summary.frame_processed ||
+            expected_blend(bits_8, current_chroma_u, filtered_chroma_u) != expected_u ||
+            expected_blend(bits_8, current_chroma_u, decoy_source_previous_u) != decoy_u ||
+            expected_u == decoy_u ||
+            expected_blend(bits_8, current_chroma_v, filtered_chroma_v) != expected_v ||
+            expected_blend(bits_8, current_chroma_v, decoy_source_previous_v) != decoy_v ||
+            expected_v == decoy_v
+            ) {
+            return fail();
+        }
+
+        for (int y = 0; y < luma_height; ++y) {
+            for (int x = 0; x < luma_width; ++x) {
+                const std::uint8_t expected = static_cast<std::uint8_t>((y * 10) + x);
+                if (destination_y[static_cast<std::size_t>((y * luma_stride) + x)] != expected) {
+                    return fail();
+                }
+            }
+        }
+
+        for (int y = 0; y < chroma_height; ++y) {
+            for (int x = 0; x < chroma_width; ++x) {
+                if (
+                    destination_u[static_cast<std::size_t>((y * chroma_stride) + x)] != expected_u ||
+                    destination_v[static_cast<std::size_t>((y * chroma_stride) + x)] != expected_v
+                    ) {
+                    return fail();
+                }
+            }
+        }
+
+        if (
+            !active_padding_is(destination_y, luma_width, luma_height, luma_stride, 1, 0xA5U) ||
+            !active_padding_is(destination_u, chroma_width, chroma_height, chroma_stride, 1, 0xB5U) ||
+            !active_padding_is(destination_v, chroma_width, chroma_height, chroma_stride, 1, 0xC5U)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int luma_stride = 12;
+        constexpr int chroma_stride = 6;
+        constexpr int current_chroma_u = 120;
+        constexpr int filtered_chroma_u = 20;
+        constexpr int current_chroma_v = 130;
+        constexpr int filtered_chroma_v = 30;
+        constexpr int expected_u = 20;
+        constexpr int expected_v = 30;
+
+        std::vector<std::uint8_t> current_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEEU);
+        std::vector<std::uint8_t> previous_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEDU);
+        std::vector<std::uint8_t> current_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xECU);
+        std::vector<std::uint8_t> current_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEBU);
+        std::vector<std::uint8_t> previous_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEAU);
+        std::vector<std::uint8_t> previous_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xE9U);
+        std::vector<std::uint8_t> destination_y(static_cast<std::size_t>(luma_stride * luma_height), 0xA6U);
+        std::vector<std::uint8_t> destination_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB6U);
+        std::vector<std::uint8_t> destination_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC6U);
+
+        fill_u16_luma(current_y, luma_stride);
+        fill_u16_luma(previous_y, luma_stride);
+        put_u16_active(current_u, chroma_stride, chroma_width, chroma_height, current_chroma_u);
+        put_u16_active(current_v, chroma_stride, chroma_width, chroma_height, current_chroma_v);
+        put_u16_active(previous_u, chroma_stride, chroma_width, chroma_height, filtered_chroma_u);
+        put_u16_active(previous_v, chroma_stride, chroma_width, chroma_height, filtered_chroma_v);
+
+        configure_read_frame(vsapi_state.fake_frames[0], current_y, current_u, current_v, luma_stride, chroma_stride);
+        configure_read_frame(vsapi_state.fake_frames[1], previous_y, previous_u, previous_v, luma_stride, chroma_stride);
+        configure_write_frame(vsapi_state.fake_frames[2], destination_y, destination_u, destination_v, luma_stride, chroma_stride);
+
+        const Cnr3ResponseTables tables = make_tables(bits_10, 0, 100, 100);
+        Cnr3CallerSuppliedFrameProcessSummary summary{};
+
+        if (
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_10,
+                sub_sampling_w,
+                sub_sampling_h,
+                tables,
+                summary
+            ) != Cnr3Status::ok ||
+            summary.storage_bytes != 2 ||
+            summary.first_u_output_sample != expected_u ||
+            summary.first_v_output_sample != expected_v ||
+            get_u16_active(destination_y, luma_stride, 3, 2) != 23 ||
+            get_u16_active(destination_u, chroma_stride, 0, 0) != expected_u ||
+            get_u16_active(destination_u, chroma_stride, 1, 1) != expected_u ||
+            get_u16_active(destination_v, chroma_stride, 0, 0) != expected_v ||
+            get_u16_active(destination_v, chroma_stride, 1, 1) != expected_v ||
+            !active_padding_is(destination_y, luma_width, luma_height, luma_stride, 2, 0xA6U) ||
+            !active_padding_is(destination_u, chroma_width, chroma_height, chroma_stride, 2, 0xB6U) ||
+            !active_padding_is(destination_v, chroma_width, chroma_height, chroma_stride, 2, 0xC6U)
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int luma_stride = 12;
+        constexpr int chroma_stride = 6;
+        std::vector<std::uint8_t> current_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEEU);
+        std::vector<std::uint8_t> previous_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEDU);
+        std::vector<std::uint8_t> current_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xECU);
+        std::vector<std::uint8_t> current_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEBU);
+        std::vector<std::uint8_t> previous_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEAU);
+        std::vector<std::uint8_t> previous_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xE9U);
+        std::vector<std::uint8_t> destination_y(static_cast<std::size_t>(luma_stride * luma_height), 0xA7U);
+        std::vector<std::uint8_t> destination_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB7U);
+        std::vector<std::uint8_t> destination_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC7U);
+
+        fill_u16_luma(current_y, luma_stride);
+        fill_u16_luma(previous_y, luma_stride);
+        put_u16_active(current_u, chroma_stride, chroma_width, chroma_height, 120U);
+        put_u16_active(current_v, chroma_stride, chroma_width, chroma_height, 130U);
+        put_u16_active(previous_u, chroma_stride, chroma_width, chroma_height, 20U);
+        put_u16_active(previous_v, chroma_stride, chroma_width, chroma_height, 30U);
+        cnr3_cache_core_selftest_write_u16_sample(current_u.data(), 8, 2048U);
+
+        configure_read_frame(vsapi_state.fake_frames[0], current_y, current_u, current_v, luma_stride, chroma_stride);
+        configure_read_frame(vsapi_state.fake_frames[1], previous_y, previous_u, previous_v, luma_stride, chroma_stride);
+        configure_write_frame(vsapi_state.fake_frames[2], destination_y, destination_u, destination_v, luma_stride, chroma_stride);
+
+        const Cnr3ResponseTables tables = make_tables(bits_10, 0, 100, 100);
+        Cnr3CallerSuppliedFrameProcessSummary summary{};
+        summary.frame_processed = true;
+        summary.luma_samples_copied = 99;
+
+        if (
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_10,
+                sub_sampling_w,
+                sub_sampling_h,
+                tables,
+                summary
+            ) != Cnr3Status::invalid_argument ||
+            !all_bytes_are(destination_y, 0xA7U) ||
+            !all_bytes_are(destination_u, 0xB7U) ||
+            !all_bytes_are(destination_v, 0xC7U) ||
+            summary.frame_processed ||
+            summary.luma_samples_copied != 0
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int luma_stride = 6;
+        constexpr int chroma_stride = 4;
+        std::vector<std::uint8_t> current_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEEU);
+        std::vector<std::uint8_t> previous_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEDU);
+        std::vector<std::uint8_t> current_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xECU);
+        std::vector<std::uint8_t> current_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEBU);
+        std::vector<std::uint8_t> previous_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEAU);
+        std::vector<std::uint8_t> previous_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xE9U);
+        std::vector<std::uint8_t> destination_y(static_cast<std::size_t>(luma_stride * luma_height), 0xA8U);
+        std::vector<std::uint8_t> destination_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB8U);
+        std::vector<std::uint8_t> destination_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC8U);
+
+        fill_u8_luma(current_y, luma_stride);
+        fill_u8_luma(previous_y, luma_stride);
+        fill_u8_active(current_u, chroma_width, chroma_height, chroma_stride, 120U);
+        fill_u8_active(current_v, chroma_width, chroma_height, chroma_stride, 130U);
+        fill_u8_active(previous_u, chroma_width, chroma_height, chroma_stride, 20U);
+        fill_u8_active(previous_v, chroma_width, chroma_height, chroma_stride, 30U);
+
+        configure_read_frame(vsapi_state.fake_frames[0], current_y, current_u, current_v, luma_stride, chroma_stride);
+        configure_read_frame(vsapi_state.fake_frames[1], previous_y, previous_u, previous_v, luma_stride, chroma_stride);
+        configure_write_frame(vsapi_state.fake_frames[2], destination_y, destination_u, destination_v, luma_stride, chroma_stride);
+
+        Cnr3ResponseTables bad_tables = make_tables(bits_8, 0, 100, 100);
+        bad_tables.table_offset = 0;
+        Cnr3CallerSuppliedFrameProcessSummary summary{};
+
+        if (
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_8,
+                sub_sampling_w,
+                sub_sampling_h,
+                bad_tables,
+                summary
+            ) != Cnr3Status::invalid_argument ||
+            !all_bytes_are(destination_y, 0xA8U) ||
+            !all_bytes_are(destination_u, 0xB8U) ||
+            !all_bytes_are(destination_v, 0xC8U) ||
+            summary.frame_processed
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        constexpr int luma_stride = 6;
+        constexpr int chroma_stride = 4;
+        std::vector<std::uint8_t> current_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEEU);
+        std::vector<std::uint8_t> previous_y(static_cast<std::size_t>(luma_stride * luma_height), 0xEDU);
+        std::vector<std::uint8_t> current_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xECU);
+        std::vector<std::uint8_t> current_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEBU);
+        std::vector<std::uint8_t> previous_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xEAU);
+        std::vector<std::uint8_t> previous_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xE9U);
+        std::vector<std::uint8_t> destination_y(static_cast<std::size_t>(luma_stride * luma_height), 0xA9U);
+        std::vector<std::uint8_t> destination_u(static_cast<std::size_t>(chroma_stride * chroma_height), 0xB9U);
+        std::vector<std::uint8_t> destination_v(static_cast<std::size_t>(chroma_stride * chroma_height), 0xC9U);
+
+        fill_u8_luma(current_y, luma_stride);
+        fill_u8_luma(previous_y, luma_stride);
+        fill_u8_active(current_u, chroma_width, chroma_height, chroma_stride, 120U);
+        fill_u8_active(current_v, chroma_width, chroma_height, chroma_stride, 130U);
+        fill_u8_active(previous_u, chroma_width, chroma_height, chroma_stride, 20U);
+        fill_u8_active(previous_v, chroma_width, chroma_height, chroma_stride, 30U);
+
+        configure_read_frame(vsapi_state.fake_frames[0], current_y, current_u, current_v, luma_stride, chroma_stride);
+        configure_read_frame(vsapi_state.fake_frames[1], previous_y, previous_u, previous_v, luma_stride, chroma_stride);
+        configure_write_frame(vsapi_state.fake_frames[2], destination_y, destination_u, destination_v, luma_stride, chroma_stride);
+        vsapi_state.fake_frames[1].planes[1].width = 3;
+
+        const Cnr3ResponseTables tables = make_tables(bits_8, 0, 100, 100);
+        Cnr3CallerSuppliedFrameProcessSummary summary{};
+
+        if (
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+                current_source_frame,
+                previous_filtered_frame,
+                destination_frame,
+                &vsapi,
+                bits_8,
+                sub_sampling_w,
+                sub_sampling_h,
+                tables,
+                summary
+            ) != Cnr3Status::invalid_argument ||
+            !all_bytes_are(destination_y, 0xA9U) ||
+            !all_bytes_are(destination_u, 0xB9U) ||
+            !all_bytes_are(destination_v, 0xC9U) ||
+            summary.frame_processed
+            ) {
+            return fail();
+        }
+
+        vsapi_state.fake_frames[1].planes[1].width = chroma_width;
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    cnr3_cache_core_selftest_trace_line("P.11B caller-supplied real-frame pixel-composition proof scenario");
+    cnr3_cache_core_selftest_trace_line("    caller-supplied frame triplet composes P.11A views with the proven pixel pipeline");
+    cnr3_cache_core_selftest_trace_line("    output luma is staged and copied unchanged from current source luma");
+    cnr3_cache_core_selftest_trace_line("    chroma U/V are blended against previous filtered output frame planes");
+    cnr3_cache_core_selftest_trace_line("    predecessor semantics vector proves previous filtered output is used, not source[N-1]");
+    cnr3_cache_core_selftest_trace_line("    two-byte samples retain the P.8A memcpy path; typed row-pointer optimization is deferred to fmParallel measurement");
+    cnr3_cache_core_selftest_trace_line("    invalid late pixel/response-table proofs publish no partial destination frame");
+    cnr3_cache_core_selftest_trace_line("    source-frame lifecycle, predecessor sourcing, scene-change, and getFrame/cache integration remain deferred");
+
+    return Cnr3Status::ok;
+}
+
+
 
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
@@ -12137,6 +12723,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "caller_supplied_frame_triplet_view_proof",
             cnr3_cache_core_selftest_caller_supplied_frame_triplet_view_proof
+        },
+        {
+            "caller_supplied_real_frame_pixel_composition_proof",
+            cnr3_cache_core_selftest_caller_supplied_real_frame_pixel_composition_proof
         },
         {
             "lookup_addref_hit_and_miss",

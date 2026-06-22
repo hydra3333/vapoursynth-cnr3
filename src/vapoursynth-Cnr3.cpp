@@ -97,10 +97,10 @@
         It must not contain cache algorithms, recovery algorithms, prune policy,
         pixel loops, response-table construction, or memory-diagnostic internals.
 
-        During CMS07-K.1C this file contains only a temporary live getFrame
-        passthrough scaffold. It proves VapourSynth callback/request/return
-        plumbing and must not be treated as real CNR3 filtering, cache output,
-        predecessor sourcing, or old-code salvage.
+        During CMS07-K.1D this file contains the temporary live getFrame frame-0
+        proof path. It proves frame-0 source-verbatim fresh-start output
+        creation, cache store, and return plumbing. Nonzero frames are refused
+        until predecessor-present processing is wired.
 
     Filter-mode posture:
         The final operational target is fmParallel.
@@ -145,19 +145,21 @@
 */
 
 #include "cnr3_build_config.h"
+#include "cnr3_cache_core.h"
 #include "cnr3_common.h"
 #include "cnr3_instance_config.h"
+#include "cnr3_owned_frame_ref.h"
 
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 
-#include <atomic>
 #include <cstdio>
 #include <new>
+#include <utility>
 
 namespace {
 
-struct Cnr3LiveGetFrameScaffoldFrameData {
+struct Cnr3LiveGetFrameFrameData {
     int requested_frame = CNR3_INVALID_FRAME_NUMBER;
     bool source_requested = false;
 };
@@ -166,34 +168,34 @@ struct Cnr3FilterData {
     VSNode* source = nullptr;
     VSVideoInfo video_info{};
     Cnr3InstanceConfig config{};
-
-    std::atomic<int> live_scaffold_requested_total{ 0 };
-    std::atomic<int> live_scaffold_retrieved_total{ 0 };
-    std::atomic<int> live_scaffold_returned_total{ 0 };
-    std::atomic<int> live_scaffold_passthrough_total{ 0 };
+    Cnr3OutputCacheCore output_cache{};
 };
 
 /*
-    The K.1C coordinator harness requires [KDT] output only when real
-    getFrame processing occurs. These helpers are therefore called only from
-    the live getFrame callback path, never from plugin load, registration,
-    create, or free.
+    The coordinator harness requires [KDT] output only when real getFrame
+    processing occurs. These helpers are therefore called only from the live
+    getFrame callback path, never from plugin load, registration, create, or
+    free.
 */
-void cnr3_trace_live_scaffold_frame(
+void cnr3_trace_live_frame0_fresh_start(
     const Cnr3FilterData& data,
     int requested_frame,
     bool source_requested,
     bool source_retrieved,
+    bool copy_frame_succeeded,
+    const char* store_status_name,
     bool frame_returned
 ) noexcept {
-#if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(CNR3_KEYSTONE_LIVE_GETFRAME_SCAFFOLD)
+#if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF)
     std::fprintf(
         stderr,
-        "[KDT] instance=%d N=%d LIVE-SCAFFOLD-PASSTHROUGH req=%d got=%d ret=%d flag=SCAFFOLD_NOT_FILTERED\n",
+        "[KDT] instance=%d N=%d FRAME0-FRESH-START req=%d got=%d copyFrame=%s store=%s ret=%d flag=REAL_OUTPUT_FRAME0\n",
         data.config.instance_id.value,
         requested_frame,
         source_requested ? 1 : 0,
         source_retrieved ? 1 : 0,
+        copy_frame_succeeded ? "ok" : "fail",
+        store_status_name != nullptr ? store_status_name : "unknown",
         frame_returned ? 1 : 0
     );
 #else
@@ -201,25 +203,26 @@ void cnr3_trace_live_scaffold_frame(
     (void)requested_frame;
     (void)source_requested;
     (void)source_retrieved;
+    (void)copy_frame_succeeded;
+    (void)store_status_name;
     (void)frame_returned;
 #endif
 }
 
-void cnr3_trace_live_scaffold_summary(
-    const Cnr3FilterData& data
+void cnr3_trace_live_nonzero_not_yet_implemented(
+    const Cnr3FilterData& data,
+    int requested_frame
 ) noexcept {
-#if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(CNR3_KEYSTONE_LIVE_GETFRAME_SCAFFOLD)
+#if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF)
     std::fprintf(
         stderr,
-        "[KDT-SUMMARY] instance=%d live_scaffold_passthrough=%d requested=%d retrieved=%d returned=%d flag=SCAFFOLD_NOT_FILTERED\n",
+        "[KDT] instance=%d N=%d NOT-YET-IMPLEMENTED branch=nonzero-before-predecessor-wiring\n",
         data.config.instance_id.value,
-        data.live_scaffold_passthrough_total.load(std::memory_order_relaxed),
-        data.live_scaffold_requested_total.load(std::memory_order_relaxed),
-        data.live_scaffold_retrieved_total.load(std::memory_order_relaxed),
-        data.live_scaffold_returned_total.load(std::memory_order_relaxed)
+        requested_frame
     );
 #else
     (void)data;
+    (void)requested_frame;
 #endif
 }
 
@@ -230,7 +233,7 @@ void cnr3_discard_frame_data(
         return;
     }
 
-    delete static_cast<Cnr3LiveGetFrameScaffoldFrameData*>(*frame_data);
+    delete static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
     *frame_data = nullptr;
 }
 
@@ -244,7 +247,13 @@ void cnr3_set_filter_error(
     }
 }
 
-const VSFrame* VS_CC cnr3_get_frame_keystone_live_passthrough_scaffold_only(
+bool cnr3_live_store_status_allows_return(
+    Cnr3Status status
+) noexcept {
+    return status == Cnr3Status::ok || status == Cnr3Status::duplicate;
+}
+
+const VSFrame* VS_CC cnr3_get_frame_keystone_live_frame0_proof_only(
     int n,
     int activation_reason,
     void* instance_data,
@@ -253,16 +262,31 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_passthrough_scaffold_only(
     VSCore* core,
     const VSAPI* vsapi
 ) {
-    (void)core;
-
     Cnr3FilterData* data = static_cast<Cnr3FilterData*>(instance_data);
 
-    if (data == nullptr || data->source == nullptr || frame_data == nullptr || vsapi == nullptr) {
+    if (data == nullptr || data->source == nullptr || frame_data == nullptr || core == nullptr || vsapi == nullptr) {
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1C live scaffold: invalid getFrame state."
+            "CNR3 K.1D frame-0 proof: invalid getFrame state."
         );
+        return nullptr;
+    }
+
+    if (n != 0) {
+        if (activation_reason == arInitial) {
+            cnr3_trace_live_nonzero_not_yet_implemented(*data, n);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1D frame-0 proof: nonzero frames are not implemented before predecessor wiring."
+            );
+        }
+
+        if (activation_reason == arError || activation_reason == arAllFramesReady) {
+            cnr3_discard_frame_data(frame_data);
+        }
+
         return nullptr;
     }
 
@@ -271,19 +295,19 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_passthrough_scaffold_only(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1C live scaffold: frameData was unexpectedly non-null at arInitial."
+                "CNR3 K.1D frame-0 proof: frameData was unexpectedly non-null at arInitial."
             );
             return nullptr;
         }
 
-        Cnr3LiveGetFrameScaffoldFrameData* request_data =
-            new (std::nothrow) Cnr3LiveGetFrameScaffoldFrameData{};
+        Cnr3LiveGetFrameFrameData* request_data =
+            new (std::nothrow) Cnr3LiveGetFrameFrameData{};
 
         if (request_data == nullptr) {
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1C live scaffold: failed to allocate frameData."
+                "CNR3 K.1D frame-0 proof: failed to allocate frameData."
             );
             return nullptr;
         }
@@ -292,15 +316,14 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_passthrough_scaffold_only(
         request_data->source_requested = true;
         *frame_data = request_data;
 
-        data->live_scaffold_requested_total.fetch_add(1, std::memory_order_relaxed);
         vsapi->requestFrameFilter(n, data->source, frame_ctx);
 
         return nullptr;
     }
 
     if (activation_reason == arAllFramesReady) {
-        Cnr3LiveGetFrameScaffoldFrameData* request_data =
-            static_cast<Cnr3LiveGetFrameScaffoldFrameData*>(*frame_data);
+        Cnr3LiveGetFrameFrameData* request_data =
+            static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
 
         if (request_data == nullptr ||
             request_data->requested_frame != n ||
@@ -309,7 +332,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_passthrough_scaffold_only(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1C live scaffold: source frame was not requested in this activation."
+                "CNR3 K.1D frame-0 proof: source frame was not requested in this activation."
             );
             return nullptr;
         }
@@ -321,33 +344,106 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_passthrough_scaffold_only(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1C live scaffold: source frame retrieval failed."
+                "CNR3 K.1D frame-0 proof: source frame retrieval failed."
             );
             return nullptr;
         }
 
-        data->live_scaffold_retrieved_total.fetch_add(1, std::memory_order_relaxed);
-        data->live_scaffold_returned_total.fetch_add(1, std::memory_order_relaxed);
-        data->live_scaffold_passthrough_total.fetch_add(1, std::memory_order_relaxed);
+        VSFrame* output_frame = vsapi->copyFrame(source_frame, core);
 
-        cnr3_trace_live_scaffold_frame(
+        if (output_frame == nullptr) {
+            vsapi->freeFrame(source_frame);
+            cnr3_discard_frame_data(frame_data);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1D frame-0 proof: copyFrame failed."
+            );
+            return nullptr;
+        }
+
+        if (output_frame == source_frame) {
+            vsapi->freeFrame(output_frame);
+            cnr3_discard_frame_data(frame_data);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1D frame-0 proof: copyFrame returned the source frame alias."
+            );
+            return nullptr;
+        }
+
+        vsapi->freeFrame(source_frame);
+        source_frame = nullptr;
+
+        const VSFrame* cache_frame_ref = vsapi->addFrameRef(output_frame);
+
+        if (cache_frame_ref == nullptr) {
+            vsapi->freeFrame(output_frame);
+            cnr3_discard_frame_data(frame_data);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1D frame-0 proof: failed to add cache frame reference."
+            );
+            return nullptr;
+        }
+
+        Cnr3OwnedFrameRef cache_owned_frame{};
+        const Cnr3Status adopt_status = cache_owned_frame.reset_to_owned_frame(
+            cache_frame_ref,
+            vsapi
+        );
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            vsapi->freeFrame(cache_frame_ref);
+            vsapi->freeFrame(output_frame);
+            cnr3_discard_frame_data(frame_data);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1D frame-0 proof: failed to adopt cache frame reference."
+            );
+            return nullptr;
+        }
+
+        const Cnr3Status store_status = data->output_cache.store_checkpoint_owned_frame(
+            0,
+            std::move(cache_owned_frame)
+        );
+
+        if (!cnr3_live_store_status_allows_return(store_status)) {
+            vsapi->freeFrame(output_frame);
+            cnr3_discard_frame_data(frame_data);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1D frame-0 proof: failed to store output[0] checkpoint."
+            );
+            return nullptr;
+        }
+
+        cnr3_trace_live_frame0_fresh_start(
             *data,
             n,
             true,
             true,
+            true,
+            cnr3_status_name(store_status),
             true
         );
-        cnr3_trace_live_scaffold_summary(*data);
 
         cnr3_discard_frame_data(frame_data);
 
         /*
-            CMS07-K.1C live scaffold only: this returns source[N] to prove
-            VapourSynth getFrame plumbing. It is not filtered output[N], is not
-            a predecessor, is never stored in the CNR3 output cache, and must be
-            removed when real CNR3 output generation replaces this scaffold.
+            CMS07-K.1D frame-0 only: copyFrame(source[0]) produces the first
+            real CNR3 output frame because fresh-start output[0] is
+            source-verbatim. The extra addFrameRef() reference is stored in the
+            output cache; this original copyFrame reference is returned to
+            VapourSynth. Nonzero frames are refused until predecessor-present
+            processing is wired, so source[N] cannot remain a fallback output.
         */
-        return source_frame;
+        return output_frame;
     }
 
     if (activation_reason == arError) {
@@ -437,7 +533,7 @@ void VS_CC cnr3_create_filter(
         out,
         "CNR3",
         &data->video_info,
-        cnr3_get_frame_keystone_live_passthrough_scaffold_only,
+        cnr3_get_frame_keystone_live_frame0_proof_only,
         cnr3_free_filter,
         fmUnordered,
         dependencies,

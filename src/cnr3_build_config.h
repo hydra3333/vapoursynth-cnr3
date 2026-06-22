@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1C-live-getFrame-passthrough-scaffold-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1D-live-frame0-fresh-start-store-return-proof";
 
 
 /*
@@ -43,16 +43,16 @@ inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1C-live-getFrame-passt
 
 
 /*
-    Temporary CMS07-K.1C live getFrame passthrough scaffold.
+    Temporary CMS07-K.1D live frame-0 getFrame proof.
 
     This is behaviour-changing proof scaffolding, not a CNR3_DIAG_* gate. It
-    exists only to prove live VapourSynth API4 request/retrieve/return plumbing:
-    source[N] is requested, retrieved, and returned unchanged. The returned
-    frame is not filtered output[N], is not stored in the CNR3 output cache, is
-    not a predecessor, and is not checkpointed. This guard and the scaffold it
-    enables must be removed when real CNR3 output generation is wired.
+    proves the first real VapourSynth getFrame output case: frame 0 is copied
+    through VSAPI::copyFrame(), stored as cache-authoritative output[0], and
+    returned to VapourSynth. Nonzero frames are deliberately refused until the
+    predecessor-present path is wired, so source[N] cannot survive as a
+    fallback output path.
 */
-#define CNR3_KEYSTONE_LIVE_GETFRAME_SCAFFOLD 1
+#define CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF 1
 
 /*
     Temporary proof scaffold convention.

@@ -59,8 +59,20 @@ set "targetfile_processing_base=%sourcefile%_%mode_processing%"
 set "targetfile_processing=%targetfile_processing_base%_temp.y4m"
 set "targetstderr_processing=%targetfile_processing_base%_temp_stderr.txt"
 
+echo.
+echo.
+echo CD /D "%vs_root%"
 CD /D "%vs_root%"
-COPY /Y "%built_dll_folder%\cnr3.dll" "%runtime_dll_folder%\"
+echo del /F "%runtime_dll_folder%\cnr3.dll"
+del /F "%runtime_dll_folder%\cnr3.dll"
+echo dir /tw "%runtime_dll_folder%\cnr3.dll"
+dir /tw "%runtime_dll_folder%\cnr3.dll"
+echo COPY /Y /V "%built_dll_folder%\cnr3.dll" "%runtime_dll_folder%\"
+COPY /Y /V "%built_dll_folder%\cnr3.dll" "%runtime_dll_folder%\"
+echo dir /tw "%runtime_dll_folder%\cnr3.dll"
+dir /tw "%runtime_dll_folder%\cnr3.dll"
+echo.
+echo.
 
 REM ===================================================================================================================================================================
 echo. >"%targetstderr_passthrough%"
@@ -73,6 +85,13 @@ echo "%vspipe%" %rrr% --arg mode="%mode_passthrough%" --arg sourcefile="%sourcef
 "%vspipe%" %rrr% --arg mode="%mode_passthrough%" --arg sourcefile="%sourcefile%" --arg scenario="%scenario%" --container y4m "%vpy%" "%targetfile_passthrough%" 2>>"%targetstderr_passthrough%"
 @echo off
 echo. >>"%targetstderr_passthrough%"
+echo dir /tw "%targetfile_passthrough%"
+dir /tw "%targetfile_passthrough%"
+echo dir /tw "%targetfile_passthrough%" >>"%targetstderr_passthrough%"
+dir /tw "%targetfile_passthrough%" >>"%targetstderr_passthrough%"
+echo. >>"%targetstderr_passthrough%"
+echo.
+
 REM ===================================================================================================================================================================
 echo. >"%targetstderr_processing%"
 echo ==================================================== >>"%targetstderr_processing%"
@@ -84,7 +103,16 @@ echo "%vspipe%" %rrr% --arg mode="%mode_processing%" --arg sourcefile="%sourcefi
 "%vspipe%" %rrr% --arg mode="%mode_processing%" --arg sourcefile="%sourcefile%" --arg scenario="%scenario%" --container y4m "%vpy%" "%targetfile_processing%" 2>>"%targetstderr_processing%"
 @echo off
 echo. >>"%targetstderr_processing%"
+echo. >>"%targetstderr_processing%"
+echo dir /tw "%targetstderr_processing%"
+dir /tw "%targetstderr_processing%"
+echo. >>"%targetstderr_passthrough%"
+echo dir /tw "%targetstderr_processing%" >>"%targetstderr_passthrough%"
+dir /tw "%targetstderr_processing%" >>"%targetstderr_passthrough%"
+echo. >>"%targetstderr_passthrough%"
+echo.
 REM ===================================================================================================================================================================
+
 
 echo. 1>&2
 echo ==================================================== 1>&2

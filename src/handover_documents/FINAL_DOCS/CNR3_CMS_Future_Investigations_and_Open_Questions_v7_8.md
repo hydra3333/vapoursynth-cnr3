@@ -3,7 +3,7 @@
 **Date:** 2026-06-21
 **Pairs with:** the CNR3 Cache Manager Design Specification (CMS) at the **identical
 version number**, which is carried in this document's filename
-(`CNR3_CMS_Future_Investigations_and_Open_Questions_v7.7.md` pairs with CMS07.7).
+(`CNR3_CMS_Future_Investigations_and_Open_Questions_v7.8.md` pairs with CMS07.8).
 This document carries **no internal version number** — its version is its filename,
 and that filename always matches the prevailing CMS version. The date above reflects
 this document's last **content** change (which may be older than the filename version,

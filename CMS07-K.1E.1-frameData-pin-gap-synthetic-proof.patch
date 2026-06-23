@@ -1,0 +1,298 @@
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 704c791..4b7d9a1 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -22,7 +22,7 @@
+     This string is for human diagnostics and build identification only. It must
+     not be used for control flow.
+ */
+-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1D-live-frame0-fresh-start-store-return-proof";
++inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1E.1-frameData-pin-gap-synthetic-proof";
+ 
+ 
+ /*
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index c6470cb..2f4b8a7 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -12,6 +12,7 @@
+ #include <cstring>
+ #include <initializer_list>
+ #include <limits>
++#include <new>
+ #include <type_traits>
+ #include <utility>
+ #include <vector>
+@@ -13640,6 +13641,237 @@ Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof() noexcept {
+ #endif
+ }
+ 
++
++Cnr3Status cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof() noexcept {
++    /*
++        CMS07-K.1E.1 proves the actual gap-carriage mechanism needed by
++        K.1E before any live getFrame frame-1 code depends on it.
++
++        The proof deliberately carries a caller-owned pin-list and predecessor
++        frame number in a frameData-shaped heap holder. It carries no
++        predecessor VSFrame reference across the arInitial -> arAllFramesReady
++        gap. The pin protects slot liveness only; discharge releases the pin
++        before the holder is deleted on both the normal and abandoned/free
++        paths.
++    */
++    struct Cnr3CacheCoreSelftestK1EFrameDataHolder {
++        int requested_frame = CNR3_INVALID_FRAME_NUMBER;
++        int predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
++        bool predecessor_pin_taken = false;
++        bool predecessor_pin_discharged = false;
++        Cnr3CachePinList pin_list{};
++    };
++
++    const auto fail = []() noexcept -> Cnr3Status {
++        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++        return Cnr3Status::invariant_violation;
++    };
++
++    const auto seed_output_zero = [](
++        Cnr3OutputCacheCore& cache,
++        const VSFrame* frame,
++        const VSAPI* vsapi
++    ) noexcept -> Cnr3Status {
++        if (frame == nullptr || vsapi == nullptr) {
++            return Cnr3Status::invalid_argument;
++        }
++
++        Cnr3OwnedFrameRef owned_frame{};
++        const Cnr3Status adopt_status = owned_frame.reset_to_owned_frame(
++            frame,
++            vsapi
++        );
++
++        if (!cnr3_status_is_ok(adopt_status)) {
++            return adopt_status;
++        }
++
++        return cache.store_checkpoint_owned_frame(0, std::move(owned_frame));
++    };
++
++    const auto discard_holder = [](
++        Cnr3OutputCacheCore& cache,
++        Cnr3CacheCoreSelftestK1EFrameDataHolder*& holder
++    ) noexcept -> Cnr3Status {
++        if (holder == nullptr) {
++            return Cnr3Status::ok;
++        }
++
++        Cnr3Status status = holder->pin_list.discharge_all(cache);
++
++        if (cnr3_status_is_ok(status)) {
++            holder->predecessor_pin_discharged = true;
++
++            if (!holder->pin_list.empty() || holder->pin_list.pin_count() != 0U) {
++                status = Cnr3Status::invariant_violation;
++            }
++        }
++
++        delete holder;
++        holder = nullptr;
++
++        return status;
++    };
++
++    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
++    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
++
++    int normal_frame_storage = 101;
++    int abandoned_frame_storage = 202;
++
++    const VSFrame* normal_frame =
++        reinterpret_cast<const VSFrame*>(&normal_frame_storage);
++    const VSFrame* abandoned_frame =
++        reinterpret_cast<const VSFrame*>(&abandoned_frame_storage);
++
++    vsapi_state.tracked_release_frames[0] = normal_frame;
++    vsapi_state.tracked_release_frames[1] = abandoned_frame;
++
++    {
++        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++        Cnr3OutputCacheCore cache{};
++
++        if (seed_output_zero(cache, normal_frame, &vsapi) != Cnr3Status::ok) {
++            return fail();
++        }
++
++        if (cache.total_pin_count() != 0) {
++            return fail();
++        }
++
++        Cnr3CacheCoreSelftestK1EFrameDataHolder* holder =
++            new (std::nothrow) Cnr3CacheCoreSelftestK1EFrameDataHolder;
++
++        if (holder == nullptr) {
++            return fail();
++        }
++
++        holder->requested_frame = 1;
++        holder->predecessor_frame = 0;
++
++        if (
++            cache.lookup_frame_and_record_pin(
++                holder->predecessor_frame,
++                holder->pin_list
++            ) != Cnr3Status::ok
++            ) {
++            delete holder;
++            return fail();
++        }
++
++        holder->predecessor_pin_taken = true;
++
++        if (
++            !holder->predecessor_pin_taken ||
++            holder->predecessor_pin_discharged ||
++            holder->requested_frame != 1 ||
++            holder->predecessor_frame != 0 ||
++            holder->pin_list.pin_count() != 1U ||
++            cache.total_pin_count() != 1 ||
++            vsapi_state.add_frame_ref_count != 0 ||
++            vsapi_state.free_frame_count != 0
++            ) {
++            delete holder;
++            return fail();
++        }
++
++        if (discard_holder(cache, holder) != Cnr3Status::ok || holder != nullptr) {
++            return fail();
++        }
++
++        if (cache.total_pin_count() != 0) {
++            return fail();
++        }
++
++        if (cache.clear() != Cnr3Status::ok) {
++            return fail();
++        }
++
++        if (!cache.empty() || cache.total_pin_count() != 0) {
++            return fail();
++        }
++    }
++
++    if (
++        vsapi_state.free_frame_count != 1 ||
++        vsapi_state.tracked_release_counts[0] != 1 ||
++        vsapi_state.tracked_release_counts[1] != 0
++        ) {
++        return fail();
++    }
++
++    {
++        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++        Cnr3OutputCacheCore cache{};
++
++        if (seed_output_zero(cache, abandoned_frame, &vsapi) != Cnr3Status::ok) {
++            return fail();
++        }
++
++        Cnr3CacheCoreSelftestK1EFrameDataHolder* holder =
++            new (std::nothrow) Cnr3CacheCoreSelftestK1EFrameDataHolder;
++
++        if (holder == nullptr) {
++            return fail();
++        }
++
++        holder->requested_frame = 1;
++        holder->predecessor_frame = 0;
++
++        if (
++            cache.lookup_frame_and_record_pin(
++                holder->predecessor_frame,
++                holder->pin_list
++            ) != Cnr3Status::ok
++            ) {
++            delete holder;
++            return fail();
++        }
++
++        holder->predecessor_pin_taken = true;
++
++        if (holder->pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
++            delete holder;
++            return fail();
++        }
++
++        if (discard_holder(cache, holder) != Cnr3Status::ok || holder != nullptr) {
++            return fail();
++        }
++
++        if (cache.total_pin_count() != 0) {
++            return fail();
++        }
++
++        if (cache.clear() != Cnr3Status::ok) {
++            return fail();
++        }
++
++        if (!cache.empty() || cache.total_pin_count() != 0) {
++            return fail();
++        }
++    }
++
++    if (
++        vsapi_state.add_frame_ref_count != 0 ||
++        vsapi_state.free_frame_count != 2 ||
++        vsapi_state.tracked_release_counts[0] != 1 ||
++        vsapi_state.tracked_release_counts[1] != 1
++        ) {
++        return fail();
++    }
++
++    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++
++    cnr3_cache_core_selftest_trace_line("K.1E.1 frameData pin-gap synthetic proof scenario");
++    cnr3_cache_core_selftest_trace_line("    frameData-shaped holder carries predecessor frame number and caller-owned pin-list only");
++    cnr3_cache_core_selftest_trace_line("    no predecessor VSFrame ref is carried across the arInitial/arAllFramesReady gap");
++    cnr3_cache_core_selftest_trace_line("    normal path discharges the pin-list before deleting the holder");
++    cnr3_cache_core_selftest_trace_line("    abandoned/free path uses the same discharge-before-delete helper");
++
++    return Cnr3Status::ok;
++}
++
+ 
+ 
+ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+@@ -13644,6 +13848,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+             "keystone_direct_cached_output_return_proof",
+             cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof
+         },
++        {
++            "k1e1_frame_data_pin_gap_synthetic_proof",
++            cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof
++        },
+         {
+             "lookup_addref_hit_and_miss",
+             cnr3_cache_core_selftest_lookup_addref_hit_and_miss
+diff --git a/src/cnr3_cache_core_selftest.h b/src/cnr3_cache_core_selftest.h
+index c9d1b1b..c7f8b29 100644
+--- a/src/cnr3_cache_core_selftest.h
++++ b/src/cnr3_cache_core_selftest.h
+@@ -472,6 +472,19 @@
+ */
+ [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof() noexcept;
+ 
++/*
++    Run the CMS07-K.1E.1 frameData pin-gap synthetic proof.
++
++    This proves the real gap-carriage mechanism before live frame-1 wiring:
++    a frameData-shaped holder carries only a predecessor frame number and a
++    caller-owned Cnr3CachePinList across the activation gap. Both the normal
++    completion path and the abandoned/free path discharge the pin-list before
++    deleting the holder, returning the pin-list count and cache total pin count
++    to zero. It does not request source frames, call getFrame, call P.11B/P.11C,
++    touch cache-core internals, or modify live plugin dispatch.
++*/
++[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof() noexcept;
++
+ /*
+     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
+ 

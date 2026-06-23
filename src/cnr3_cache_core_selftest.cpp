@@ -13,6 +13,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <limits>
+#include <new>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -13474,6 +13475,403 @@ Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof()
 }
 
 
+Cnr3Status cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof() noexcept {
+    /*
+        CMS07-K.1E.1 proves the actual gap-carriage mechanism needed by
+        K.1E before any live getFrame frame-1 code depends on it.
+
+        The proof deliberately carries a caller-owned pin-list and predecessor
+        frame number in a frameData-shaped heap holder. It carries no
+        predecessor VSFrame reference across the arInitial -> arAllFramesReady
+        gap. The pin protects slot liveness only; discharge releases the pin
+        before the holder is deleted on both the normal and abandoned/free
+        paths.
+    */
+    struct Cnr3CacheCoreSelftestK1EFrameDataHolder {
+        int requested_frame = CNR3_INVALID_FRAME_NUMBER;
+        int predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
+        bool predecessor_pin_taken = false;
+        bool predecessor_pin_discharged = false;
+        Cnr3CachePinList pin_list{};
+    };
+
+    const auto fail = []() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    const auto seed_output_zero = [](
+        Cnr3OutputCacheCore& cache,
+        const VSFrame* frame,
+        const VSAPI* vsapi
+    ) noexcept -> Cnr3Status {
+        if (frame == nullptr || vsapi == nullptr) {
+            return Cnr3Status::invalid_argument;
+        }
+
+        Cnr3OwnedFrameRef owned_frame{};
+        const Cnr3Status adopt_status = owned_frame.reset_to_owned_frame(
+            frame,
+            vsapi
+        );
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        return cache.store_checkpoint_owned_frame(0, std::move(owned_frame));
+    };
+
+    const auto seed_noncheckpoint_frame = [](
+        Cnr3OutputCacheCore& cache,
+        int frame_number,
+        const VSFrame* frame,
+        const VSAPI* vsapi
+    ) noexcept -> Cnr3Status {
+        if (!cnr3_frame_number_is_valid(frame_number) || frame == nullptr || vsapi == nullptr) {
+            return Cnr3Status::invalid_argument;
+        }
+
+        Cnr3OwnedFrameRef owned_frame{};
+        const Cnr3Status adopt_status = owned_frame.reset_to_owned_frame(
+            frame,
+            vsapi
+        );
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        return cache.store_noncheckpoint_owned_frame(frame_number, std::move(owned_frame));
+    };
+
+    const auto discard_holder = [](
+        Cnr3OutputCacheCore& cache,
+        Cnr3CacheCoreSelftestK1EFrameDataHolder*& holder
+    ) noexcept -> Cnr3Status {
+        if (holder == nullptr) {
+            return Cnr3Status::ok;
+        }
+
+        Cnr3Status status = holder->pin_list.discharge_all(cache);
+
+        if (cnr3_status_is_ok(status)) {
+            holder->predecessor_pin_discharged = true;
+
+            if (!holder->pin_list.empty() || holder->pin_list.pin_count() != 0U) {
+                status = Cnr3Status::invariant_violation;
+            }
+        }
+
+        delete holder;
+        holder = nullptr;
+
+        return status;
+    };
+
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int normal_frame_storage = 101;
+    int abandoned_frame_storage = 202;
+
+    const VSFrame* normal_frame =
+        reinterpret_cast<const VSFrame*>(&normal_frame_storage);
+    const VSFrame* abandoned_frame =
+        reinterpret_cast<const VSFrame*>(&abandoned_frame_storage);
+
+    vsapi_state.tracked_release_frames[0] = normal_frame;
+    vsapi_state.tracked_release_frames[1] = abandoned_frame;
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        if (seed_output_zero(cache, normal_frame, &vsapi) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        Cnr3CacheCoreSelftestK1EFrameDataHolder* holder =
+            new (std::nothrow) Cnr3CacheCoreSelftestK1EFrameDataHolder;
+
+        if (holder == nullptr) {
+            return fail();
+        }
+
+        holder->requested_frame = 1;
+        holder->predecessor_frame = 0;
+
+        if (
+            cache.lookup_frame_and_record_pin(
+                holder->predecessor_frame,
+                holder->pin_list
+            ) != Cnr3Status::ok
+            ) {
+            delete holder;
+            return fail();
+        }
+
+        holder->predecessor_pin_taken = true;
+
+        if (
+            !holder->predecessor_pin_taken ||
+            holder->predecessor_pin_discharged ||
+            holder->requested_frame != 1 ||
+            holder->predecessor_frame != 0 ||
+            holder->pin_list.pin_count() != 1U ||
+            cache.total_pin_count() != 1 ||
+            vsapi_state.add_frame_ref_count != 0 ||
+            vsapi_state.free_frame_count != 0
+            ) {
+            delete holder;
+            return fail();
+        }
+
+        if (discard_holder(cache, holder) != Cnr3Status::ok || holder != nullptr) {
+            return fail();
+        }
+
+        if (cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!cache.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+    }
+
+    if (
+        vsapi_state.free_frame_count != 1 ||
+        vsapi_state.tracked_release_counts[0] != 1 ||
+        vsapi_state.tracked_release_counts[1] != 0
+        ) {
+        return fail();
+    }
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        if (seed_output_zero(cache, abandoned_frame, &vsapi) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        Cnr3CacheCoreSelftestK1EFrameDataHolder* holder =
+            new (std::nothrow) Cnr3CacheCoreSelftestK1EFrameDataHolder;
+
+        if (holder == nullptr) {
+            return fail();
+        }
+
+        holder->requested_frame = 1;
+        holder->predecessor_frame = 0;
+
+        if (
+            cache.lookup_frame_and_record_pin(
+                holder->predecessor_frame,
+                holder->pin_list
+            ) != Cnr3Status::ok
+            ) {
+            delete holder;
+            return fail();
+        }
+
+        holder->predecessor_pin_taken = true;
+
+        if (holder->pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
+            delete holder;
+            return fail();
+        }
+
+        if (discard_holder(cache, holder) != Cnr3Status::ok || holder != nullptr) {
+            return fail();
+        }
+
+        if (cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!cache.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+    }
+
+    if (
+        vsapi_state.add_frame_ref_count != 0 ||
+        vsapi_state.free_frame_count != 2 ||
+        vsapi_state.tracked_release_counts[0] != 1 ||
+        vsapi_state.tracked_release_counts[1] != 1
+        ) {
+        return fail();
+    }
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        int protected_frame_storage = 303;
+        const VSFrame* protected_frame =
+            reinterpret_cast<const VSFrame*>(&protected_frame_storage);
+        vsapi_state.tracked_release_frames[2] = protected_frame;
+
+        if (seed_output_zero(cache, protected_frame, &vsapi) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        constexpr std::size_t prune_pressure_frame_count =
+            CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES +
+            (CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES / 10U) +
+            CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS +
+            2U;
+
+        std::vector<int> prune_pressure_frame_storage(prune_pressure_frame_count);
+
+        for (std::size_t i = 0; i < prune_pressure_frame_storage.size(); ++i) {
+            prune_pressure_frame_storage[i] = static_cast<int>(1000U + i);
+            const VSFrame* prune_pressure_frame =
+                reinterpret_cast<const VSFrame*>(&prune_pressure_frame_storage[i]);
+            const int frame_number = static_cast<int>(i + 1U);
+
+            if (
+                seed_noncheckpoint_frame(
+                    cache,
+                    frame_number,
+                    prune_pressure_frame,
+                    &vsapi
+                ) != Cnr3Status::ok
+                ) {
+                return fail();
+            }
+        }
+
+        Cnr3CacheCoreSelftestK1EFrameDataHolder* holder =
+            new (std::nothrow) Cnr3CacheCoreSelftestK1EFrameDataHolder;
+
+        if (holder == nullptr) {
+            return fail();
+        }
+
+        holder->requested_frame = 1;
+        holder->predecessor_frame = 0;
+
+        if (
+            cache.lookup_frame_and_record_pin(
+                holder->predecessor_frame,
+                holder->pin_list
+            ) != Cnr3Status::ok
+            ) {
+            delete holder;
+            return fail();
+        }
+
+        holder->predecessor_pin_taken = true;
+
+        if (holder->pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
+            delete holder;
+            return fail();
+        }
+
+        Cnr3CachePruneExecutionSummary prune_summary{};
+        if (
+            cache.execute_bounded_prune_pass(
+                CNR3_CACHE_BYTE_BUDGET_BYTES,
+                CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+                CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS,
+                prune_summary
+            ) != Cnr3Status::ok
+            ) {
+            delete holder;
+            return fail();
+        }
+
+        if (
+            !prune_summary.trigger_decision.prune_is_required ||
+            prune_summary.detached_count == 0U ||
+            prune_summary.detached_count > CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS ||
+            holder->pin_list.pin_count() != 1U ||
+            cache.total_pin_count() != 1
+            ) {
+            delete holder;
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef protected_lookup_ref{};
+        if (
+            cache.lookup_frame_and_add_ref(
+                holder->predecessor_frame,
+                &vsapi,
+                protected_lookup_ref
+            ) != Cnr3Status::ok ||
+            !protected_lookup_ref.has_frame() ||
+            protected_lookup_ref.get() != protected_frame
+            ) {
+            protected_lookup_ref.reset();
+            delete holder;
+            return fail();
+        }
+
+        if (vsapi_state.add_frame_ref_count != 1) {
+            protected_lookup_ref.reset();
+            delete holder;
+            return fail();
+        }
+
+        protected_lookup_ref.reset();
+
+        if (vsapi_state.tracked_release_counts[2] != 1) {
+            delete holder;
+            return fail();
+        }
+
+        if (discard_holder(cache, holder) != Cnr3Status::ok || holder != nullptr) {
+            return fail();
+        }
+
+        if (cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!cache.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+    }
+
+    if (
+        vsapi_state.add_frame_ref_count != 1 ||
+        vsapi_state.tracked_release_counts[2] != 2
+        ) {
+        return fail();
+    }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    cnr3_cache_core_selftest_trace_line("K.1E.1 frameData pin-gap synthetic proof scenario");
+    cnr3_cache_core_selftest_trace_line("    frameData-shaped holder carries predecessor frame number and caller-owned pin-list only");
+    cnr3_cache_core_selftest_trace_line("    no predecessor VSFrame ref is carried across the arInitial/arAllFramesReady gap");
+    cnr3_cache_core_selftest_trace_line("    normal path discharges the pin-list before deleting the holder");
+    cnr3_cache_core_selftest_trace_line("    abandoned/free path uses the same discharge-before-delete helper");
+    cnr3_cache_core_selftest_trace_line("    intervening prune during the gap leaves the pinned predecessor present and retrievable");
+
+    return Cnr3Status::ok;
+}
+
+
 
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
@@ -13647,6 +14045,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "keystone_direct_cached_output_return_proof",
             cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof
+        },
+        {
+            "k1e1_frame_data_pin_gap_synthetic_proof",
+            cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof
         },
         {
             "lookup_addref_hit_and_miss",

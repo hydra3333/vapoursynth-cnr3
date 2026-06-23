@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1D-live-frame0-fresh-start-store-return-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1E.1-frameData-pin-gap-synthetic-proof";
 
 
 /*

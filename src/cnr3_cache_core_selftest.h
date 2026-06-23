@@ -473,6 +473,21 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof() noexcept;
 
 /*
+    Run the CMS07-K.1E.1 frameData pin-gap synthetic proof.
+
+    This proves the real gap-carriage mechanism before live frame-1 wiring:
+    a frameData-shaped holder carries only a predecessor frame number and a
+    caller-owned Cnr3CachePinList across the activation gap. Both the normal
+    completion path and the abandoned/free path discharge the pin-list before
+    deleting the holder, returning the pin-list count and cache total pin count
+    to zero. It also drives a public bounded prune during the synthetic gap and
+    proves the pinned predecessor remains present and retrievable. It does not
+    request source frames, call getFrame, call P.11B/P.11C,
+    touch cache-core internals, or modify live plugin dispatch.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof() noexcept;
+
+/*
     Run the CMS07-H.3A AS2 recovery store-consumer selftest.
 
     This verifies that genuine holes from a bounded recovery plan are consumed

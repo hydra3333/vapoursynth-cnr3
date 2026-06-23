@@ -67,7 +67,7 @@ read-first-before-apply should be firm again from the next load-bearing phase on
 If you are a new chat picking up the CNR3 designer/reviewer role, do this in order:
 1. Read this whole document once before doing anything else. It is long on purpose.
 2. Read the authoritative state documents (Part 2 lists them), starting with **Document B**
-   (current build state) and **CMS07.7** (`cnr3_cache_manager_design_v7_7.1.md`, controlling design
+   (current build state) and **CMS07.8** (`cnr3_cache_manager_design_v7_8.md`, controlling design
    authority), and the **THIS-CHAT DELTA** (`CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md`,
    the keystone state since Document B / this handover were last written).
 3. Confirm the actual current build state from the **repository**, not from any snapshot in
@@ -380,14 +380,14 @@ BUILD VS2026 project wiring; plugin registration; diagnostics cleanup / scaffold
 ```
 ### The authoritative document set (with versions, at this document's date)
 ```text
-CMS07.7                       cnr3_cache_manager_design_v7_7.1.md     — controlling DESIGN authority
-Production Spec v2.6           CNR3_Handover_Pack_Production_Spec_v2_6.md — §3A Prevailing Rules Register (PDAP / R-PROCESS-20)
+CMS07.8                       cnr3_cache_manager_design_v7_8.md       — controlling DESIGN authority
+Production Spec v2.7           CNR3_Handover_Pack_Production_Spec_v2_7.md — §3A Prevailing Rules Register (PDAP / R-PROCESS-20; +R-PROCESS-21/22)
 Diagnostics spec v1.5          cnr3_diagnostics_specification_v1_5.md   — §2.8 = temporary keystone KDT (removed post-K.1G)
-Document A v3.2                Document_A_..._v3_2.md                  — context + §3A register (carries a
-                              documented intentional lag re R-PROCESS-20; §3A authoritative per R-PACK-02)
+Document A v3.3                Document_A_..._v3_3.md                  — context + §3A register (reproduces
+                              R-PROCESS-20/21/22 in full; the prior v3.2 lag is resolved; §3A authoritative per R-PACK-02)
 Document B v3.2.9              Document_B_..._Current_State_v3_2_9.md  — current build state + work plan (keystone through K.1D)
 THIS-CHAT DELTA               CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md — keystone delta (companion to Document B)
-Companion v7.8                CNR3_CMS_Future_Investigations_..._v7_8.md — NON-NORMATIVE, NOT in coder pack (contains FI-04)
+Companion v7.8                CNR3_CMS_Future_Investigations_..._v7_8.md — NON-NORMATIVE, NOT in coder pack (FI-04 resolved into CMS §9.7.7)
 Introduction v3.0             CNR3_Handover_Introduction_to_new_chat_v3.0.md — concise entry point / role for the reviewer
 This document v1.6            CNR3_Designer_Reviewer_Role_Handover_v1_6.md — the role/disposition handover
 ```

@@ -16,7 +16,7 @@ triggers, worked examples), this carries the orientation.
 **How to start (do this in order):**
 1. Read this document.
 2. Read **`CNR3_Designer_Reviewer_Role_Handover_v1.6.md`** (the role, disciplines D1–D15,
-   triggers, worked examples) and **the CMS** (`cnr3_cache_manager_design_v7_7.1.md`, the design
+   triggers, worked examples) and **the CMS** (`cnr3_cache_manager_design_v7_8.md`, the design
    authority).
 3. Read **`CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md`** for the current state and
    the immediate next action.
@@ -63,7 +63,7 @@ safe and auditable, that it does not disturb proven code, and that it is structu
 later phases.
 
 ### 1.3 Review methodology (at each phase)
-- **Design compliance** — faithful to the CMS (currently CMS07.7 / v7.7.1)?
+- **Design compliance** — faithful to the CMS (currently CMS07.8 / v7.8)?
 - **Scope discipline** — only the changes authorised for this subphase; flag scope creep and
   premature implementation of later phases; **any contact with proven / cache-core / selftest /
   project / VS-header code must be reported BEFORE coding**, not discovered in the diff.
@@ -106,15 +106,16 @@ output, never assumed output.
 
 ### 2.1 The authoritative document set (current versions)
 ```text
-CMS (design authority)     cnr3_cache_manager_design_v7_7.1.md
-Production Spec            CNR3_Handover_Pack_Production_Spec_v2_6.md   (§3A Prevailing Rules Register, incl. PDAP / R-PROCESS-20)
+CMS (design authority)     cnr3_cache_manager_design_v7_8.md
+Production Spec            CNR3_Handover_Pack_Production_Spec_v2_7.md   (§3A Prevailing Rules Register, incl. PDAP / R-PROCESS-20..22)
 Diagnostics spec          cnr3_diagnostics_specification_v1_5.md       (§2.8 = the temporary keystone KDT, removed post-K.1G)
-Companion (non-normative)  CNR3_CMS_Future_Investigations_and_Open_Questions_v7_8.md   (contains FI-04; NOT in the coder pack)
+Companion (non-normative)  CNR3_CMS_Future_Investigations_and_Open_Questions_v7_8.md   (FI-04 resolved into CMS §9.7.7; NOT in the coder pack)
 Role/Reviewer Handover    CNR3_Designer_Reviewer_Role_Handover_v1.6.md  (the role + disposition depth)
-Current-state             Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_2_8.md
+Current-state             Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_2_9.md
 This-chat delta           CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md   (companion to Document B; newest state)
 This document             CNR3_Handover_Introduction_to_new_chat_v3.0.md
 ```
+
 **Authority hierarchy:** CMS → Production Spec §3A → diagnostics spec → handover pack. If documents
 conflict, higher authority wins; **if any document conflicts with the repository on build state, the
 repository wins.**

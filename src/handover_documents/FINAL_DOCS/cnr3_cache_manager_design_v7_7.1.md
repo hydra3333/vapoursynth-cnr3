@@ -1,7 +1,7 @@
 # CNR3 Cache Manager Design Specification
 
-**Date:** 2026-06-21 (CMS07.7; supersedes CMS07.3 dated 2026-06-19, which superseded CMS07.2 dated 2026-06-17, which superseded CMS07.1 dated 2026-06-17, which superseded CMS07.0 dated 2026-06-12)
-**Version:** CMS07.7
+**Date:** 2026-06-21 (CMS07.7.1; supersedes CMS07.3 dated 2026-06-19, which superseded CMS07.2 dated 2026-06-17, which superseded CMS07.1 dated 2026-06-17, which superseded CMS07.0 dated 2026-06-12)
+**Version:** CMS07.7.1
 **Status:** Design specification — architectural supersession. COMPLETE: all verify
 items V1–V8 resolved (several against authoritative sources: the CNR2 reference code,
 the local R76 VapourSynth4.h header); section-level bring-across audit of the

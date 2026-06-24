@@ -5,7 +5,7 @@ REM K.1E.2 acceptance harness. FOUR vspipe runs over a SYNTHETIC deterministic c
 REM frame-exact via --start/--end:
 REM   RUN 1  frame 0, processing  -> real fresh-start output[0]              (must SUCCEED)
 REM   RUN 2  frame 0, passthrough -> source frame 0 (CNR3 bypassed)          (must SUCCEED)
-REM   RUN 3  frame 1, processing  -> predecessor-present compute output[1]   (must SUCCEED, KNOWN-ANSWER)
+REM   RUN 3  frames 0..1, processing -> frame 1 is predecessor-present compute output[1] (must SUCCEED, KNOWN-ANSWER on frame index 1)
 REM   RUN 4  frame 2, processing  -> N>1 not-yet-implemented                 (must FAIL CLEANLY)
 REM
 REM SYNTHETIC SOURCE (from the .vpy, constant planes):
@@ -56,7 +56,8 @@ set "f0proc_err=%source_path%\K1E2_frame0_processing_temp_stderr.txt"
 REM RUN 2: frame 0, passthrough (source bypass)
 set "f0bypass_y4m=%source_path%\K1E2_frame0_passthrough_temp.y4m"
 set "f0bypass_err=%source_path%\K1E2_frame0_passthrough_temp_stderr.txt"
-REM RUN 3: frame 1, processing (predecessor-present compute -> known-answer)
+REM RUN 3: frames 0..1, processing. MUST request 0..1 together: frame 1 is a RECURSIVE compute whose
+REM         predecessor output[0] must be computed and cached in the SAME process. An isolated --start 1 cannot work.
 set "f1proc_y4m=%source_path%\K1E2_frame1_processing_temp.y4m"
 set "f1proc_err=%source_path%\K1E2_frame1_processing_temp_stderr.txt"
 REM RUN 4: frame 2, processing (must fail cleanly)
@@ -106,9 +107,9 @@ echo. >"%f1proc_err%"
 echo ==================================================== >>"%f1proc_err%"
 echo RUN 3: frame 1 PROCESSING (predecessor-present compute - KNOWN ANSWER) >>"%f1proc_err%"
 echo ==================================================== >>"%f1proc_err%"
-echo "%vspipe%" %rrr% --start 1 --end 1 --arg mode="%mode_processing%" --container y4m "%vpy%" "%f1proc_y4m%" >>"%f1proc_err%"
+echo "%vspipe%" %rrr% --start 0 --end 1 --arg mode="%mode_processing%" --container y4m "%vpy%" "%f1proc_y4m%" >>"%f1proc_err%"
 @echo on
-"%vspipe%" %rrr% --start 1 --end 1 --arg mode="%mode_processing%" --container y4m "%vpy%" "%f1proc_y4m%" 2>>"%f1proc_err%"
+"%vspipe%" %rrr% --start 0 --end 1 --arg mode="%mode_processing%" --container y4m "%vpy%" "%f1proc_y4m%" 2>>"%f1proc_err%"
 @echo off
 set "rc_f1proc=%ERRORLEVEL%"
 echo (RUN3 frame1 processing exit=%rc_f1proc%) >>"%f1proc_err%"
@@ -198,7 +199,7 @@ if errorlevel 1 (
     echo RESULT D2: PASS  -- PREDECESSOR-PRESENT-COMPUTE KDT line present for frame 1 1>&2
 )
 REM D3: decode the y4m frame-1 active pixels and assert the exact golden triple.
-"%python_exe%" "%~dp0check_y4m_constant_plane.py" "%f1proc_y4m%" %golden_y% %golden_u% %golden_v% 1>&2
+"%python_exe%" "%~dp0check_y4m_constant_plane.py" "%f1proc_y4m%" %golden_y% %golden_u% %golden_v% 1 1>&2
 if errorlevel 1 (
     echo RESULT D3: FAIL  -- frame 1 bytes do NOT match golden Y=%golden_y% U=%golden_u% V=%golden_v% 1>&2
 ) else (

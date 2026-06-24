@@ -1,8 +1,8 @@
 # CNR3 — THIS-CHAT DELTA (Keystone K.1A → K.1E branch-(c))
 
-**Companion to:** `Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_2_8.md`
+**Companion to:** `Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_2_9(.x).md`
 **Status of this document:** the delta of everything done in the designer/reviewer chat that ran
-*after* Document B v3.2.8 and Role Handover v1.5 were written. Those two documents were authored
+*after* Document B v3.2.9(.x) and Role Handover v1.5+ were written. Those two documents were authored
 at the **P.11C / pre-keystone doorstep**; this chat then drove the keystone from K.1A through
 K.1D (committed) and K.1E branch-(c) (in flight). Read this alongside Document B; where this
 document and Document B differ on current state, **this document is newer** — but the
@@ -73,6 +73,28 @@ added the requirement: **[KDT] is emitted ONLY inside getFrame, never at plugin 
 and returned through live getFrame. Reached via the `copyFrame` reorientation (Section 2), so it
 touches **no proven code**. N>0 is cleanly refused. Verified against five review bars (Section 2),
 four-way clean (47/47), harness green. This is the bootstrap frame that branch-(c) builds on.
+
+### K.1E.1 — `CMS07-K.1E.1: prove frameData pin-gap (lifecycle + intervening-prune composition)` (selftest count → 48)
+frameData-shaped holder carries the predecessor frame number + caller-owned pin-list ONLY; no
+predecessor VSFrame ref crosses the arInitial/arAllFramesReady gap. Normal and abandoned/free paths
+use ONE discharge-before-delete helper. An intervening prune during the gap leaves the pinned
+predecessor present and retrievable. Four-way 48/48.
+
+### K.1E.2 — `CMS07-K.1E.2: prove live frame-1 predecessor-present compute` (plugin-only; count stays 48)
+First live recursive compute. arInitial pins cached output[0] (no ref carried); arAllFramesReady
+acquires a short-lived compute ref via `lookup_frame_and_add_ref(0)`, calls proven P.11B,
+production-stores output[1] (NOT the pin-recording store — no consumer pin on output), releases the
+compute ref, frees source, discharges the pin-list on EVERY exit path. Gate edit n!=0 -> n>1;
+rpStrictSpatial -> rpGeneral. Golden: source[1]=128/224/32 -> output[1]=128/161/95 (strong three-way
+discriminator: distinct from predecessor 96/160 AND source 224/32). Debug+Release harness green.
+
+### K.1E.3 — `CMS07-K.1E.3: prove recursive filtered-predecessor distinction at N=2` (plugin-only; count stays 48)
+Bounded generalisation of branch-(c) to N==1 || N==2 (predecessor = N-1); N>2 clean marked refusal,
+marker moved to `after-frame2-before-recovery-wiring`. Golden: source[2]=128/192/64 ->
+output[2]=128/163/93. CLOSES R-ARCH-06: output[2]=163/93 is reachable ONLY from cached filtered
+output[1] (161/95); a source[1]-substitution bug yields 222/34, passthrough yields 192/64 — both
+byte-distinct. Live recursive chain output[0]->output[1]->output[2] proven in Debug AND Release.
+Harness extended (frame-2 golden RUN at index 2 + frame-3 N>2 refusal RUN).
 
 ---
 
@@ -162,7 +184,11 @@ owed item, in its correct context.
   predecessor (real lookup/addref, carried in frameData) and request source[1]; at `arAllFramesReady`
   retrieve source[1], compute output[1] via the proven P.11B composition, **release** the predecessor
   after use, store output[1] per existing checkpoint policy, return output[1].
+  **[SUPERSEDED — predecessor handling is now PIN-CARRY; see the 2026-06-23 pin-carry decision note at
+  the end of this section.]**
 - **Ownership (OPPOSITE tail to K.1B):** acquired=1, released=1, transferred=0, balance=0.
+  **[SUPERSEDED — restated in pin-ledger terms by the 2026-06-23 pin-carry decision note at the end of
+  this section.]**
 - **Dependency declaration change:** `rpStrictSpatial` → `rpGeneral` (this resolves FI-04). Rationale:
   `rpStrictSpatial` ("only requests frame N to output frame N") stops being truthful once the filter
   is recursive and later requests bounded source ranges for recovery; `rpNoFrameReuse` is too
@@ -193,6 +219,41 @@ owed item, in its correct context.
 src_req=1 src_get=1 pixel=1 store=ok pred_acquired=1 pred_released=1 pred_transferred=0 pred_balance=0
 ret=1 flag=REAL_OUTPUT_FRAME`
 
+**[2026-06-23 — PIN-CARRY DECISION (additive; supersedes the predecessor-handling and ownership wording in this section).]**
+K.1E branch-(c) sources the predecessor by PIN-CARRY, not by taking a second VSFrame reference. The
+foundational locking/pinning cross-check returned GREEN LIGHT — all Tier-1 fatals PASS on two independent
+reads, and the per-invocation pin-list is caller-owned (INV-D1), so this is thin USE of already-proven
+machinery, not a cache-core internals change.
+- **Predecessor step** (supersedes the Scenario bullet's "acquire cached output[0] as predecessor (real
+  lookup/addref, carried in frameData)" and the earlier "share the lookup/addref **acquisition**" framing):
+  at `arInitial`, PIN cached output[0] via the proven AS1 fused `lookup_frame_and_record_pin` — it returns
+  a BORROWED `const VSFrame*` and records a consumer-pin on the per-invocation pin-list, atomically; carry
+  {borrowed pointer + predecessor frame number + pin-list} in frameData; request source[1]; return NULL.
+  At `arAllFramesReady`, use the borrowed (still-pinned) predecessor into the proven P.11B, then DISCHARGE
+  the pin. Discharge is wired on BOTH the `arAllFramesReady` arm AND the `arError` arm; the doubly-abandoned
+  case (activation abandoned AND the frameData free callback never runs) is the benign residual below. No
+  second VSFrame reference is ever taken for the predecessor — it is borrowed, kept alive by the pin
+  (liveness comes from the pin, INV-B2; NOT from output[0]'s checkpoint status — leaning on the checkpoint
+  flag would be the retired checkpoint-as-pin reasoning, R-RETIRED-03).
+- **Ownership tail** (supersedes "acquired=1, released=1, transferred=0, balance=0", the same figures in
+  the agreed KDT line above, and the ownership-balance figures in the §4 patch-review bars): the proof
+  obligation is a PIN-LEDGER, not a ref-ledger — pin taken=1, discharged=1, `pin_count` balance=0, with
+  ZERO predecessor VSFrame refs acquired or freed (borrowed). `transferred=1` applies to output[1] ONLY
+  (the K.1B-proven return path), not to the predecessor.
+- **KDT consequence:** the agreed frame-1 KDT line's ownership fields (`pred_acquired` / `pred_released` /
+  `pred_transferred` / `pred_balance`) move to pin-ledger terms (e.g. `pred_pinned` / `pred_discharged` /
+  `pred_pin_balance`, with no acquired/transferred for the borrowed predecessor); exact field names to be
+  settled when the K.1E text plan is produced.
+- **Benign residual (confirmed from committed code):** an abandoned activation's worst-case residual is an
+  UNDISCHARGED PIN — frame-safe and crash-safe (`~Cnr3OutputCacheCore` is `= default` and RAII-frees each
+  slot's `Cnr3OwnedFrameRef`; `clear()` is not on the free path → no frame-ref leak, no lifecycle_violation
+  at teardown) but SILENT today; it is surfaced by the future end-of-run integrity report (deferred owed
+  item, §10).
+- **New K.1E work (not a pre-existing fact):** discharge must be WIRED INTO the frameData free callback —
+  the single point covering normal completion AND a VS-freed abandon — new getFrame-side glue in
+  `vapoursynth-Cnr3.cpp` (cross-check INV-F3).
+This note does NOT change CMS §8.7 or any cache-core code; it records how K.1E sources the predecessor.
+
 ---
 
 ## 4. IMMEDIATE NEXT ACTIONS (in order)
@@ -208,7 +269,9 @@ ret=1 flag=REAL_OUTPUT_FRAME`
      feeds Section 7).
 2. **After the fourth confirmation is accepted:** the coder produces the **read-first K.1E patch**
    (predecessor-present frame-1 compute). Designer reviews against: P.11B-call scope (diff-verified,
-   P.11C untouched), ownership balance (acquired=1/released=1/transferred=0), the five-fence pattern,
+   P.11C untouched), ownership balance (acquired=1/released=1/transferred=0) **[now a PIN-ledger: pin
+   taken=1/discharged=1/pin_count balance=0, zero predecessor refs — see the 2026-06-23 pin-carry note
+   in §3]**, the five-fence pattern,
    and the four confirmations.
 3. **Build the K.1E-shaped harness** (coordinator-side, parallel to the patch — see Section 6).
 4. **Run K.1E:** four-way unchanged (47/47) + harness. Commit if green; advance baseline to K.1E.
@@ -340,19 +403,33 @@ confirm it was done correctly and that nothing was lost.
 
 ## 10. OWED-ITEMS LEDGER (carried forward)
 
-- **branch (c) — predecessor consumption** — IN FLIGHT as K.1E (pre-patch).
+- **branch (c) — predecessor consumption** — DONE (K.1E.2 N==1, K.1E.3 N==2). R-ARCH-06 filtered-vs-source distinction CLOSED at N=2.
 - **branch (d) — bounded recovery live wiring.**
 - **multi-frame VS-LIFECYCLE-01 request-set proof** — for recovery; K.1C/K.1D/K.1E prove SINGLE-frame
   request lifecycle only.
 - **live scene-change threshold derivation + reset wiring** — deferred from K.1E; must reproduce
   vsCnr2's `diff_max` and match P.11C accumulation units.
-- **longer sequential recursive run beyond N==1.**
+- **longer sequential recursive run beyond N==2** (K.1E.3 proved the bounded N==1||N==2 case; N>2 refused).
 - **post-K.1G KDT cleanup** — remove BOTH the K.1A plan-driven formatter AND the live frame-0 / scaffold
   formatters, plus the temporary guards, per diagnostics spec v1.5 §2.8.
-- **real `VSFrame` return** (from K.1B) — now expected to retire INSIDE branch-(c) work.
+- real `VSFrame` return (from K.1B) — RETIRED inside branch-(c) (K.1E.2 output[1] return, K.1E.3 output[2] return).
 - **fmParallel** — a CORRECTNESS phase, after the keystone wires single-threaded getFrame.
 - **typed-row-pointer vs memcpy** — a measured fmParallel performance phase; any optimisation must be
   proven bit-exact-output identical to the memcpy path.
+- **AS4 vs `discharge_all` atomicity-wording discrepancy** *(recorded 2026-06-23; CMS-text decision)* —
+  `discharge_all()` takes one lock per token via `unpin_frame()`, while CMS §8.7 AS4 specifies one lock
+  acquisition for the whole list. Correctness-safe today (INV-B2 guarantees no slot being discharged can
+  vanish mid-walk); a register-vs-code WORDING discrepancy only. RULE ON before multi-pin recovery relies
+  on it. Options: (a) relax AS4 wording to per-token, or (b) add a single-lock batch-discharge variant to
+  match the register. Tied to the branch-(d) recovery step where multi-pin carriage first appears.
+  (Records the decision as owed; does NOT change CMS §8.7 or `discharge_all`.)
+- **recovery-onward design-drivers** *(decided 2026-06-24)* — (1) recovery before live hot-zone
+  tracking; (2) larger recovery steps, each harness-proven (single-hole -> multi-hole/branch-(d) ->
+  under-prune-pressure); (3) operational fmParallel-observable diagnostics tier, two-instance interlaced,
+  instance+thread/frame-attributed, atomic, low-distortion, two-dimensionally demuxable, cross-instance
+  independence assertable, emission mechanism itself proof-worthy; (4) test-tunable hot-zone/prune
+  thresholds in the real instance-config surface (force recovery paths on small clips + confirm dormancy
+  at production-like thresholds). See Document B v3.2.9.2.
 
 ---
 

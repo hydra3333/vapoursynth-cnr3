@@ -1,5 +1,5 @@
 # Document B — CNR3 Work Plan and Current Build State (CMS07.7, RESUME)
-**Version:** v3.2.9 (RESUME-state work plan; focused status update. The version label is kept at
+**Version:** v3.2.9.2 (RESUME-state work plan; focused status update. The version label is kept at
 the "3.2" generation to stay aligned with Document A v3.2; the `.9` patch level marks this update.
 Records the **keystone now under way and committed through K.1D** — K.1A (request-plan structures +
 temporary KDT dev-trace), K.1B (direct cached-output-return ownership, synthetic), K.1C (live
@@ -9,7 +9,7 @@ store/return)** — on top of the caller-supplied pixel path (P.10A–P.11C), th
 count is now 47/47** (forced-fail 46/47, exit 1; verbose 47/47). The next phase is **K.1E branch-(c)**
 (live predecessor-present frame-1 compute), in flight at acknowledgement-accepted / pre-patch. The
 full delta of the keystone work is recorded in the companion document
-`CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md`; the v3.2.9 status note below summarises
+`CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md`; the v3.2.9.2 status note below summarises
 it in Document B's format. Earlier sections carry forward except the version pointers below.)
 **Date:** 2026-06-23
 **Role:** Current-state / work-plan document. It states the controlling authority, the **current
@@ -20,7 +20,7 @@ not be implemented yet.
 **Precedence:** volatile. If this document ever conflicts with the latest prevailing CMS, the CMS
 wins. If it conflicts with Production Spec §3A on register-owned rules, §3A wins.
 
-**v3.2.9 status note (the KEYSTONE is under way — committed through K.1D; K.1E branch-(c) in flight):**
+**v3.2.9.1 status note (the KEYSTONE is under way — committed through K.1D; K.1E branch-(c) in flight):**
 The controlling CMS is now **CMS07.7** (`cnr3_cache_manager_design_v7_7.1.md`); the Production Spec is
 **v2.6**; the diagnostics spec is now **v1.5**; the non-normative companion is now **v7.8**
 (`CNR3_CMS_Future_Investigations_and_Open_Questions_v7_8.md`, which contains **FI-04**). On top of the
@@ -61,6 +61,60 @@ keystone is being decomposed K.1A–K.1G.
   `CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF`, stderr-only; N>0 gated before arInitial). Four-way clean
   (47/47); A/B harness green (frame-0 byte-identical; N>0 clean refusal leaves a header-only y4m, no FRAME
   marker).
+*** v3.2.9.2 UPDATE — 2026-06-24 — KEYSTONE COMMITTED THROUGH K.1E.3 (supersedes the K.1D-era
+status note above; confirm from the repository) ***
+
+The keystone branch-(c) live path is now committed and pushed through K.1E.3, and the cache-core
+selftest count is now 48/48 (forced-fail 47/48, exit 1; verbose 48/48). The live recursive chain
+output[0] -> output[1] -> output[2] is runtime-proven in BOTH Debug and Release.
+
+- K.1E.1 — frameData pin-gap synthetic proof (selftest count -> 48). Holder carries predecessor
+  frame number + caller-owned pin-list only; no predecessor VSFrame ref crosses the
+  arInitial/arAllFramesReady gap; normal and abandoned/free paths use one discharge-before-delete
+  helper; an intervening prune during the gap leaves the pinned predecessor present and retrievable.
+- K.1E.2 — live frame-1 predecessor-present compute (plugin-only; count stays 48). arInitial pins
+  cached output[0]; arAllFramesReady acquires a short-lived compute ref via lookup_frame_and_add_ref(0),
+  calls proven P.11B, production-stores output[1] (no consumer pin), releases the compute ref, and
+  discharges the pin-list on every exit path. Gate edit n!=0 -> n>1; rpStrictSpatial -> rpGeneral.
+  Golden: source[1]=128/224/32 -> output[1]=128/161/95 (three-way-distinct discriminator).
+- K.1E.3 — recursive filtered-predecessor distinction at N=2 (plugin-only; count stays 48). Bounded
+  generalisation: branch-(c) now covers N==1 and N==2 with predecessor = N-1; N>2 a clean marked
+  refusal (after-frame2-before-recovery-wiring). Golden: source[2]=128/192/64 -> output[2]=128/163/93.
+
+R-ARCH-06 — CLOSED (proven at N=2, K.1E.3): the filtered-output-not-source predecessor distinction is
+now byte-observable and proven. At N==1, output[0]==source[0] (fresh start) made it invisible; at N==2,
+cached output[1] (161/95) differs from source[1] (224/32), and output[2]=163/93 is reachable ONLY from
+the cached filtered output[1] — a source[1]-substitution bug yields 222/34, a passthrough yields 192/64,
+both byte-distinct on U and V. The prior N=1-limitation proof note is superseded by this closure.
+
+CURRENT STATUS (supersedes the v3.2.9.1 summary in section 11; repository is authoritative):
+    Code state:     Keystone committed through CMS07-K.1E.3; 48/48 selftests (forced-fail 47/48 exit 1;
+                    verbose 48/48). Edit marker CMS07-K.1E.3-live-frame2-sequential-filtered-
+                    predecessor-distinction-proof.
+    Live proof:     Debug AND Release harness green — frame 0 fresh-start byte-identical; frame 1
+                    golden 128/161/95; frame 2 golden 128/163/93; frame 3 clean N>2 refusal.
+    Immediate task: Designer-led recovery (branch-(d)) scoping pass BEFORE any coder scope (see the
+                    recovery design-drivers below and the AS4 wording gate).
+    After that:     branch-(d) bounded recovery; multi-frame VS-LIFECYCLE-01; longer sequential run
+                    (N>2); live scene-change/P.11C wiring; post-K.1G KDT cleanup; fmParallel.
+
+RECOVERY-ONWARD DESIGN-DRIVERS (decided this session; shape the recovery phase — not yet owed work):
+    - Sequencing: recovery (branch-(d)) BEFORE live hot-zone tracking; live hot-zone tracking after.
+    - Recovery is built in LARGER steps than K.1E.x, but each step still ends in a byte-exact,
+      harness-proven acceptance result. Proposed breakdown: single-hole recovery from a pruned
+      predecessor -> multi-hole/branch-(d) bounded recovery -> recovery under live prune pressure.
+    - Diagnostics: recovery-onward must include an OPERATIONAL fmParallel-observable trace tier,
+      sufficient to watch TWO CNR3 instances under fmParallel (interlaced) during pre-release
+      verification. Every line instance- AND thread/frame-attributed, atomically emitted, low-distortion
+      (non-serializing), demuxable in two dimensions (instance x thread); cross-instance independence
+      (pin-ledger conservation, prune isolation) must be assertable. The emission mechanism is itself a
+      proof-worthy concurrent component.
+    - Verification config: the real instance-config surface must expose TEST-TUNABLE hot-zone sizing and
+      prune-trigger thresholds, so pre-release verification can deliberately lower them to FORCE
+      prune/eviction/recovery paths on small clips — alongside production-like-threshold runs confirming
+      those paths stay correctly DORMANT. (Prune hysteresis G.10A exists; the knobs are owed.)
+*** end v3.2.9.2 UPDATE ***
+
 
 **THE K.1D REORIENTATION (durable lesson — see DELTA §2).** The FIRST K.1D patch was **DROPPED** because
 it silently rewrote the body of the proven, selftested P.11C function and introduced a second
@@ -82,6 +136,41 @@ declaration changes `rpStrictSpatial` → `rpGeneral`** (resolves FI-04; conserv
 recursive filter; `fmUnordered` stays — `requestPattern` is a separate layer from `filterMode` and does
 not affect the CMS7 cache). N>1 clean refusal (`branch=after-frame1-before-recovery-wiring`). Proves N==1
 only.
+**[2026-06-23: the predecessor step and ownership tail in this paragraph are SUPERSEDED — predecessor
+handling is now PIN-CARRY; see the pin-carry decision note immediately below.]**
+
+**[2026-06-23 — PIN-CARRY DECISION (additive; supersedes the predecessor-handling and ownership wording above).]**
+K.1E branch-(c) sources the predecessor by PIN-CARRY, not by taking a second VSFrame reference. The
+foundational locking/pinning cross-check returned GREEN LIGHT — all Tier-1 fatals PASS on two independent
+reads, and the per-invocation pin-list is caller-owned (INV-D1), so this is thin USE of already-proven
+machinery, not a cache-core internals change.
+- **Predecessor step** (supersedes "acquire cached output[0] as predecessor (real lookup/addref, carried
+  in frameData)" above): at `arInitial`, PIN cached output[0] via the proven AS1 fused
+  `lookup_frame_and_record_pin` — it returns a BORROWED `const VSFrame*` and records a consumer-pin on the
+  per-invocation pin-list, atomically; carry {borrowed pointer + predecessor frame number + pin-list} in
+  frameData; request source[1]; return NULL. At `arAllFramesReady`, use the borrowed (still-pinned)
+  predecessor into the proven P.11B, then DISCHARGE the pin. Discharge is wired on BOTH the
+  `arAllFramesReady` arm AND the `arError` arm; the doubly-abandoned case (activation abandoned AND the
+  frameData free callback never runs) is the benign residual below. No second VSFrame reference is ever
+  taken for the predecessor — it is borrowed, kept alive by the pin (liveness comes from the pin, INV-B2;
+  NOT from output[0]'s checkpoint status — that would be the retired checkpoint-as-pin reasoning,
+  R-RETIRED-03).
+- **Ownership tail** (supersedes "acquired=1, released=1, transferred=0, balance=0" above, the
+  `pred_released=1` / `pred_balance=0` figures in confirmation 2 below, and the restatement in the §10
+  v3.2.9.1 NOTE): the proof obligation is a PIN-LEDGER, not a ref-ledger — pin taken=1, discharged=1,
+  `pin_count` balance=0, with ZERO predecessor VSFrame refs acquired or freed (borrowed). `transferred=1`
+  applies to output[1] ONLY (the K.1B-proven return path), not to the predecessor.
+- **KDT consequence:** the frame-1 KDT line's ownership fields move to pin-ledger terms (e.g.
+  `pred_pinned` / `pred_discharged` / `pred_pin_balance`, with no acquired/transferred for the borrowed
+  predecessor); exact field names to be settled when the K.1E text plan is produced.
+- **Benign residual (confirmed from committed code):** an abandoned activation's worst-case residual is an
+  UNDISCHARGED PIN — frame-safe and crash-safe (`~Cnr3OutputCacheCore` is `= default` and RAII-frees each
+  slot's `Cnr3OwnedFrameRef`; `clear()` is not on the free path → no frame-ref leak, no lifecycle_violation
+  at teardown) but SILENT today; surfaced by the future end-of-run integrity report (deferred owed item).
+- **New K.1E work (not a pre-existing fact):** discharge must be WIRED INTO the frameData free callback —
+  the single point covering normal completion AND a VS-freed abandon — new getFrame-side glue in
+  `vapoursynth-Cnr3.cpp` (cross-check INV-F3).
+This note does NOT change CMS §8.7 or any cache-core code; it records how K.1E sources the predecessor.
 
 **Designer review of the K.1E branch-(c) proposal: three confirmations accepted; a FOURTH is drafted but
 NOT yet sent** (see DELTA §4):
@@ -123,6 +212,14 @@ request-set proof; live scene-change threshold derivation + reset wiring; longer
 beyond N==1; post-K.1G KDT cleanup; the real `VSFrame` return (from K.1B, now retiring inside branch-(c));
 fmParallel (a correctness phase); typed-row-pointer-vs-memcpy (a measured fmParallel performance phase,
 proven bit-exact-output identical).
+
+**[2026-06-23] Owed (CMS-text decision) — AS4 vs `discharge_all` atomicity-wording discrepancy:**
+`discharge_all()` takes one lock per token via `unpin_frame()`, while CMS §8.7 AS4 specifies one lock
+acquisition for the whole list. Correctness-safe today (INV-B2 guarantees no slot being discharged can
+vanish mid-walk); a register-vs-code WORDING discrepancy only. RULE ON before multi-pin recovery relies
+on it. Options: (a) relax AS4 wording to per-token, or (b) add a single-lock batch-discharge variant to
+match the register. Tied to the branch-(d) recovery step where multi-pin carriage first appears. (Records
+the decision as owed; does NOT change CMS §8.7 or `discharge_all`.)
 
 **Acceptance method unchanged:** four-way (Debug N/N exit 0; Release N/N exit 0; Release
 `--force-fail-for-harness-proof` (N-1)/N exit 1; Release `--verbose` N/N exit 0, all priors) + the
@@ -832,8 +929,8 @@ post-keystone integration:
     checklist (the byte-plane/stride/real-frame/scene-change items are now done; the live hunting list
     is the getFrame/cache keystone).
 
-    *** v3.2.9 UPDATE: the NEXT item (1) above — the cache↔pixel / getFrame keystone — is no longer
-    "next"; it is UNDER WAY and committed through K.1D, with K.1E branch-(c) in flight. See the v3.2.9
+    *** v3.2.9.1 UPDATE: the NEXT item (1) above — the cache↔pixel / getFrame keystone — is no longer
+    "next"; it is UNDER WAY and committed through K.1D, with K.1E branch-(c) in flight. See the v3.2.9.1
     status note at the top of this document and the companion DELTA
     (CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md) for the keystone decomposition
     (K.1A–K.1G), the four committed phases, the K.1D reorientation lesson, and the owed items. The
@@ -935,13 +1032,13 @@ QUARANTINE — do NOT open for ideas, do NOT salvage logic (history only):
 - Do not re-open the diagnostics-spec v1.4 pointer or the memory-diagnostics fold during
   a coding phase; those are separate deferred documentation tasks.
 ```
-*** v3.2.9 NOTE: the "no getFrame wiring until the cache core is proven complete" bar was
+*** v3.2.9.1 NOTE: the "no getFrame wiring until the cache core is proven complete" bar was
 satisfied at C.14A; getFrame integration is now the live keystone work (K.1A–K.1E). The
 remaining do-not-implement items (no CMS06.x/H15.6B, no old cache concepts, no CNR2
 recovery/predecessor logic, no unapproved salvage/file/lock-scope changes) remain in force.
 The keystone has ADDED a load-bearing rule: proven/selftested code is never modified —
 behaviour or internals — without explicit visible planning and designer approval in advance
-(see the v3.2.9 status note and DELTA §2). ***
+(see the v3.2.9.1 status note and DELTA §2). ***
 
 ---
 
@@ -962,10 +1059,26 @@ incrementally and to be confirmed together at C.14A:
 - diagnostics are observe-only: a compute-macro-disabled build preserves all non-D-SUM
   behaviour (R-PROCESS-19)
 ```
-*** v3.2.9 NOTE: the lookup-ref balance obligation (acquired == released + transferred) is
+*** v3.2.9.1 NOTE: the lookup-ref balance obligation (acquired == released + transferred) is
 now exercised LIVE in the keystone — K.1B proved it synthetically (success 1/0/1); K.1E
 branch-(c) proves the OPPOSITE disposition live (acquired=1, released=1, transferred=0,
 balance=0: a predecessor is consumed-and-released, not transferred). ***
+
+*** [2026-06-23 UPDATE — PIN-CARRY] Under the pin-carry decision (see the v3.2.9.1 status note at the top of
+this document), the K.1E predecessor obligation is restated in PIN-LEDGER terms: pin taken=1, discharged=1,
+`pin_count` balance=0, with ZERO predecessor VSFrame refs (borrowed, kept alive by the pin); `transferred=1`
+applies to output[1] only (the K.1B return path). The lookup-ref balance obligation above remains correct
+for output[1] and for any genuinely owned-ref consumer; the K.1E predecessor specifically is pin-carry,
+not ref-carry. ***
+
+*** v3.2.9.2 NOTE:    
+
+*** [2026-06-24 UPDATE — R-ARCH-06 LIVE-PROVEN at N=2 (K.1E.3)] The pin-ledger obligation (pin taken=1,
+discharged=1, balance=0, zero predecessor refs carried) is now proven LIVE at BOTH N==1 and N==2, and the
+filtered-output-not-source predecessor identity is byte-proven at N==2 (output[2]=163/93 from cached
+output[1], not source[1]). This closes the R-ARCH-06 distinction obligation for the bounded branch-(c)
+path. Multi-pin discharge balance (anchor + holes) remains OWED to branch-(d) recovery, gated by the AS4
+vs discharge_all wording decision. ***
 
 ---
 
@@ -983,7 +1096,7 @@ After that:         H.3A (recovery AS2 store-consumer), then C.14A aggregate pro
                     pixel salvage, then VapourSynth integration, then VS2026 project.
 Pixel layer:        Deferred to salvage; CNR2 is pixel-maths reference only.
 ```
-*** v3.2.9 CURRENT STATUS SUMMARY (supersedes the H.1A-era summary directly above; confirm
+*** v3.2.9.1 CURRENT STATUS SUMMARY (supersedes the H.1A-era summary directly above; confirm
 from the repository) ***
 ```text
 Design authority:   CMS07.7 (cnr3_cache_manager_design_v7_7.1.md).
@@ -1014,4 +1127,4 @@ Pixel layer:        Proven on caller-supplied frames through P.11C; CNR2 is pixe
                     over that already-proven pixel path.
 ```
 
-— End of Document B v3.2.9.
+— End of Document B v3.2.9.1.

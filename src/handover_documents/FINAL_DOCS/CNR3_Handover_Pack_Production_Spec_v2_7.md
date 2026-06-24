@@ -1166,7 +1166,58 @@ relying on it. This is a process/epistemics obligation owned here; the specific 
 contracts live in the prevailing CMS (e.g. VS-LIFECYCLE-01 in CMS §9A.1, the frame-return
 contract in CMS §9A.1.1, and the rpGeneral declaration in CMS §9.7.7).
 ```
-## 3A.6 Architecture and salvage rules
+### R-PROCESS-23 — Patch validation must match the target environment, and proof level must be labelled honestly
+**Status:** confirmed  
+**Source:** CMS07-K.1E.2/K.1E.3 keystone delivery (a five-revision patch saga: a hunk-count corruption, a stale base, a context-narrowing non-fix, an LF-vs-CRLF apply failure, and an API3-vs-API4 compile error — each rooted in validating against an ASSUMED environment rather than the real one); user-approved process rule  
+**Last revised:** 2026-06-24
+**Statement:**
+```text
+A patch is validated only against the EXACT target environment, never an assumed one. This
+complements R-PROCESS-20 (PDAP delivery mechanics) and is owned as a distinct rule because it
+governs environment conformance and proof-level honesty, not the review cadence.
+
+(1) CANONICAL BASE. The patch base is the current committed source obtained via the GitHub
+branch-ZIP path (the repository's stored form). It is NOT a local-working-tree copy, NOT
+GitHub-raw single-file reads, and NOT an inferred/reconstructed source. The coordinator
+standardises on the branch-ZIP upload so the base is deterministic; the coder confirms its
+baseline marker before producing any patch (R-PROCESS-20 baseline discipline).
+
+(2) LINE ENDINGS. This repository stores source as LF (core.autocrlf=true: LF in the index,
+CRLF in the Windows working tree; no .gitattributes). Do NOT change this setting mid-project
+(it would renormalise every file). Patches are emitted to MATCH THE STORED (LF) FORM and
+validated LF-against-LF in a line-ending-matched temporary repo. An LF-seeded validation that
+"passes git apply" is NOT valid evidence for the CRLF working tree, and a CRLF patch is NOT the
+fix — it matches the converted form, the wrong layer. The coordinator applies on the CRLF
+working tree with autocrlf mediating; `git apply --ignore-whitespace` is the standing,
+understood fallback (by construction the only difference at that point is the EOL conversion).
+
+(3) COMPILE BEFORE GREEN. "Applies" is not "compiles" and "compiles" is not "runs." For any
+phase touching the plugin (the live getFrame path), the patch is not validated until the
+affected build has been COMPILED against the real target headers (R76 / API4) in BOTH Debug and
+Release — not merely applied. API-shape assumptions (e.g. VSVideoInfo::format is a VALUE member
+in API4, not a pointer; const VSFrame* vs VSFrame*; copyFrame/addFrameRef/freeFrame signatures)
+are checked against the R76 headers before delivery (this is the R-PROCESS-22 obligation applied
+at the call site), and any new VSVideoInfo/VSVideoFormat access is audited for the same shape in
+one pass.
+
+(4) PROOF-LEVEL HONESTY. Each claim is labelled at its true proof level: "patch applies
+(LF-against-LF)", "DLL compiles (Debug+Release)", "selftest/harness passes". A green check in a
+sandbox that does not match the target's line endings and headers is not a proof for the target;
+say what was and was not validated.
+
+(5) DIAGNOSE THE FAILURE CLASS, DO NOT NARROW CONTEXT. When a patch fails to apply, diagnose the
+CLASS of failure first — malformed/hunk-count, wrong base, line-ending mismatch, whitespace,
+path, or genuine source conflict — and fix the cause. Narrowing hunk context to make `git apply`
+stop complaining is prohibited: it masks the cause (it gives the tool fewer lines to disagree
+with) and can land a hunk in the wrong place. Reducing context is allowed only with a deliberate,
+stated reason, never as a response to a failed apply.
+
+This rule generalises R-PROCESS-20 (delivery/baseline) and R-PROCESS-22 (contracts from
+documentation) to the mechanical delivery layer, and exists to prevent the "passes for me, fails
+for you" class of failure.
+```
+
+## 3A.6 Architecture and salvage rules    
 ### R-ARCH-01 — Reuse the existing per-frame processing boundary (no parallel pixel algorithm)
 **Status:** confirmed  
 **Source:** CNR3 Register-Owned Rules Review — Reconciled v3.3; user-approved suggested wording  

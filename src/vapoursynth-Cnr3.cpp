@@ -288,9 +288,10 @@ void cnr3_trace_live_frame0_fresh_start(
 #endif
 }
 
-void cnr3_trace_live_frame1_predecessor_present_compute(
+void cnr3_trace_live_predecessor_present_compute(
     const Cnr3FilterData& data,
     int requested_frame,
+    int predecessor_frame,
     Cnr3Status store_status,
     const Cnr3CallerSuppliedFrameProcessSummary& process_summary
 ) noexcept {
@@ -298,7 +299,7 @@ void cnr3_trace_live_frame1_predecessor_present_compute(
     std::fprintf(
         stderr,
         "[KDT] instance=%d N=%d branch=PREDECESSOR-PRESENT-COMPUTE "
-        "source=1 pred=0 pred_source=output_cache pred_lookup=hit "
+        "source=%d pred=%d pred_source=output_cache pred_lookup=hit "
         "pred_liveness_basis=pin pred_checkpoint_used_as_pin=0 "
         "pred_pin_taken=1 pred_pin_discharged=1 pred_pin_balance=0 "
         "pred_ref_carried_across_gap=0 "
@@ -312,6 +313,8 @@ void cnr3_trace_live_frame1_predecessor_present_compute(
         "first_v_output_sample=%d last_v_output_sample=%d\n",
         data.config.instance_id.value,
         requested_frame,
+        requested_frame,
+        predecessor_frame,
         cnr3_status_name(store_status),
         process_summary.frame_processed ? 1 : 0,
         process_summary.luma_samples_copied,
@@ -327,19 +330,20 @@ void cnr3_trace_live_frame1_predecessor_present_compute(
 #else
     (void)data;
     (void)requested_frame;
+    (void)predecessor_frame;
     (void)store_status;
     (void)process_summary;
 #endif
 }
 
-void cnr3_trace_live_after_frame1_not_yet_implemented(
+void cnr3_trace_live_after_frame2_not_yet_implemented(
     const Cnr3FilterData& data,
     int requested_frame
 ) noexcept {
-#if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(SCAFFOLD_CMS07_K1E2_REFUSE_AFTER_FRAME1_BEFORE_RECOVERY)
+#if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(SCAFFOLD_CMS07_K1E3_REFUSE_AFTER_FRAME2_BEFORE_RECOVERY)
     std::fprintf(
         stderr,
-        "[KDT] instance=%d N=%d NOT-YET-IMPLEMENTED branch=after-frame1-before-recovery-wiring\n",
+        "[KDT] instance=%d N=%d NOT-YET-IMPLEMENTED branch=after-frame2-before-recovery-wiring\n",
         data.config.instance_id.value,
         requested_frame
     );
@@ -426,7 +430,7 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
     );
 }
 
-const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
+const VSFrame* cnr3_get_frame_live_predecessor_present_compute(
     int n,
     int activation_reason,
     Cnr3FilterData& data,
@@ -440,7 +444,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1E.2 frame-1 proof: frameData was unexpectedly non-null at arInitial."
+                "CNR3 K.1E.3 sequential proof: frameData was unexpectedly non-null at arInitial."
             );
             return nullptr;
         }
@@ -452,7 +456,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1E.2 frame-1 proof: failed to allocate frameData."
+                "CNR3 K.1E.3 sequential proof: failed to allocate frameData."
             );
             return nullptr;
         }
@@ -471,7 +475,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1E.2 frame-1 proof: cached output[0] predecessor was not available."
+                "CNR3 K.1E.3 sequential proof: cached predecessor output[N-1] was not available."
             );
             return nullptr;
         }
@@ -506,7 +510,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: invalid frameData predecessor/source lifecycle."
+            "CNR3 K.1E.3 sequential proof: invalid frameData predecessor/source lifecycle."
         );
         return nullptr;
     }
@@ -518,7 +522,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: source frame retrieval failed."
+            "CNR3 K.1E.3 sequential proof: source frame retrieval failed."
         );
         return nullptr;
     }
@@ -537,7 +541,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: failed to acquire predecessor compute reference."
+            "CNR3 K.1E.3 sequential proof: failed to acquire predecessor compute reference."
         );
         return nullptr;
     }
@@ -551,7 +555,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: copyFrame failed."
+            "CNR3 K.1E.3 sequential proof: copyFrame failed."
         );
         return nullptr;
     }
@@ -563,7 +567,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: copyFrame returned the source frame alias."
+            "CNR3 K.1E.3 sequential proof: copyFrame returned the source frame alias."
         );
         return nullptr;
     }
@@ -592,7 +596,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: P.11B predecessor-present processing failed."
+            "CNR3 K.1E.3 sequential proof: P.11B predecessor-present processing failed."
         );
         return nullptr;
     }
@@ -610,10 +614,12 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: failed to production-store output[1]."
+            "CNR3 K.1E.3 sequential proof: failed to production-store output[N]."
         );
         return nullptr;
     }
+
+    const int predecessor_frame_for_trace = request_data->predecessor_frame;
 
     const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
         frame_data,
@@ -625,14 +631,15 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.2 frame-1 proof: failed to discharge predecessor pin-list."
+            "CNR3 K.1E.3 sequential proof: failed to discharge predecessor pin-list."
         );
         return nullptr;
     }
 
-    cnr3_trace_live_frame1_predecessor_present_compute(
+    cnr3_trace_live_predecessor_present_compute(
         data,
         n,
+        predecessor_frame_for_trace,
         store_status,
         process_summary
     );
@@ -640,7 +647,7 @@ const VSFrame* cnr3_get_frame_live_frame1_predecessor_present(
     return output_frame;
 }
 
-const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e2_proof(
+const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
     int n,
     int activation_reason,
     void* instance_data,
@@ -655,18 +662,18 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e2_proof(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1D frame-0 proof: invalid getFrame state."
+            "CNR3 K.1E.3 sequential proof: invalid getFrame state."
         );
         return nullptr;
     }
 
-    if (n > 1) {
+    if (n > 2) {
         if (activation_reason == arInitial) {
-            cnr3_trace_live_after_frame1_not_yet_implemented(*data, n);
+            cnr3_trace_live_after_frame2_not_yet_implemented(*data, n);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 K.1E.2 frame-1 proof: frames after 1 are not implemented before recovery wiring."
+                "CNR3 K.1E.3 sequential proof: frames after 2 are not implemented before recovery wiring."
             );
         }
 
@@ -677,8 +684,8 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e2_proof(
         return nullptr;
     }
 
-    if (n == 1) {
-        return cnr3_get_frame_live_frame1_predecessor_present(
+    if (n == 1 || n == 2) {
+        return cnr3_get_frame_live_predecessor_present_compute(
             n,
             activation_reason,
             *data,
@@ -839,8 +846,8 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e2_proof(
             real CNR3 output frame because fresh-start output[0] is
             source-verbatim. The extra addFrameRef() reference is stored in the
             output cache; this original copyFrame reference is returned to
-            VapourSynth. Frames after 1 are refused until recovery wiring
-            replaces the K.1E.2 temporary boundary, so source[N] cannot remain
+            VapourSynth. Frames after 2 are refused until recovery wiring
+            replaces the K.1E.3 temporary boundary, so source[N] cannot remain
             a fallback output.
         */
         return output_frame;
@@ -947,7 +954,7 @@ void VS_CC cnr3_create_filter(
         out,
         "CNR3",
         &data->video_info,
-        cnr3_get_frame_keystone_live_k1e2_proof,
+        cnr3_get_frame_keystone_live_k1e3_proof,
         cnr3_free_filter,
         fmUnordered,
         dependencies,

@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1E.2-live-frame1-predecessor-present-compute-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1E.3-live-frame2-sequential-filtered-predecessor-distinction-proof";
 
 
 /*
@@ -55,15 +55,15 @@ inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1E.2-live-frame1-prede
 #define CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF 1
 
 /*
-    Temporary CMS07-K.1E.2 live getFrame refusal boundary.
+    Temporary CMS07-K.1E.3 live getFrame refusal boundary.
 
     // BEHAVIOURAL-SCAFFOLD:
-    Frames after 1 are deliberately refused until branch-(d) bounded recovery
+    Frames after 2 are deliberately refused until branch-(d) bounded recovery
     and later multi-frame request-set wiring replace this boundary. The
-    N == 1 predecessor-present compute branch is permanent branch-(c) logic
-    and is not scaffold-marked.
+    N == 1 and N == 2 predecessor-present compute branches are permanent
+    branch-(c) logic and are not scaffold-marked.
 */
-#define SCAFFOLD_CMS07_K1E2_REFUSE_AFTER_FRAME1_BEFORE_RECOVERY 1
+#define SCAFFOLD_CMS07_K1E3_REFUSE_AFTER_FRAME2_BEFORE_RECOVERY 1
 
 /*
     Temporary proof scaffold convention.

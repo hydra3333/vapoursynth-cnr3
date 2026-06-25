@@ -339,6 +339,38 @@ namespace {
 
 } // namespace
 
+struct Cnr3CachePinListSelftestAccess {
+    [[nodiscard]] static bool has_used_token_at(
+        const Cnr3CachePinList& pin_list,
+        std::size_t pin_index
+    ) noexcept {
+        return pin_index < pin_list.used_pin_count_;
+    }
+
+    [[nodiscard]] static Cnr3CacheSlotPinToken token_at(
+        const Cnr3CachePinList& pin_list,
+        std::size_t pin_index
+    ) noexcept {
+        if (pin_index >= pin_list.used_pin_count_) {
+            return {};
+        }
+
+        return pin_list.pin_tokens_[pin_index];
+    }
+
+    static void replace_token_at(
+        Cnr3CachePinList& pin_list,
+        std::size_t pin_index,
+        const Cnr3CacheSlotPinToken& pin_token
+    ) noexcept {
+        if (pin_index >= pin_list.used_pin_count_) {
+            return;
+        }
+
+        pin_list.pin_tokens_[pin_index] = pin_token;
+    }
+};
+
 void cnr3_cache_core_selftest_set_verbose(bool verbose) noexcept {
     g_cnr3_cache_core_selftest_verbose = verbose;
 }
@@ -3986,6 +4018,297 @@ Cnr3Status cnr3_cache_core_selftest_per_invocation_pin_list_lifecycle() noexcept
         g_cnr3_cache_core_selftest_vsapi_state = nullptr;
         return Cnr3Status::invariant_violation;
     }
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_cache_core_selftest_as4_single_lock_batch_discharge_proof() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int frame_storage[6] = { 10, 11, 12, 20, 21, 22 };
+    const VSFrame* frames[6] = {
+        reinterpret_cast<const VSFrame*>(&frame_storage[0]),
+        reinterpret_cast<const VSFrame*>(&frame_storage[1]),
+        reinterpret_cast<const VSFrame*>(&frame_storage[2]),
+        reinterpret_cast<const VSFrame*>(&frame_storage[3]),
+        reinterpret_cast<const VSFrame*>(&frame_storage[4]),
+        reinterpret_cast<const VSFrame*>(&frame_storage[5])
+    };
+
+    for (int frame_index = 0; frame_index < 6; ++frame_index) {
+        vsapi_state.tracked_release_frames[frame_index] = frames[frame_index];
+    }
+
+    const auto store_frame = [](
+        Cnr3OutputCacheCore& cache,
+        VSAPI& vsapi,
+        int frame_number,
+        const VSFrame* frame
+    ) -> Cnr3Status {
+        Cnr3OwnedFrameRef owned_frame{};
+
+        const Cnr3Status adopt_status = owned_frame.reset_to_owned_frame(
+            frame,
+            &vsapi
+        );
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        return cache.store_noncheckpoint_owned_frame(
+            frame_number,
+            std::move(owned_frame)
+        );
+    };
+
+    struct Cnr3As4SelftestFrameDataHolder {
+        Cnr3CachePinList pin_list{};
+    };
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3As4SelftestFrameDataHolder* holder =
+            new (std::nothrow) Cnr3As4SelftestFrameDataHolder{};
+
+        if (holder == nullptr) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::allocation_failed;
+        }
+
+        for (int frame_offset = 0; frame_offset < 3; ++frame_offset) {
+            if (
+                store_frame(
+                    cache,
+                    vsapi,
+                    100 + frame_offset,
+                    frames[frame_offset]
+                ) != Cnr3Status::ok
+                ) {
+                delete holder;
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (
+                cache.lookup_frame_and_record_pin(
+                    100 + frame_offset,
+                    holder->pin_list
+                ) != Cnr3Status::ok
+                ) {
+                delete holder;
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        if (cache.total_pin_count() != 3) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (holder->pin_list.pin_count() != 3U) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        std::size_t removed_count = 99U;
+        const std::vector<int> pinned_candidates{ 100, 101, 102 };
+
+        if (
+            cache.remove_selected_unpinned_frames_bounded(
+                pinned_candidates,
+                pinned_candidates.size(),
+                removed_count
+            ) != Cnr3Status::lifecycle_violation
+            ) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (removed_count != 0U || cache.total_pin_count() != 3) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::lifecycle_violation) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (holder->pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0 || !holder->pin_list.empty()) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (holder->pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            delete holder;
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        delete holder;
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0 || !cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+
+        for (int frame_offset = 0; frame_offset < 3; ++frame_offset) {
+            if (
+                store_frame(
+                    cache,
+                    vsapi,
+                    200 + frame_offset,
+                    frames[3 + frame_offset]
+                ) != Cnr3Status::ok
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (
+                cache.lookup_frame_and_record_pin(
+                    200 + frame_offset,
+                    pin_list
+                ) != Cnr3Status::ok
+                ) {
+                g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+
+        if (cache.total_pin_count() != 3 || pin_list.pin_count() != 3U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!Cnr3CachePinListSelftestAccess::has_used_token_at(pin_list, 2U)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        const Cnr3CacheSlotPinToken original_middle_token =
+            Cnr3CachePinListSelftestAccess::token_at(pin_list, 1U);
+
+        if (!cnr3_cache_slot_pin_token_is_valid(original_middle_token)) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CacheSlotPinToken mismatched_middle_token = original_middle_token;
+        ++mismatched_middle_token.slot_id.value;
+
+        Cnr3CachePinListSelftestAccess::replace_token_at(
+            pin_list,
+            1U,
+            mismatched_middle_token
+        );
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::lifecycle_violation) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        /*
+            The first and third tokens must have been attempted and released
+            even though the middle token failed. If the batch walk aborted on
+            first failure, two pins would remain instead of one.
+        */
+        if (cache.total_pin_count() != 1 || pin_list.pin_count() != 1U) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3CachePinListSelftestAccess::replace_token_at(
+            pin_list,
+            1U,
+            original_middle_token
+        );
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.total_pin_count() != 0 || !pin_list.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (vsapi_state.add_frame_ref_count != 0) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    if (vsapi_state.free_frame_count != 6) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    for (int frame_index = 0; frame_index < 6; ++frame_index) {
+        if (vsapi_state.tracked_release_counts[frame_index] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "Recovery-Step-0 AS4 single-lock batch discharge scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    public discharge_all call site is stable and delegates to cache.discharge_pin_list"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    batch path uses one AS4 cache-lock acquisition and unpin_frame_locked worker"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    multi-pin discharge releases every token and double-discharge no-ops"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    partial invalid-token proof attempts all entries and returns first failure"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    public clear/remove cannot invalidate pinned tokens before discharge"
+    );
 
     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
 
@@ -14049,6 +14372,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "k1e1_frame_data_pin_gap_synthetic_proof",
             cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof
+        },
+        {
+            "as4_single_lock_batch_discharge_proof",
+            cnr3_cache_core_selftest_as4_single_lock_batch_discharge_proof
         },
         {
             "lookup_addref_hit_and_miss",

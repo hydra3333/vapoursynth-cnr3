@@ -1078,6 +1078,24 @@ public:
     );
 
     /*
+        Lock-owning AS4 whole-list discharge operation.
+
+        This is the CMS07-Recovery-Step-0 implementation of AS4 final
+        unpin: one cache_mutex_ acquisition for the whole pin-list. The
+        helper walks every still-valid token through unpin_frame_locked(),
+        so it never re-enters the public lock-owning unpin_frame() path.
+
+        The observable discharge contract is unchanged from
+        Cnr3CachePinList::discharge_all(): attempt every still-valid token,
+        remember the first failure, and report it only after the walk. A
+        clean discharge invalidates all entries and leaves the list empty; a
+        second discharge is a no-op success.
+    */
+    [[nodiscard]] Cnr3Status discharge_pin_list(
+        Cnr3CachePinList& pin_list
+    );
+
+    /*
         Lock-owning clear operation.
 
         This operation detaches cached slots and clears frame-index/checkpoint
@@ -1518,8 +1536,9 @@ private:
 
     This list owns slot-pin tokens recorded during one cache-core activation.
     Recording a token consumes the caller token by resetting it after the list
-    has stored its own copy. Discharge walks the recorded tokens and releases
-    each still-valid token through Cnr3OutputCacheCore::unpin_frame().
+    has stored its own copy. Discharge delegates to
+    Cnr3OutputCacheCore::discharge_pin_list(), which releases the whole
+    recorded list under one AS4 cache-lock acquisition.
 
     The list is deliberately not copyable or movable. A copied pin list would
     duplicate pin-token ownership and could cause double-unpin attempts.
@@ -1572,6 +1591,11 @@ public:
     /*
         Release every still-valid token recorded in this list.
 
+        This public pin-list entry point is deliberately kept stable for
+        getFrame cleanup code. Internally it delegates to the cache core's
+        AS4 batch-discharge method, so the whole list is discharged under one
+        cache-lock acquisition rather than one lock per token.
+
         A clean discharge invalidates all recorded entries and leaves the list
         empty, so a second discharge is a no-op success. If any unpin fails, the
         first failure status is returned after all entries have been attempted.
@@ -1582,6 +1606,7 @@ public:
 
 private:
     friend class Cnr3OutputCacheCore;
+    friend struct Cnr3CachePinListSelftestAccess;
 
     /*
         Record one pin into already-reserved storage.

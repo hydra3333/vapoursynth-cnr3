@@ -1277,6 +1277,47 @@ Cnr3Status Cnr3OutputCacheCore::unpin_frame(
     return unpin_frame_locked(pin_token);
 }
 
+Cnr3Status Cnr3OutputCacheCore::discharge_pin_list(
+    Cnr3CachePinList& pin_list
+) {
+    Cnr3Status first_failure_status = Cnr3Status::ok;
+
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    for (std::size_t pin_index = 0;
+        pin_index < pin_list.used_pin_count_;
+        ++pin_index
+        ) {
+        Cnr3CacheSlotPinToken& pin_token = pin_list.pin_tokens_[pin_index];
+
+        if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
+            continue;
+        }
+
+        const Cnr3Status unpin_status = unpin_frame_locked(pin_token);
+
+        if (
+            !cnr3_status_is_ok(unpin_status) &&
+            cnr3_status_is_ok(first_failure_status)
+            ) {
+            first_failure_status = unpin_status;
+        }
+    }
+
+    if (cnr3_status_is_ok(first_failure_status)) {
+        for (std::size_t pin_index = 0;
+            pin_index < pin_list.used_pin_count_;
+            ++pin_index
+            ) {
+            cnr3_cache_slot_pin_token_reset(pin_list.pin_tokens_[pin_index]);
+        }
+
+        pin_list.used_pin_count_ = 0U;
+    }
+
+    return first_failure_status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::clear() {
     std::vector<Cnr3CacheSlot> detached_slots{};
     Cnr3Status status = Cnr3Status::invariant_violation;
@@ -3221,34 +3262,7 @@ Cnr3Status Cnr3CachePinList::record_pin_without_allocation(
 Cnr3Status Cnr3CachePinList::discharge_all(
     Cnr3OutputCacheCore& cache
 ) {
-    Cnr3Status first_failure_status = Cnr3Status::ok;
-
-    for (std::size_t pin_index = 0; pin_index < used_pin_count_; ++pin_index) {
-        Cnr3CacheSlotPinToken& pin_token = pin_tokens_[pin_index];
-
-        if (!cnr3_cache_slot_pin_token_is_valid(pin_token)) {
-            continue;
-        }
-
-        const Cnr3Status unpin_status = cache.unpin_frame(pin_token);
-
-        if (
-            !cnr3_status_is_ok(unpin_status) &&
-            cnr3_status_is_ok(first_failure_status)
-            ) {
-            first_failure_status = unpin_status;
-        }
-    }
-
-    if (cnr3_status_is_ok(first_failure_status)) {
-        for (std::size_t pin_index = 0; pin_index < used_pin_count_; ++pin_index) {
-            cnr3_cache_slot_pin_token_reset(pin_tokens_[pin_index]);
-        }
-
-        used_pin_count_ = 0U;
-    }
-
-    return first_failure_status;
+    return cache.discharge_pin_list(*this);
 }
 
 /*

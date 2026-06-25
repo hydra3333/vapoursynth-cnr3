@@ -563,6 +563,20 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as1_lookup_pin_record_atomicity() noexcept;
 
 /*
+    Run the CMS07-Recovery-Step-0 AS4 single-lock batch-discharge selftest.
+
+    This verifies that the stable Cnr3CachePinList::discharge_all() call site
+    now delegates to the cache core's whole-list AS4 discharge path, while
+    preserving the prior observable contract: all valid tokens are attempted,
+    the first failure is reported after the walk, clean discharge empties the
+    list, and a second discharge is a no-op success. The test covers multi-pin
+    discharge, frameData-style cleanup, double-discharge, public-operation
+    resistance to invalidating pinned tokens, and a deliberate internal
+    mismatched-token failure that proves attempt-all semantics.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as4_single_lock_batch_discharge_proof() noexcept;
+
+/*
     Permanent cache-core selftest runner result.
 
     This is test infrastructure, not production diagnostics. It is intentionally

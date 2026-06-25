@@ -9,6 +9,15 @@ items V1–V8 resolved (several against authoritative sources: the CNR2 referenc
 the local R76 VapourSynth4.h header); section-level bring-across audit of the
 CMS06.11 body done (§9A); final self-review pass done. Controlling design authority
 for the CNR3 restart; ready for coder study and the isolated cache-core milestone.
+CMS07.10 is a CORRECTION over CMS07.9: it corrects §9A.1.1 for the K.1F-proven
+R-LIFECYCLE triggering-request rule. A dependency-filter cache-hit activation must not
+rely on zero-request arInitial->NULL (not guaranteed an arAllFramesReady callback under
+API4/R76); every CNR3 branch requests at least one real source frame at arInitial and
+returns only at arAllFramesReady. Branch-(b) cache-hit uses source[N] as a lifecycle
+trigger, pins cached output[N] across the activation gap, retrieves/frees the trigger
+source (not consumed), and returns the cached output via lookup-and-add-ref plus AS4
+batch discharge. This correction does not change the CMS07.9 recovery model, AS scopes,
+constants, or branch-(d) plan.
 CMS07.9 is an ADDITIVE revision over CMS07.8, made to bring an fmParallel/two-instance
 consequence forward into normative text rather than discover it at the parallel phase
 (the standing mandate is to build toward the fmParallel + two-instance-interlaced end
@@ -45,7 +54,7 @@ material only.
 **Companion document (non-normative).** This CMS has a companion working document,
 `CNR3_CMS_Future_Investigations_and_Open_Questions_vXX.Y.md`, which always carries the
 **same version number as this CMS** (XX.Y = this CMS version; for this version,
-`_v7.8.md`). It records deferred design questions and open tuning investigations. It is
+`_v7.10.md`). It records deferred design questions and open tuning investigations. It is
 **NOT part of this specification, NOT controlling, and NOT part of the coder handover
 pack**; nothing in it is implemented without formal prior approval and a corresponding
 CMS revision. It exists only so that open questions are not lost between sessions. Refer
@@ -746,10 +755,15 @@ Determine the predecessor in this order. Every branch is specified in an owning 
            [Owning: §9.2 fresh-start definition; §9.5 "as if frame 0"; §6.3 frame 0 is
             always a checkpoint and is never pruned.]
 (b) output[N] already present in cache
-        -> RETURN IT DIRECTLY. No predecessor is sought, no source is requested, no pixel
-           path runs. (Cache-hit fast path for repeated/duplicate requests and seeks.)
+        -> RETURN IT DIRECTLY. No predecessor is sought, and no source is needed or
+           consumed for the result; no pixel path runs. (Cache-hit fast path for
+           repeated/duplicate requests and seeks.) Under R-LIFECYCLE (§9A.1.1), CNR3 as a
+           dependency filter still requests source[N] as a lifecycle TRIGGER for
+           callback-safety, retrieves and immediately frees it (not consumed), and returns
+           the cached output at arAllFramesReady; "direct" means "no predecessor, no result
+           source, no pixel path" -- NOT "no request and not from arInitial."
            [Owning: §9.3 first-in-best-dressed; the cached frame's ref is transferred to
-            VapourSynth on return, §4.8.]
+            VapourSynth on return, §4.8; §9A.1.1 R-LIFECYCLE for the trigger-request timing.]
 (c) N > 0, output[N] absent, output[N-1] PRESENT in cache
         -> USE output[N-1] as the predecessor (find-and-pin). Request source[N] only.
            Blend output[N] = f(source[N], output[N-1]).
@@ -951,7 +965,7 @@ holes-only source set, §9.5.1) must therefore be complete at arInitial time usi
 arInitial-time information; the output is produced and returned one activation-reason later.
 (Confirmed against the local R76 VapourSynth4.h.)
 
-*** CMS07.9-K.1F CORRECTION — R-LIFECYCLE (the triggering-request rule). Proven live by
+*** CMS07.10 CORRECTION TO CMS07.9 §9A.1.1 — R-LIFECYCLE (the triggering-request rule). Proven live by
 keystone K.1F (live direct cached-output return), 2026-06-25. ***
 The paragraph above previously stated that at arInitial the branch-(b) cache-hit activation
 "requests nothing ... and returns NULL." Investigation for K.1F (multiple authoritative-source
@@ -982,7 +996,7 @@ request-in-arInitial / return-in-arAllFramesReady contract. (Branches and the ac
 are keyed on a per-invocation frameData branch tag set at arInitial, never on re-inspecting
 frame state at arAllFramesReady, so a concurrent cache change cannot cause a different branch to
 execute than the one planned.)
-*** end CMS07.9-K.1F CORRECTION ***
+*** end CMS07.10 CORRECTION ***
 **9A.2 Reference-count discipline RC1–RC8 (carried; helper NAMES indicative — the
 restart coder names them; the OBLIGATIONS are mandatory).**
 - **RC1 — Single store helper.** All cache-owned `addFrameRef` calls occur only in

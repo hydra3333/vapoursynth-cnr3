@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-Recovery-Step-0-AS4-single-lock-batch-discharge-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-K.1F-live-direct-cached-output-return-proof";
 
 
 /*

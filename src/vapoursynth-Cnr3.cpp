@@ -161,12 +161,21 @@
 
 namespace {
 
+enum class Cnr3LiveGetFrameBranch {
+    none,
+    cache_hit_return,
+    frame0_fresh_start,
+    predecessor_present_compute
+};
+
 struct Cnr3LiveGetFrameFrameData {
+    Cnr3LiveGetFrameBranch branch = Cnr3LiveGetFrameBranch::none;
     int requested_frame = CNR3_INVALID_FRAME_NUMBER;
     int predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
     bool source_requested = false;
     bool predecessor_pin_taken = false;
-    Cnr3CachePinList predecessor_pin_list{};
+    bool cache_hit_pin_taken = false;
+    Cnr3CachePinList pin_list{};
 };
 
 struct Cnr3FilterData {
@@ -336,6 +345,29 @@ void cnr3_trace_live_predecessor_present_compute(
 #endif
 }
 
+void cnr3_trace_live_cache_hit_return(
+    const Cnr3FilterData& data,
+    int requested_frame
+) noexcept {
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+    std::fprintf(
+        stderr,
+        "[KDT] instance=%d N=%d branch=CACHE-HIT "
+        "cache_lookup=hit "
+        "source_trigger_requested=1 source_trigger_retrieved=1 "
+        "source_trigger_consumed=0 source_trigger_released=1 "
+        "pixel_compute=0 p11b_called=0 p11c_called=0 "
+        "cache_hit_pin_taken=1 cache_hit_pin_discharged=1 cache_hit_pin_balance=0 "
+        "returned_ref_added=1 return_transferred=1\n",
+        data.config.instance_id.value,
+        requested_frame
+    );
+#else
+    (void)data;
+    (void)requested_frame;
+#endif
+}
+
 void cnr3_trace_live_after_frame2_not_yet_implemented(
     const Cnr3FilterData& data,
     int requested_frame
@@ -365,7 +397,7 @@ Cnr3Status cnr3_discard_frame_data_with_cache(
         static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
 
     const Cnr3Status discharge_status =
-        request_data->predecessor_pin_list.discharge_all(output_cache);
+        request_data->pin_list.discharge_all(output_cache);
 
     delete request_data;
     *frame_data = nullptr;
@@ -430,6 +462,165 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
     );
 }
 
+enum class Cnr3LiveCacheHitStartResult {
+    miss,
+    started,
+    failed
+};
+
+Cnr3LiveCacheHitStartResult cnr3_try_start_live_cache_hit_return(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+) {
+    if (*frame_data != nullptr) {
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: frameData was unexpectedly non-null at arInitial."
+        );
+        return Cnr3LiveCacheHitStartResult::failed;
+    }
+
+    Cnr3LiveGetFrameFrameData* request_data =
+        new (std::nothrow) Cnr3LiveGetFrameFrameData{};
+
+    if (request_data == nullptr) {
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: failed to allocate frameData."
+        );
+        return Cnr3LiveCacheHitStartResult::failed;
+    }
+
+    request_data->branch = Cnr3LiveGetFrameBranch::cache_hit_return;
+    request_data->requested_frame = n;
+
+    /*
+        K.1F cache-hit branch-b: present output[N] is a plan-time fact
+        made at arInitial and acted on at arAllFramesReady. Pin it now so
+        prune cannot evict the cached frame across the activation gap.
+    */
+    const Cnr3Status pin_status = data.output_cache.lookup_frame_and_record_pin(
+        n,
+        request_data->pin_list
+    );
+
+    if (pin_status == Cnr3Status::not_found) {
+        delete request_data;
+        return Cnr3LiveCacheHitStartResult::miss;
+    }
+
+    if (!cnr3_status_is_ok(pin_status)) {
+        delete request_data;
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: failed to pin cached output[N]."
+        );
+        return Cnr3LiveCacheHitStartResult::failed;
+    }
+
+    request_data->cache_hit_pin_taken = true;
+    request_data->source_requested = true;
+    *frame_data = request_data;
+
+    /*
+        Option C lifecycle trigger: the cache-hit path does not consume
+        source[N] for pixel computation, but requests one real source frame so
+        the non-source filter returns only from arAllFramesReady.
+    */
+    vsapi->requestFrameFilter(n, data.source, frame_ctx);
+
+    return Cnr3LiveCacheHitStartResult::started;
+}
+
+const VSFrame* cnr3_get_frame_live_cache_hit_return(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+) {
+    Cnr3LiveGetFrameFrameData* request_data =
+        static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
+
+    if (request_data == nullptr ||
+        request_data->branch != Cnr3LiveGetFrameBranch::cache_hit_return ||
+        request_data->requested_frame != n ||
+        !request_data->source_requested ||
+        !request_data->cache_hit_pin_taken ||
+        request_data->pin_list.pin_count() != 1U) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: invalid frameData cache-hit lifecycle."
+        );
+        return nullptr;
+    }
+
+    const VSFrame* source_trigger_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
+
+    if (source_trigger_frame == nullptr) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: triggering source frame retrieval failed."
+        );
+        return nullptr;
+    }
+
+    /*
+        The trigger source exists only to guarantee arAllFramesReady. It is
+        deliberately not passed to P.11B/P.11C and not stored. The retrieved
+        source reference is nevertheless a normal owned reference and must be
+        released exactly once outside any cache lock.
+    */
+    vsapi->freeFrame(source_trigger_frame);
+    source_trigger_frame = nullptr;
+
+    Cnr3OwnedFrameRef returned_cache_ref{};
+    const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
+        n,
+        vsapi,
+        returned_cache_ref
+    );
+
+    if (!cnr3_status_is_ok(lookup_status) || !returned_cache_ref.has_frame()) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: pinned cached output[N] was not retrievable."
+        );
+        return nullptr;
+    }
+
+    const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
+        frame_data,
+        data.output_cache
+    );
+
+    if (!cnr3_status_is_ok(discard_status)) {
+        returned_cache_ref.reset();
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: failed to discharge cache-hit pin-list."
+        );
+        return nullptr;
+    }
+
+    cnr3_trace_live_cache_hit_return(data, n);
+
+    return returned_cache_ref.transfer_to_caller();
+}
+
 const VSFrame* cnr3_get_frame_live_predecessor_present_compute(
     int n,
     int activation_reason,
@@ -461,13 +652,14 @@ const VSFrame* cnr3_get_frame_live_predecessor_present_compute(
             return nullptr;
         }
 
+        request_data->branch = Cnr3LiveGetFrameBranch::predecessor_present_compute;
         request_data->requested_frame = n;
         request_data->predecessor_frame = n - 1;
         *frame_data = request_data;
 
         const Cnr3Status pin_status = data.output_cache.lookup_frame_and_record_pin(
             request_data->predecessor_frame,
-            request_data->predecessor_pin_list
+            request_data->pin_list
         );
 
         if (!cnr3_status_is_ok(pin_status)) {
@@ -505,7 +697,7 @@ const VSFrame* cnr3_get_frame_live_predecessor_present_compute(
         request_data->predecessor_frame != n - 1 ||
         !request_data->source_requested ||
         !request_data->predecessor_pin_taken ||
-        request_data->predecessor_pin_list.pin_count() != 1U) {
+        request_data->pin_list.pin_count() != 1U) {
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -647,55 +839,15 @@ const VSFrame* cnr3_get_frame_live_predecessor_present_compute(
     return output_frame;
 }
 
-const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
+const VSFrame* cnr3_get_frame_live_frame0_fresh_start(
     int n,
     int activation_reason,
-    void* instance_data,
+    Cnr3FilterData& data,
     void** frame_data,
     VSFrameContext* frame_ctx,
     VSCore* core,
     const VSAPI* vsapi
 ) {
-    Cnr3FilterData* data = static_cast<Cnr3FilterData*>(instance_data);
-
-    if (data == nullptr || data->source == nullptr || frame_data == nullptr || core == nullptr || vsapi == nullptr) {
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 K.1E.3 sequential proof: invalid getFrame state."
-        );
-        return nullptr;
-    }
-
-    if (n > 2) {
-        if (activation_reason == arInitial) {
-            cnr3_trace_live_after_frame2_not_yet_implemented(*data, n);
-            cnr3_set_filter_error(
-                frame_ctx,
-                vsapi,
-                "CNR3 K.1E.3 sequential proof: frames after 2 are not implemented before recovery wiring."
-            );
-        }
-
-        if (activation_reason == arError || activation_reason == arAllFramesReady) {
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
-        }
-
-        return nullptr;
-    }
-
-    if (n == 1 || n == 2) {
-        return cnr3_get_frame_live_predecessor_present_compute(
-            n,
-            activation_reason,
-            *data,
-            frame_data,
-            frame_ctx,
-            core,
-            vsapi
-        );
-    }
-
     if (activation_reason == arInitial) {
         if (*frame_data != nullptr) {
             cnr3_set_filter_error(
@@ -718,11 +870,12 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
             return nullptr;
         }
 
+        request_data->branch = Cnr3LiveGetFrameBranch::frame0_fresh_start;
         request_data->requested_frame = n;
         request_data->source_requested = true;
         *frame_data = request_data;
 
-        vsapi->requestFrameFilter(n, data->source, frame_ctx);
+        vsapi->requestFrameFilter(n, data.source, frame_ctx);
 
         return nullptr;
     }
@@ -732,9 +885,10 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
             static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
 
         if (request_data == nullptr ||
+            request_data->branch != Cnr3LiveGetFrameBranch::frame0_fresh_start ||
             request_data->requested_frame != n ||
             !request_data->source_requested) {
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -743,10 +897,10 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
             return nullptr;
         }
 
-        const VSFrame* source_frame = vsapi->getFrameFilter(n, data->source, frame_ctx);
+        const VSFrame* source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
 
         if (source_frame == nullptr) {
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -759,7 +913,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
 
         if (output_frame == nullptr) {
             vsapi->freeFrame(source_frame);
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -770,7 +924,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
 
         if (output_frame == source_frame) {
             vsapi->freeFrame(output_frame);
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -786,7 +940,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
 
         if (cache_frame_ref == nullptr) {
             vsapi->freeFrame(output_frame);
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -804,7 +958,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
         if (!cnr3_status_is_ok(adopt_status)) {
             vsapi->freeFrame(cache_frame_ref);
             vsapi->freeFrame(output_frame);
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -813,14 +967,14 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
             return nullptr;
         }
 
-        const Cnr3Status store_status = data->output_cache.store_checkpoint_owned_frame(
+        const Cnr3Status store_status = data.output_cache.store_checkpoint_owned_frame(
             0,
             std::move(cache_owned_frame)
         );
 
         if (!cnr3_live_store_status_allows_return(store_status)) {
             vsapi->freeFrame(output_frame);
-            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -830,7 +984,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
         }
 
         cnr3_trace_live_frame0_fresh_start(
-            *data,
+            data,
             n,
             true,
             true,
@@ -839,7 +993,7 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
             true
         );
 
-        (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
 
         /*
             CMS07-K.1D frame-0 only: copyFrame(source[0]) produces the first
@@ -854,11 +1008,141 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1e3_proof(
     }
 
     if (activation_reason == arError) {
-        (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         return nullptr;
     }
 
     return nullptr;
+}
+
+const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1f_proof(
+    int n,
+    int activation_reason,
+    void* instance_data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    VSCore* core,
+    const VSAPI* vsapi
+) {
+    Cnr3FilterData* data = static_cast<Cnr3FilterData*>(instance_data);
+
+    if (data == nullptr || data->source == nullptr || frame_data == nullptr || core == nullptr || vsapi == nullptr) {
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: invalid getFrame state."
+        );
+        return nullptr;
+    }
+
+    if (activation_reason == arError) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+        return nullptr;
+    }
+
+    if (activation_reason == arAllFramesReady) {
+        Cnr3LiveGetFrameFrameData* request_data =
+            static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
+
+        if (request_data == nullptr) {
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1F cache-hit proof: missing frameData at arAllFramesReady."
+            );
+            return nullptr;
+        }
+
+        switch (request_data->branch) {
+        case Cnr3LiveGetFrameBranch::cache_hit_return:
+            return cnr3_get_frame_live_cache_hit_return(
+                n,
+                *data,
+                frame_data,
+                frame_ctx,
+                vsapi
+            );
+        case Cnr3LiveGetFrameBranch::predecessor_present_compute:
+            return cnr3_get_frame_live_predecessor_present_compute(
+                n,
+                activation_reason,
+                *data,
+                frame_data,
+                frame_ctx,
+                core,
+                vsapi
+            );
+        case Cnr3LiveGetFrameBranch::frame0_fresh_start:
+            return cnr3_get_frame_live_frame0_fresh_start(
+                n,
+                activation_reason,
+                *data,
+                frame_data,
+                frame_ctx,
+                core,
+                vsapi
+            );
+        case Cnr3LiveGetFrameBranch::none:
+        default:
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data->output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 K.1F cache-hit proof: unknown frameData branch at arAllFramesReady."
+            );
+            return nullptr;
+        }
+    }
+
+    if (activation_reason != arInitial) {
+        return nullptr;
+    }
+
+    const Cnr3LiveCacheHitStartResult cache_hit_start =
+        cnr3_try_start_live_cache_hit_return(
+            n,
+            *data,
+            frame_data,
+            frame_ctx,
+            vsapi
+        );
+
+    if (cache_hit_start == Cnr3LiveCacheHitStartResult::started ||
+        cache_hit_start == Cnr3LiveCacheHitStartResult::failed) {
+        return nullptr;
+    }
+
+    if (n > 2) {
+        cnr3_trace_live_after_frame2_not_yet_implemented(*data, n);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1F cache-hit proof: frames after 2 are not implemented before recovery wiring."
+        );
+        return nullptr;
+    }
+
+    if (n == 1 || n == 2) {
+        return cnr3_get_frame_live_predecessor_present_compute(
+            n,
+            activation_reason,
+            *data,
+            frame_data,
+            frame_ctx,
+            core,
+            vsapi
+        );
+    }
+
+    return cnr3_get_frame_live_frame0_fresh_start(
+        n,
+        activation_reason,
+        *data,
+        frame_data,
+        frame_ctx,
+        core,
+        vsapi
+    );
 }
 
 void VS_CC cnr3_free_filter(
@@ -954,7 +1238,7 @@ void VS_CC cnr3_create_filter(
         out,
         "CNR3",
         &data->video_info,
-        cnr3_get_frame_keystone_live_k1e3_proof,
+        cnr3_get_frame_keystone_live_k1f_proof,
         cnr3_free_filter,
         fmUnordered,
         dependencies,

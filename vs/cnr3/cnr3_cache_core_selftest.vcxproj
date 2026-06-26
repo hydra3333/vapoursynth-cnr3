@@ -35,6 +35,7 @@
     <ClInclude Include="..\..\src\cnr3_diagnostics.h" />
     <ClInclude Include="..\..\src\cnr3_frame_processing.h" />
     <ClInclude Include="..\..\src\cnr3_owned_frame_ref.h" />
+    <ClInclude Include="..\..\src\cnr3_plugin_internal.h" />
     <ClInclude Include="..\..\src\cnr3_response_tables.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VapourSynth4.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h" />

@@ -64,5 +64,8 @@
     <ClInclude Include="..\..\src\cnr3_frame_processing.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_plugin_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

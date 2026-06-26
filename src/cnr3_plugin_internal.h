@@ -1,0 +1,175 @@
+/*
+    CNR3 private VapourSynth plugin-integration declarations.
+
+    This header is intentionally private to the VapourSynth plugin translation
+    units. It carries live getFrame frameData, branch tags, and helper
+    declarations that must be shared after splitting vapoursynth-Cnr3.cpp.
+
+    Cache algorithms, prune policy, hot-zone mechanics, and pixel loops remain
+    in their own layers; this file only describes plugin-side integration state.
+
+    SPDX-License-Identifier: AGPL-3.0-or-later
+*/
+
+#pragma once
+
+#include "cnr3_cache_core.h"
+#include "cnr3_common.h"
+#include "cnr3_frame_processing.h"
+#include "cnr3_instance_config.h"
+#include "cnr3_owned_frame_ref.h"
+#include "cnr3_response_tables.h"
+
+#include "VapourSynth4.h"
+
+struct Cnr3FilterData {
+    VSNode* source = nullptr;
+    VSVideoInfo video_info{};
+    Cnr3InstanceConfig config{};
+    Cnr3OutputCacheCore output_cache{};
+    Cnr3ResponseTables response_tables{};
+    int bits_per_sample = 0;
+    int sub_sampling_w = -1;
+    int sub_sampling_h = -1;
+};
+
+enum class Cnr3LiveGetFrameBranch {
+    none,
+    cache_hit_return,
+    frame0_fresh_start,
+    predecessor_present_compute
+};
+
+struct Cnr3LiveGetFrameFrameData {
+    Cnr3LiveGetFrameBranch branch = Cnr3LiveGetFrameBranch::none;
+    int requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    int predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
+    bool source_requested = false;
+    bool predecessor_pin_taken = false;
+    bool cache_hit_pin_taken = false;
+    Cnr3CachePinList pin_list{};
+};
+
+enum class Cnr3LiveCacheHitStartResult {
+    miss,
+    started,
+    failed
+};
+
+void cnr3_set_filter_error(
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi,
+    const char* message
+) noexcept;
+
+Cnr3Status cnr3_discard_frame_data_with_cache(
+    void** frame_data,
+    Cnr3OutputCacheCore& output_cache
+) noexcept;
+
+bool cnr3_live_store_status_allows_return(
+    Cnr3Status status
+) noexcept;
+
+Cnr3Status cnr3_store_live_output_frame_for_return(
+    Cnr3FilterData& data,
+    int frame_number,
+    VSFrame* output_frame,
+    const VSAPI* vsapi
+) noexcept;
+
+void cnr3_trace_live_frame0_fresh_start(
+    const Cnr3FilterData& data,
+    int requested_frame,
+    bool source_requested,
+    bool source_retrieved,
+    bool copy_frame_succeeded,
+    const char* store_status_name,
+    bool frame_returned
+) noexcept;
+
+void cnr3_trace_live_predecessor_present_compute(
+    const Cnr3FilterData& data,
+    int requested_frame,
+    int predecessor_frame,
+    Cnr3Status store_status,
+    const Cnr3CallerSuppliedFrameProcessSummary& process_summary
+) noexcept;
+
+void cnr3_trace_live_cache_hit_return(
+    const Cnr3FilterData& data,
+    int requested_frame
+) noexcept;
+
+void cnr3_trace_live_after_frame2_not_yet_implemented(
+    const Cnr3FilterData& data,
+    int requested_frame
+) noexcept;
+
+Cnr3LiveCacheHitStartResult cnr3_try_start_live_cache_hit_return(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_start_live_predecessor_present_compute(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_start_live_frame0_fresh_start(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_get_frame_live_cache_hit_return(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_complete_live_predecessor_present_compute(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    VSCore* core,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_complete_live_frame0_fresh_start(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    VSCore* core,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_arInitial(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    VSCore* core,
+    const VSAPI* vsapi
+);
+
+const VSFrame* cnr3_arAllFramesReady(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    VSCore* core,
+    const VSAPI* vsapi
+);

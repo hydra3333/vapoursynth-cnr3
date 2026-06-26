@@ -45,6 +45,12 @@
     <ClCompile Include="..\..\src\cnr3_diagnostics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_arAllFramesReady.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_arInitial.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\third_party\vapoursynth\include\VapourSynth4.h">
@@ -84,6 +90,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\cnr3_diagnostics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_plugin_internal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

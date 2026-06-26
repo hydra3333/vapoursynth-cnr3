@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\src\cnr3_arAllFramesReady.cpp" />
+    <ClCompile Include="..\..\src\cnr3_arInitial.cpp" />
     <ClCompile Include="..\..\src\cnr3_cache_core.cpp" />
     <ClCompile Include="..\..\src\cnr3_cache_core_selftest.cpp" />
     <ClCompile Include="..\..\src\cnr3_cache_diagnostics.cpp" />
@@ -44,6 +46,7 @@
     <ClInclude Include="..\..\src\cnr3_instance_config.h" />
     <ClInclude Include="..\..\src\cnr3_memory_diagnostics.h" />
     <ClInclude Include="..\..\src\cnr3_owned_frame_ref.h" />
+    <ClInclude Include="..\..\src\cnr3_plugin_internal.h" />
     <ClInclude Include="..\..\src\cnr3_response_tables.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VapourSynth4.h" />
     <ClInclude Include="..\..\third_party\vapoursynth\include\VSHelper4.h" />

@@ -12,63 +12,41 @@
 #include "cnr3_plugin_internal.h"
 
 #include <new>
+#include <utility>
 
-Cnr3LiveCacheHitStartResult cnr3_try_start_live_cache_hit_return(
+namespace {
+
+void cnr3_delete_unpublished_frame_data(
+    Cnr3LiveGetFrameFrameData* request_data,
+    Cnr3OutputCacheCore& output_cache
+) noexcept {
+    if (request_data == nullptr) {
+        return;
+    }
+
+    (void)request_data->pin_list.discharge_all(output_cache);
+    delete request_data;
+}
+
+const VSFrame* cnr3_publish_live_cache_hit_return(
     int n,
     Cnr3FilterData& data,
+    Cnr3LiveGetFrameFrameData* request_data,
     void** frame_data,
     VSFrameContext* frame_ctx,
     const VSAPI* vsapi
 ) {
-    if (*frame_data != nullptr) {
+    if (request_data == nullptr || frame_data == nullptr || *frame_data != nullptr) {
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1F cache-hit proof: frameData was unexpectedly non-null at arInitial."
+            "CNR3 D.1 recovery proof: invalid cache-hit frameData publication."
         );
-        return Cnr3LiveCacheHitStartResult::failed;
-    }
-
-    Cnr3LiveGetFrameFrameData* request_data =
-        new (std::nothrow) Cnr3LiveGetFrameFrameData{};
-
-    if (request_data == nullptr) {
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 K.1F cache-hit proof: failed to allocate frameData."
-        );
-        return Cnr3LiveCacheHitStartResult::failed;
+        return nullptr;
     }
 
     request_data->branch = Cnr3LiveGetFrameBranch::cache_hit_return;
     request_data->requested_frame = n;
-
-    /*
-        K.1F cache-hit branch-b: present output[N] is a plan-time fact
-        made at arInitial and acted on at arAllFramesReady. Pin it now so
-        prune cannot evict the cached frame across the activation gap.
-    */
-    const Cnr3Status pin_status = data.output_cache.lookup_frame_and_record_pin(
-        n,
-        request_data->pin_list
-    );
-
-    if (pin_status == Cnr3Status::not_found) {
-        delete request_data;
-        return Cnr3LiveCacheHitStartResult::miss;
-    }
-
-    if (!cnr3_status_is_ok(pin_status)) {
-        delete request_data;
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 K.1F cache-hit proof: failed to pin cached output[N]."
-        );
-        return Cnr3LiveCacheHitStartResult::failed;
-    }
-
     request_data->cache_hit_pin_taken = true;
     request_data->source_requested = true;
     *frame_data = request_data;
@@ -80,88 +58,54 @@ Cnr3LiveCacheHitStartResult cnr3_try_start_live_cache_hit_return(
     */
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
 
-    return Cnr3LiveCacheHitStartResult::started;
+    return nullptr;
 }
 
-const VSFrame* cnr3_start_live_predecessor_present_compute(
+const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predecessor(
     int n,
     Cnr3FilterData& data,
+    Cnr3LiveGetFrameFrameData* request_data,
     void** frame_data,
     VSFrameContext* frame_ctx,
     const VSAPI* vsapi
 ) {
-    if (*frame_data != nullptr) {
+    if (request_data == nullptr ||
+        frame_data == nullptr ||
+        *frame_data != nullptr ||
+        request_data->predecessor_frame != n - 1 ||
+        !request_data->predecessor_pin_taken ||
+        request_data->pin_list.pin_count() != 1U) {
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.3 sequential proof: frameData was unexpectedly non-null at arInitial."
-        );
-        return nullptr;
-    }
-
-    Cnr3LiveGetFrameFrameData* request_data =
-        new (std::nothrow) Cnr3LiveGetFrameFrameData{};
-
-    if (request_data == nullptr) {
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 K.1E.3 sequential proof: failed to allocate frameData."
+            "CNR3 D.1 recovery proof: invalid predecessor-present pinned start."
         );
         return nullptr;
     }
 
     request_data->branch = Cnr3LiveGetFrameBranch::predecessor_present_compute;
     request_data->requested_frame = n;
-    request_data->predecessor_frame = n - 1;
-    *frame_data = request_data;
-
-    const Cnr3Status pin_status = data.output_cache.lookup_frame_and_record_pin(
-        request_data->predecessor_frame,
-        request_data->pin_list
-    );
-
-    if (!cnr3_status_is_ok(pin_status)) {
-        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 K.1E.3 sequential proof: cached predecessor output[N-1] was not available."
-        );
-        return nullptr;
-    }
-
-    request_data->predecessor_pin_taken = true;
     request_data->source_requested = true;
+    *frame_data = request_data;
 
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
 
     return nullptr;
 }
-const VSFrame* cnr3_start_live_frame0_fresh_start(
+
+const VSFrame* cnr3_publish_live_frame0_fresh_start(
     int n,
     Cnr3FilterData& data,
+    Cnr3LiveGetFrameFrameData* request_data,
     void** frame_data,
     VSFrameContext* frame_ctx,
     const VSAPI* vsapi
 ) {
-    if (*frame_data != nullptr) {
+    if (request_data == nullptr || frame_data == nullptr || *frame_data != nullptr) {
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1D frame-0 proof: frameData was unexpectedly non-null at arInitial."
-        );
-        return nullptr;
-    }
-
-    Cnr3LiveGetFrameFrameData* request_data =
-        new (std::nothrow) Cnr3LiveGetFrameFrameData{};
-
-    if (request_data == nullptr) {
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 K.1D frame-0 proof: failed to allocate frameData."
+            "CNR3 D.1 recovery proof: invalid frame-0 frameData publication."
         );
         return nullptr;
     }
@@ -175,6 +119,140 @@ const VSFrame* cnr3_start_live_frame0_fresh_start(
 
     return nullptr;
 }
+
+bool cnr3_d1_recovery_plan_is_accepted(
+    int n,
+    const Cnr3CacheRecoverySearchPlan& plan
+) noexcept {
+    if (!plan.anchor_found || !plan.anchor_pin_recorded) {
+        return false;
+    }
+
+    const std::size_t hole_count = plan.hole_frame_numbers.size();
+
+    return
+        (hole_count == 1U && plan.anchor_frame_number == n - 2) ||
+        (hole_count == 0U && plan.anchor_frame_number == n - 1);
+}
+
+Cnr3Status cnr3_fill_recovery_source_request_numbers(
+    int n,
+    Cnr3LiveGetFrameFrameData& request_data
+) {
+    request_data.source_request_frame_numbers.clear();
+
+    const std::size_t request_count =
+        request_data.recovery_plan.hole_frame_numbers.size() + 1U;
+
+    try {
+        request_data.source_request_frame_numbers.reserve(request_count);
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
+
+    for (const int hole_frame : request_data.recovery_plan.hole_frame_numbers) {
+        request_data.source_request_frame_numbers.push_back(hole_frame);
+    }
+
+    request_data.source_request_frame_numbers.push_back(n);
+
+    return Cnr3Status::ok;
+}
+
+const VSFrame* cnr3_start_live_recovery(
+    int n,
+    Cnr3FilterData& data,
+    Cnr3LiveGetFrameFrameData* request_data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    const VSAPI* vsapi
+) {
+    if (request_data == nullptr || frame_data == nullptr || *frame_data != nullptr) {
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: invalid recovery frameData start."
+        );
+        return nullptr;
+    }
+
+    Cnr3CacheRecoverySearchPlan recovery_plan{};
+    const Cnr3Status plan_status =
+        data.output_cache.plan_bounded_recovery_search_and_record_anchor_pin(
+            n,
+            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+            request_data->pin_list,
+            recovery_plan
+        );
+
+    if (!cnr3_status_is_ok(plan_status)) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: bounded recovery plan failed."
+        );
+        return nullptr;
+    }
+
+    if (!cnr3_d1_recovery_plan_is_accepted(n, recovery_plan)) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_trace_live_after_frame2_not_yet_implemented(data, n);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: recovery plan is outside the single-hole exact-anchor scope."
+        );
+        return nullptr;
+    }
+
+    request_data->branch = Cnr3LiveGetFrameBranch::recovery;
+    request_data->requested_frame = n;
+    request_data->predecessor_frame = n - 1;
+    request_data->recovery_plan = std::move(recovery_plan);
+
+    const Cnr3Status source_plan_status =
+        cnr3_fill_recovery_source_request_numbers(n, *request_data);
+
+    if (!cnr3_status_is_ok(source_plan_status)) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed to derive recovery source request set."
+        );
+        return nullptr;
+    }
+
+    try {
+        request_data->per_hole_outcomes.assign(
+            request_data->recovery_plan.hole_frame_numbers.size(),
+            Cnr3LiveRecoveryHoleOutcome::none
+        );
+    }
+    catch (const std::bad_alloc&) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed to allocate per-hole outcome state."
+        );
+        return nullptr;
+    }
+
+    request_data->source_requested = true;
+    *frame_data = request_data;
+
+    for (const int source_frame_number : request_data->source_request_frame_numbers) {
+        vsapi->requestFrameFilter(source_frame_number, data.source, frame_ctx);
+    }
+
+    return nullptr;
+}
+
+} // namespace
+
 const VSFrame* cnr3_arInitial(
     int n,
     Cnr3FilterData& data,
@@ -185,43 +263,106 @@ const VSFrame* cnr3_arInitial(
 ) {
     (void)core;
 
-    const Cnr3LiveCacheHitStartResult cache_hit_start =
-        cnr3_try_start_live_cache_hit_return(
-            n,
-            data,
-            frame_data,
-            frame_ctx,
-            vsapi
-        );
-
-    if (cache_hit_start == Cnr3LiveCacheHitStartResult::started ||
-        cache_hit_start == Cnr3LiveCacheHitStartResult::failed) {
-        return nullptr;
-    }
-
-    if (n > 2) {
-        cnr3_trace_live_after_frame2_not_yet_implemented(data, n);
+    if (frame_data == nullptr || *frame_data != nullptr) {
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1F cache-hit proof: frames after 2 are not implemented before recovery wiring."
+            "CNR3 D.1 recovery proof: frameData was unexpectedly non-null at arInitial."
         );
         return nullptr;
     }
 
-    if (n == 1 || n == 2) {
-        return cnr3_start_live_predecessor_present_compute(
+    Cnr3LiveGetFrameFrameData* request_data =
+        new (std::nothrow) Cnr3LiveGetFrameFrameData{};
+
+    if (request_data == nullptr) {
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed to allocate frameData."
+        );
+        return nullptr;
+    }
+
+    /*
+        A-safe-1 route step 1: a present output[N] is selected only by an
+        atomic find-and-pin that also records the pin for the activation gap.
+    */
+    const Cnr3Status cache_hit_pin_status =
+        data.output_cache.lookup_frame_and_record_pin(n, request_data->pin_list);
+
+    if (cnr3_status_is_ok(cache_hit_pin_status)) {
+        return cnr3_publish_live_cache_hit_return(
             n,
             data,
+            request_data,
             frame_data,
             frame_ctx,
             vsapi
         );
     }
 
-    return cnr3_start_live_frame0_fresh_start(
+    if (cache_hit_pin_status != Cnr3Status::not_found) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed during cache-hit pin attempt."
+        );
+        return nullptr;
+    }
+
+    if (n == 0) {
+        return cnr3_publish_live_frame0_fresh_start(
+            n,
+            data,
+            request_data,
+            frame_data,
+            frame_ctx,
+            vsapi
+        );
+    }
+
+    request_data->predecessor_frame = n - 1;
+
+    /*
+        A-safe-1 route step 3: branch-c is entered only after this atomic
+        predecessor find-and-pin succeeds. A miss is only a routing opportunity
+        for branch-d recovery, never a durable cache-state fact.
+    */
+    const Cnr3Status predecessor_pin_status =
+        data.output_cache.lookup_frame_and_record_pin(
+            request_data->predecessor_frame,
+            request_data->pin_list
+        );
+
+    if (cnr3_status_is_ok(predecessor_pin_status)) {
+        request_data->predecessor_pin_taken = true;
+
+        return cnr3_publish_live_predecessor_present_compute_from_pinned_predecessor(
+            n,
+            data,
+            request_data,
+            frame_data,
+            frame_ctx,
+            vsapi
+        );
+    }
+
+    if (predecessor_pin_status != Cnr3Status::not_found) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed during predecessor pin attempt."
+        );
+        return nullptr;
+    }
+
+    return cnr3_start_live_recovery(
         n,
         data,
+        request_data,
         frame_data,
         frame_ctx,
         vsapi

@@ -11,7 +11,9 @@
 #include "cnr3_build_config.h"
 #include "cnr3_plugin_internal.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <string>
 #include <utility>
 
 /*
@@ -140,6 +142,130 @@ void cnr3_trace_live_after_frame2_not_yet_implemented(
 #endif
 }
 
+
+const char* cnr3_live_recovery_hole_outcome_name(
+    Cnr3LiveRecoveryHoleOutcome outcome
+) noexcept {
+    switch (outcome) {
+    case Cnr3LiveRecoveryHoleOutcome::computed:
+        return "computed";
+    case Cnr3LiveRecoveryHoleOutcome::adopted_skipped:
+        return "adopted-skipped";
+    case Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser:
+        return "adopted-post-compute-loser";
+    case Cnr3LiveRecoveryHoleOutcome::none:
+    default:
+        return "none";
+    }
+}
+
+std::string cnr3_join_frame_numbers_for_kdt(
+    const std::vector<int>& frame_numbers
+) {
+    std::string joined{"["};
+
+    for (std::size_t i = 0U; i < frame_numbers.size(); ++i) {
+        if (i != 0U) {
+            joined += ",";
+        }
+
+        joined += std::to_string(frame_numbers[i]);
+    }
+
+    joined += "]";
+    return joined;
+}
+
+bool cnr3_live_recovery_source_was_requested(
+    const Cnr3LiveGetFrameFrameData& request_data,
+    int source_frame_number
+) noexcept {
+    return std::find(
+        request_data.source_request_frame_numbers.begin(),
+        request_data.source_request_frame_numbers.end(),
+        source_frame_number
+    ) != request_data.source_request_frame_numbers.end();
+}
+
+void cnr3_trace_live_recovery(
+    const Cnr3FilterData& data,
+    int requested_frame,
+    const Cnr3CacheRecoverySearchPlan& recovery_plan,
+    const std::vector<int>& source_request_frame_numbers,
+    const std::vector<Cnr3LiveRecoveryHoleOutcome>& per_hole_outcomes,
+    std::size_t pin_list_size_before_discharge,
+    const Cnr3CallerSuppliedFrameProcessSummary& target_process_summary
+) noexcept {
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+    const std::string holes_text =
+        cnr3_join_frame_numbers_for_kdt(recovery_plan.hole_frame_numbers);
+    const std::string source_requests_text =
+        cnr3_join_frame_numbers_for_kdt(source_request_frame_numbers);
+
+    std::string per_hole_text{};
+
+    for (std::size_t i = 0U; i < recovery_plan.hole_frame_numbers.size(); ++i) {
+        if (!per_hole_text.empty()) {
+            per_hole_text += " ";
+        }
+
+        const Cnr3LiveRecoveryHoleOutcome outcome =
+            (i < per_hole_outcomes.size())
+            ? per_hole_outcomes[i]
+            : Cnr3LiveRecoveryHoleOutcome::none;
+
+        per_hole_text += "hole=";
+        per_hole_text += std::to_string(recovery_plan.hole_frame_numbers[i]);
+        per_hole_text += " outcome=";
+        per_hole_text += cnr3_live_recovery_hole_outcome_name(outcome);
+    }
+
+    if (per_hole_text.empty()) {
+        per_hole_text = "hole=none outcome=none";
+    }
+
+    std::fprintf(
+        stderr,
+        "[KDT] instance=%d N=%d branch=RECOVER recover_branch=exact-anchor "
+        "anchor=%d hole_count=%zu holes=%s source_requests=%s %s "
+        "pixel_compute=%d p11b_called=%d p11c_called=0 scene_change_deferred=1 "
+        "anchor_pin_taken=%d pin_list_size=%zu pin_balance=0 "
+        "returned_ref_added=1 return_transferred=1 "
+        "frame_processed=%d luma_samples_copied=%d "
+        "chroma_u_samples_processed=%d chroma_v_samples_processed=%d "
+        "first_u_output_sample=%d last_u_output_sample=%d "
+        "first_v_output_sample=%d last_v_output_sample=%d\n",
+        data.config.instance_id.value,
+        requested_frame,
+        recovery_plan.anchor_frame_number,
+        recovery_plan.hole_frame_numbers.size(),
+        holes_text.c_str(),
+        source_requests_text.c_str(),
+        per_hole_text.c_str(),
+        target_process_summary.frame_processed ? 1 : 0,
+        target_process_summary.frame_processed ? 1 : 0,
+        recovery_plan.anchor_pin_recorded ? 1 : 0,
+        pin_list_size_before_discharge,
+        target_process_summary.frame_processed ? 1 : 0,
+        target_process_summary.luma_samples_copied,
+        target_process_summary.chroma_u_samples_processed,
+        target_process_summary.chroma_v_samples_processed,
+        target_process_summary.first_u_output_sample,
+        target_process_summary.last_u_output_sample,
+        target_process_summary.first_v_output_sample,
+        target_process_summary.last_v_output_sample
+    );
+#else
+    (void)data;
+    (void)requested_frame;
+    (void)recovery_plan;
+    (void)source_request_frame_numbers;
+    (void)per_hole_outcomes;
+    (void)pin_list_size_before_discharge;
+    (void)target_process_summary;
+#endif
+}
+
 Cnr3Status cnr3_discard_frame_data_with_cache(
     void** frame_data,
     Cnr3OutputCacheCore& output_cache
@@ -221,6 +347,72 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
         frame_number,
         std::move(cache_owned_frame)
     );
+}
+
+
+Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
+    Cnr3FilterData& data,
+    int frame_number,
+    VSFrame* output_frame,
+    const VSAPI* vsapi,
+    const VSFrame*& out_return_frame,
+    Cnr3Status& out_store_status,
+    bool& out_returned_cached_winner
+) noexcept {
+    out_return_frame = nullptr;
+    out_store_status = Cnr3Status::invariant_violation;
+    out_returned_cached_winner = false;
+
+    if (output_frame == nullptr || vsapi == nullptr) {
+        if (output_frame != nullptr && vsapi != nullptr) {
+            vsapi->freeFrame(output_frame);
+        }
+
+        out_store_status = Cnr3Status::invalid_argument;
+        return out_store_status;
+    }
+
+    out_store_status = cnr3_store_live_output_frame_for_return(
+        data,
+        frame_number,
+        output_frame,
+        vsapi
+    );
+
+    if (out_store_status == Cnr3Status::ok) {
+        out_return_frame = output_frame;
+        return Cnr3Status::ok;
+    }
+
+    if (out_store_status != Cnr3Status::duplicate) {
+        vsapi->freeFrame(output_frame);
+        return out_store_status;
+    }
+
+    /*
+        A duplicate target store means another activation's first-in-best-
+        dressed output[N] is authoritative. Discard this activation's computed
+        loser and return a fresh reference to the cached winner instead.
+    */
+    vsapi->freeFrame(output_frame);
+    output_frame = nullptr;
+
+    Cnr3OwnedFrameRef cached_winner_ref{};
+    const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
+        frame_number,
+        vsapi,
+        cached_winner_ref
+    );
+
+    if (!cnr3_status_is_ok(lookup_status) || !cached_winner_ref.has_frame()) {
+        return !cnr3_status_is_ok(lookup_status)
+            ? lookup_status
+            : Cnr3Status::invariant_violation;
+    }
+
+    out_returned_cached_winner = true;
+    out_return_frame = cached_winner_ref.transfer_to_caller();
+    return Cnr3Status::ok;
 }
 
 const VSFrame* cnr3_get_frame_live_cache_hit_return(
@@ -418,25 +610,33 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         return nullptr;
     }
 
-    const Cnr3Status store_status = cnr3_store_live_output_frame_for_return(
-        data,
-        n,
-        output_frame,
-        vsapi
-    );
+    const VSFrame* return_frame = nullptr;
+    Cnr3Status store_status = Cnr3Status::invariant_violation;
+    bool returned_cached_winner = false;
+    const Cnr3Status return_status =
+        cnr3_store_live_output_frame_for_authoritative_return(
+            data,
+            n,
+            output_frame,
+            vsapi,
+            return_frame,
+            store_status,
+            returned_cached_winner
+        );
+    output_frame = nullptr;
 
-    if (!cnr3_live_store_status_allows_return(store_status)) {
-        vsapi->freeFrame(output_frame);
+    if (!cnr3_status_is_ok(return_status) || return_frame == nullptr) {
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.3 sequential proof: failed to production-store output[N]."
+            "CNR3 K.1E.3 sequential proof: failed to store/return authoritative output[N]."
         );
         return nullptr;
     }
 
     const int predecessor_frame_for_trace = request_data->predecessor_frame;
+    (void)returned_cached_winner;
 
     const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
         frame_data,
@@ -444,7 +644,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     );
 
     if (!cnr3_status_is_ok(discard_status)) {
-        vsapi->freeFrame(output_frame);
+        vsapi->freeFrame(return_frame);
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -461,8 +661,378 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         process_summary
     );
 
-    return output_frame;
+    return return_frame;
 }
+const VSFrame* cnr3_complete_live_recovery(
+    int n,
+    Cnr3FilterData& data,
+    void** frame_data,
+    VSFrameContext* frame_ctx,
+    VSCore* core,
+    const VSAPI* vsapi
+) {
+    Cnr3LiveGetFrameFrameData* request_data =
+        static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
+
+    if (request_data == nullptr ||
+        request_data->branch != Cnr3LiveGetFrameBranch::recovery ||
+        request_data->requested_frame != n ||
+        !request_data->source_requested ||
+        !request_data->recovery_plan.anchor_found ||
+        !request_data->recovery_plan.anchor_pin_recorded ||
+        request_data->recovery_plan.requested_frame != n ||
+        request_data->pin_list.pin_count() == 0U ||
+        request_data->per_hole_outcomes.size() !=
+            request_data->recovery_plan.hole_frame_numbers.size()) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: invalid recovery frameData lifecycle."
+        );
+        return nullptr;
+    }
+
+    const Cnr3CacheRecoverySearchPlan& recovery_plan = request_data->recovery_plan;
+
+    for (std::size_t hole_index = 0U;
+        hole_index < recovery_plan.hole_frame_numbers.size();
+        ++hole_index
+        ) {
+        const int hole_frame = recovery_plan.hole_frame_numbers[hole_index];
+
+        if (!cnr3_live_recovery_source_was_requested(*request_data, hole_frame)) {
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: hole source was not requested at arInitial."
+            );
+            return nullptr;
+        }
+
+        const Cnr3Status adopt_status = data.output_cache.lookup_frame_and_record_pin(
+            hole_frame,
+            request_data->pin_list
+        );
+
+        if (cnr3_status_is_ok(adopt_status)) {
+            request_data->per_hole_outcomes[hole_index] =
+                Cnr3LiveRecoveryHoleOutcome::adopted_skipped;
+            continue;
+        }
+
+        if (adopt_status != Cnr3Status::not_found) {
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: pre-compute hole adopt-and-skip lookup failed."
+            );
+            return nullptr;
+        }
+
+        Cnr3OwnedFrameRef predecessor_compute_ref{};
+        const Cnr3Status predecessor_status = data.output_cache.lookup_frame_and_add_ref(
+            hole_frame - 1,
+            vsapi,
+            predecessor_compute_ref
+        );
+
+        if (!cnr3_status_is_ok(predecessor_status) ||
+            !predecessor_compute_ref.has_frame()) {
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: failed to acquire hole predecessor compute reference."
+            );
+            return nullptr;
+        }
+
+        const VSFrame* source_frame = vsapi->getFrameFilter(
+            hole_frame,
+            data.source,
+            frame_ctx
+        );
+
+        if (source_frame == nullptr) {
+            predecessor_compute_ref.reset();
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: hole source frame retrieval failed."
+            );
+            return nullptr;
+        }
+
+        VSFrame* hole_output_frame = vsapi->copyFrame(source_frame, core);
+
+        if (hole_output_frame == nullptr) {
+            predecessor_compute_ref.reset();
+            vsapi->freeFrame(source_frame);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: hole copyFrame failed."
+            );
+            return nullptr;
+        }
+
+        if (hole_output_frame == source_frame) {
+            predecessor_compute_ref.reset();
+            vsapi->freeFrame(hole_output_frame);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: hole copyFrame returned the source frame alias."
+            );
+            return nullptr;
+        }
+
+        Cnr3CallerSuppliedFrameProcessSummary hole_process_summary{};
+        const Cnr3Status hole_process_status =
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+                source_frame,
+                predecessor_compute_ref.get(),
+                hole_output_frame,
+                vsapi,
+                data.bits_per_sample,
+                data.sub_sampling_w,
+                data.sub_sampling_h,
+                data.response_tables,
+                hole_process_summary
+            );
+
+        predecessor_compute_ref.reset();
+        vsapi->freeFrame(source_frame);
+        source_frame = nullptr;
+
+        if (!cnr3_status_is_ok(hole_process_status) ||
+            !hole_process_summary.frame_processed) {
+            vsapi->freeFrame(hole_output_frame);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: P.11B hole processing failed."
+            );
+            return nullptr;
+        }
+
+        Cnr3OwnedFrameRef hole_owned_frame{};
+        const Cnr3Status adopt_hole_status = hole_owned_frame.reset_to_owned_frame(
+            hole_output_frame,
+            vsapi
+        );
+
+        if (!cnr3_status_is_ok(adopt_hole_status)) {
+            vsapi->freeFrame(hole_output_frame);
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: failed to adopt computed hole output."
+            );
+            return nullptr;
+        }
+
+        hole_output_frame = nullptr;
+
+        Cnr3CacheAs2StoreRecordSummary hole_store_summary{};
+        const Cnr3Status hole_store_status =
+            data.output_cache.store_recovery_plan_hole_owned_frame_and_record_pin(
+                recovery_plan,
+                hole_frame,
+                std::move(hole_owned_frame),
+                cnr3_live_output_frame_is_checkpoint(hole_frame),
+                request_data->pin_list,
+                hole_store_summary
+            );
+
+        if (!cnr3_status_is_ok(hole_store_status) ||
+            !hole_store_summary.pin_recorded) {
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.1 recovery proof: failed to store/pin computed recovery hole."
+            );
+            return nullptr;
+        }
+
+        request_data->per_hole_outcomes[hole_index] =
+            hole_store_summary.duplicate_existing_slot
+            ? Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser
+            : Cnr3LiveRecoveryHoleOutcome::computed;
+    }
+
+    if (!cnr3_live_recovery_source_was_requested(*request_data, n)) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: target source was not requested at arInitial."
+        );
+        return nullptr;
+    }
+
+    Cnr3OwnedFrameRef target_predecessor_compute_ref{};
+    const Cnr3Status target_predecessor_status =
+        data.output_cache.lookup_frame_and_add_ref(
+            n - 1,
+            vsapi,
+            target_predecessor_compute_ref
+        );
+
+    if (!cnr3_status_is_ok(target_predecessor_status) ||
+        !target_predecessor_compute_ref.has_frame()) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed to acquire target predecessor compute reference."
+        );
+        return nullptr;
+    }
+
+    const VSFrame* target_source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
+
+    if (target_source_frame == nullptr) {
+        target_predecessor_compute_ref.reset();
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: target source frame retrieval failed."
+        );
+        return nullptr;
+    }
+
+    VSFrame* target_output_frame = vsapi->copyFrame(target_source_frame, core);
+
+    if (target_output_frame == nullptr) {
+        target_predecessor_compute_ref.reset();
+        vsapi->freeFrame(target_source_frame);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: target copyFrame failed."
+        );
+        return nullptr;
+    }
+
+    if (target_output_frame == target_source_frame) {
+        target_predecessor_compute_ref.reset();
+        vsapi->freeFrame(target_output_frame);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: target copyFrame returned the source frame alias."
+        );
+        return nullptr;
+    }
+
+    Cnr3CallerSuppliedFrameProcessSummary target_process_summary{};
+    const Cnr3Status target_process_status =
+        cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+            target_source_frame,
+            target_predecessor_compute_ref.get(),
+            target_output_frame,
+            vsapi,
+            data.bits_per_sample,
+            data.sub_sampling_w,
+            data.sub_sampling_h,
+            data.response_tables,
+            target_process_summary
+        );
+
+    target_predecessor_compute_ref.reset();
+    vsapi->freeFrame(target_source_frame);
+    target_source_frame = nullptr;
+
+    if (!cnr3_status_is_ok(target_process_status) ||
+        !target_process_summary.frame_processed) {
+        vsapi->freeFrame(target_output_frame);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: P.11B target processing failed."
+        );
+        return nullptr;
+    }
+
+    const VSFrame* return_frame = nullptr;
+    Cnr3Status target_store_status = Cnr3Status::invariant_violation;
+    bool returned_cached_winner = false;
+    const Cnr3Status target_return_status =
+        cnr3_store_live_output_frame_for_authoritative_return(
+            data,
+            n,
+            target_output_frame,
+            vsapi,
+            return_frame,
+            target_store_status,
+            returned_cached_winner
+        );
+    target_output_frame = nullptr;
+
+    if (!cnr3_status_is_ok(target_return_status) || return_frame == nullptr) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed to store/return authoritative target output."
+        );
+        return nullptr;
+    }
+
+    (void)target_store_status;
+    (void)returned_cached_winner;
+
+    const Cnr3CacheRecoverySearchPlan recovery_plan_for_trace =
+        request_data->recovery_plan;
+    const std::vector<int> source_requests_for_trace =
+        request_data->source_request_frame_numbers;
+    const std::vector<Cnr3LiveRecoveryHoleOutcome> hole_outcomes_for_trace =
+        request_data->per_hole_outcomes;
+    const std::size_t pin_list_size_before_discharge =
+        request_data->pin_list.pin_count();
+
+    const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
+        frame_data,
+        data.output_cache
+    );
+
+    if (!cnr3_status_is_ok(discard_status)) {
+        vsapi->freeFrame(return_frame);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.1 recovery proof: failed to discharge recovery pin-list."
+        );
+        return nullptr;
+    }
+
+    cnr3_trace_live_recovery(
+        data,
+        n,
+        recovery_plan_for_trace,
+        source_requests_for_trace,
+        hole_outcomes_for_trace,
+        pin_list_size_before_discharge,
+        target_process_summary
+    );
+
+    return return_frame;
+}
+
 const VSFrame* cnr3_complete_live_frame0_fresh_start(
     int n,
     Cnr3FilterData& data,
@@ -627,6 +1197,15 @@ const VSFrame* cnr3_arAllFramesReady(
         );
     case Cnr3LiveGetFrameBranch::predecessor_present_compute:
         return cnr3_complete_live_predecessor_present_compute(
+            n,
+            data,
+            frame_data,
+            frame_ctx,
+            core,
+            vsapi
+        );
+    case Cnr3LiveGetFrameBranch::recovery:
+        return cnr3_complete_live_recovery(
             n,
             data,
             frame_data,

@@ -22,6 +22,8 @@
 
 #include "VapourSynth4.h"
 
+#include <vector>
+
 struct Cnr3FilterData {
     VSNode* source = nullptr;
     VSVideoInfo video_info{};
@@ -37,7 +39,15 @@ enum class Cnr3LiveGetFrameBranch {
     none,
     cache_hit_return,
     frame0_fresh_start,
-    predecessor_present_compute
+    predecessor_present_compute,
+    recovery
+};
+
+enum class Cnr3LiveRecoveryHoleOutcome {
+    none,
+    computed,
+    adopted_skipped,
+    adopted_post_compute_loser
 };
 
 struct Cnr3LiveGetFrameFrameData {
@@ -47,13 +57,10 @@ struct Cnr3LiveGetFrameFrameData {
     bool source_requested = false;
     bool predecessor_pin_taken = false;
     bool cache_hit_pin_taken = false;
+    Cnr3CacheRecoverySearchPlan recovery_plan{};
+    std::vector<int> source_request_frame_numbers{};
+    std::vector<Cnr3LiveRecoveryHoleOutcome> per_hole_outcomes{};
     Cnr3CachePinList pin_list{};
-};
-
-enum class Cnr3LiveCacheHitStartResult {
-    miss,
-    started,
-    failed
 };
 
 void cnr3_set_filter_error(
@@ -106,27 +113,12 @@ void cnr3_trace_live_after_frame2_not_yet_implemented(
     int requested_frame
 ) noexcept;
 
-Cnr3LiveCacheHitStartResult cnr3_try_start_live_cache_hit_return(
+const VSFrame* cnr3_complete_live_recovery(
     int n,
     Cnr3FilterData& data,
     void** frame_data,
     VSFrameContext* frame_ctx,
-    const VSAPI* vsapi
-);
-
-const VSFrame* cnr3_start_live_predecessor_present_compute(
-    int n,
-    Cnr3FilterData& data,
-    void** frame_data,
-    VSFrameContext* frame_ctx,
-    const VSAPI* vsapi
-);
-
-const VSFrame* cnr3_start_live_frame0_fresh_start(
-    int n,
-    Cnr3FilterData& data,
-    void** frame_data,
-    VSFrameContext* frame_ctx,
+    VSCore* core,
     const VSAPI* vsapi
 );
 

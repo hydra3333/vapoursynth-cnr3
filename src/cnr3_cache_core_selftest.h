@@ -99,6 +99,28 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_as2_store_record_monotonic_checkpoint() noexcept;
 
 /*
+    Run the CMS07-D.4 present-frame adopt-skip primitive selftest.
+
+    This verifies the context-free AS1 lookup-pin-record primitive used by the
+    live floor and walked-hole adopt-skip paths: when the candidate output frame
+    is already present, lookup_frame_and_record_pin() records one pin without
+    computing or storing a new frame. It proves primitive ownership/pin balance
+    only; live arAllFramesReady race reachability is deferred to fmParallel
+    validation.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_d4_present_frame_adopt_skip_primitive() noexcept;
+
+/*
+    Run the CMS07-D.4 post-compute first-in-best-dressed duplicate selftest.
+
+    This verifies the AS2 duplicate-at-store primitive used by the live
+    adopted-post-compute-loser outcome: an already-present winner remains
+    authoritative, the incoming loser is released exactly once, one winner pin
+    is recorded, and AS4 discharge restores balance.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive() noexcept;
+
+/*
     Run the CMS07-F.1A central remove helper selftest.
 
     This verifies that the central remove helper rejects pinned slots, detaches

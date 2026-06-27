@@ -1427,6 +1427,360 @@ Cnr3Status cnr3_cache_core_selftest_as2_store_record_monotonic_checkpoint() noex
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_d4_present_frame_adopt_skip_primitive() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int present_frame_storage = 1;
+    const VSFrame* present_frame =
+        reinterpret_cast<const VSFrame*>(&present_frame_storage);
+
+    vsapi_state.tracked_release_frames[0] = present_frame;
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList consumer_pin_list{};
+        Cnr3OwnedFrameRef present_owned_frame{};
+
+        if (
+            present_owned_frame.reset_to_owned_frame(
+                present_frame,
+                &vsapi
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(
+                40,
+                std::move(present_owned_frame)
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (present_owned_frame.has_frame()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.slot_count() != 1U ||
+            cache.index_count() != 1U ||
+            cache.total_pin_count() != 0 ||
+            consumer_pin_list.pin_count() != 0U
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0 || vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        /*
+            D.4 proves the context-free primitive that live floor and hole
+            adopt-skip paths call after a race outcome has made the frame
+            present. The selftest calls lookup directly, so no compute or store
+            path is invoked by construction; live scheduling that reaches this
+            outcome is deferred to fmParallel validation.
+        */
+        if (cache.lookup_frame_and_record_pin(40, consumer_pin_list) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.total_pin_count() != 1 ||
+            consumer_pin_list.pin_count() != 1U
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.add_frame_ref_count != 0 || vsapi_state.free_frame_count != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.remove_unpinned_frame(40) != Cnr3Status::lifecycle_violation) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (consumer_pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.total_pin_count() != 0 ||
+            consumer_pin_list.pin_count() != 0U
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (
+        vsapi_state.add_frame_ref_count != 0 ||
+        vsapi_state.free_frame_count != 1 ||
+        vsapi_state.tracked_release_counts[0] != 1
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "D.4 present-frame adopt-skip primitive scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    pre-present frame 40 is adopted by lookup_frame_and_record_pin"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    no addFrameRef/freeFrame side effects occur during pin adoption"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    AS4 discharge balances the adopted pin and releases clear normally"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    int winner_frame_storage = 1;
+    int loser_frame_storage = 2;
+
+    const VSFrame* winner_frame =
+        reinterpret_cast<const VSFrame*>(&winner_frame_storage);
+    const VSFrame* loser_frame =
+        reinterpret_cast<const VSFrame*>(&loser_frame_storage);
+
+    vsapi_state.tracked_release_frames[0] = winner_frame;
+    vsapi_state.tracked_release_frames[1] = loser_frame;
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList consumer_pin_list{};
+        Cnr3CacheAs2StoreRecordSummary summary{};
+        Cnr3OwnedFrameRef winner_owned_frame{};
+
+        if (
+            winner_owned_frame.reset_to_owned_frame(
+                winner_frame,
+                &vsapi
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_noncheckpoint_owned_frame(
+                41,
+                std::move(winner_owned_frame)
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (winner_owned_frame.has_frame()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.slot_count() != 1U ||
+            cache.index_count() != 1U ||
+            cache.total_pin_count() != 0 ||
+            consumer_pin_list.pin_count() != 0U
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3OwnedFrameRef loser_owned_frame{};
+
+        if (
+            loser_owned_frame.reset_to_owned_frame(
+                loser_frame,
+                &vsapi
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.store_owned_frame_and_record_pin(
+                41,
+                std::move(loser_owned_frame),
+                false,
+                consumer_pin_list,
+                summary
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (loser_owned_frame.has_frame()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            summary.frame_number != 41 ||
+            summary.requested_checkpoint ||
+            summary.inserted_new_slot ||
+            !summary.duplicate_existing_slot ||
+            summary.checkpoint_promoted ||
+            summary.resulting_slot_is_checkpoint ||
+            !summary.pin_recorded ||
+            summary.incoming_frame_consumed ||
+            !summary.incoming_frame_rejected
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.slot_count() != 1U ||
+            cache.index_count() != 1U ||
+            cache.total_pin_count() != 1 ||
+            consumer_pin_list.pin_count() != 1U
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[1] != 1) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 0) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        Cnr3OwnedFrameRef winner_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                41,
+                &vsapi,
+                winner_lookup
+            ) != Cnr3Status::ok
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (winner_lookup.get() != winner_frame) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        winner_lookup.reset();
+
+        if (
+            vsapi_state.add_frame_ref_count != 1 ||
+            vsapi_state.tracked_release_counts[0] != 1
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (consumer_pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (
+            cache.total_pin_count() != 0 ||
+            consumer_pin_list.pin_count() != 0U
+            ) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (vsapi_state.tracked_release_counts[0] != 2) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+
+        if (!cache.empty()) {
+            g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+            return Cnr3Status::invariant_violation;
+        }
+    }
+
+    if (
+        vsapi_state.add_frame_ref_count != 1 ||
+        vsapi_state.free_frame_count != 3 ||
+        vsapi_state.tracked_release_counts[0] != 2 ||
+        vsapi_state.tracked_release_counts[1] != 1
+        ) {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "D.4 first-in-best-dressed duplicate scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    duplicate store for frame 41 preserves the existing winner"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    incoming loser is released once after the cache lock"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    duplicate_existing_slot reports the adopted-post-compute-loser outcome"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -14228,6 +14582,14 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "as2_store_record_monotonic_checkpoint",
             cnr3_cache_core_selftest_as2_store_record_monotonic_checkpoint
+        },
+        {
+            "d4_present_frame_adopt_skip_primitive",
+            cnr3_cache_core_selftest_d4_present_frame_adopt_skip_primitive
+        },
+        {
+            "d4_first_in_best_dressed_duplicate_primitive",
+            cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive
         },
         {
             "central_remove_helper_lifecycle",

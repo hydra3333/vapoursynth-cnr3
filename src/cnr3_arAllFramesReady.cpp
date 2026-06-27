@@ -159,6 +159,20 @@ const char* cnr3_live_recovery_hole_outcome_name(
     }
 }
 
+const char* cnr3_live_recovery_branch_name(
+    Cnr3LiveRecoveryBranch branch
+) noexcept {
+    switch (branch) {
+    case Cnr3LiveRecoveryBranch::exact_anchor:
+        return "exact-anchor";
+    case Cnr3LiveRecoveryBranch::floor_fresh_start:
+        return "floor-fresh-start";
+    case Cnr3LiveRecoveryBranch::none:
+    default:
+        return "none";
+    }
+}
+
 std::string cnr3_join_frame_numbers_for_kdt(
     const std::vector<int>& frame_numbers
 ) {
@@ -190,6 +204,9 @@ bool cnr3_live_recovery_source_was_requested(
 void cnr3_trace_live_recovery(
     const Cnr3FilterData& data,
     int requested_frame,
+    Cnr3LiveRecoveryBranch recovery_branch,
+    int recovery_floor_frame,
+    Cnr3LiveRecoveryHoleOutcome recovery_floor_outcome,
     const Cnr3CacheRecoverySearchPlan& recovery_plan,
     const std::vector<int>& source_request_frame_numbers,
     const std::vector<Cnr3LiveRecoveryHoleOutcome>& per_hole_outcomes,
@@ -224,9 +241,46 @@ void cnr3_trace_live_recovery(
         per_hole_text = "hole=none outcome=none";
     }
 
+    if (recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+        std::fprintf(
+            stderr,
+            "[KDT] instance=%d N=%d branch=RECOVER recover_branch=%s "
+            "floor=%d floor_outcome=%s "
+            "hole_count=%zu holes=%s source_requests=%s %s "
+            "pixel_compute=%d p11b_called=%d p11c_called=0 scene_change_deferred=1 "
+            "pin_list_size=%zu pin_balance=0 "
+            "returned_ref_added=1 return_transferred=1 "
+            "frame_processed=%d luma_samples_copied=%d "
+            "chroma_u_samples_processed=%d chroma_v_samples_processed=%d "
+            "first_u_output_sample=%d last_u_output_sample=%d "
+            "first_v_output_sample=%d last_v_output_sample=%d\n",
+            data.config.instance_id.value,
+            requested_frame,
+            cnr3_live_recovery_branch_name(recovery_branch),
+            recovery_floor_frame,
+            cnr3_live_recovery_hole_outcome_name(recovery_floor_outcome),
+            recovery_plan.hole_frame_numbers.size(),
+            holes_text.c_str(),
+            source_requests_text.c_str(),
+            per_hole_text.c_str(),
+            target_process_summary.frame_processed ? 1 : 0,
+            target_process_summary.frame_processed ? 1 : 0,
+            pin_list_size_before_discharge,
+            target_process_summary.frame_processed ? 1 : 0,
+            target_process_summary.luma_samples_copied,
+            target_process_summary.chroma_u_samples_processed,
+            target_process_summary.chroma_v_samples_processed,
+            target_process_summary.first_u_output_sample,
+            target_process_summary.last_u_output_sample,
+            target_process_summary.first_v_output_sample,
+            target_process_summary.last_v_output_sample
+        );
+        return;
+    }
+
     std::fprintf(
         stderr,
-        "[KDT] instance=%d N=%d branch=RECOVER recover_branch=exact-anchor "
+        "[KDT] instance=%d N=%d branch=RECOVER recover_branch=%s "
         "anchor=%d hole_count=%zu holes=%s source_requests=%s %s "
         "pixel_compute=%d p11b_called=%d p11c_called=0 scene_change_deferred=1 "
         "anchor_pin_taken=%d pin_list_size=%zu pin_balance=0 "
@@ -237,6 +291,7 @@ void cnr3_trace_live_recovery(
         "first_v_output_sample=%d last_v_output_sample=%d\n",
         data.config.instance_id.value,
         requested_frame,
+        cnr3_live_recovery_branch_name(recovery_branch),
         recovery_plan.anchor_frame_number,
         recovery_plan.hole_frame_numbers.size(),
         holes_text.c_str(),
@@ -258,6 +313,9 @@ void cnr3_trace_live_recovery(
 #else
     (void)data;
     (void)requested_frame;
+    (void)recovery_branch;
+    (void)recovery_floor_frame;
+    (void)recovery_floor_outcome;
     (void)recovery_plan;
     (void)source_request_frame_numbers;
     (void)per_hole_outcomes;
@@ -663,6 +721,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     return return_frame;
 }
+
 const VSFrame* cnr3_complete_live_recovery(
     int n,
     Cnr3FilterData& data,
@@ -678,22 +737,190 @@ const VSFrame* cnr3_complete_live_recovery(
         request_data->branch != Cnr3LiveGetFrameBranch::recovery ||
         request_data->requested_frame != n ||
         !request_data->source_requested ||
-        !request_data->recovery_plan.anchor_found ||
-        !request_data->recovery_plan.anchor_pin_recorded ||
         request_data->recovery_plan.requested_frame != n ||
-        request_data->pin_list.pin_count() == 0U ||
         request_data->per_hole_outcomes.size() !=
             request_data->recovery_plan.hole_frame_numbers.size()) {
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: invalid recovery frameData lifecycle."
+            "CNR3 D.3 floor-fresh-start proof: invalid recovery frameData lifecycle."
         );
         return nullptr;
     }
 
-    const Cnr3CacheRecoverySearchPlan& recovery_plan = request_data->recovery_plan;
+    const bool exact_anchor_recovery =
+        request_data->recovery_branch == Cnr3LiveRecoveryBranch::exact_anchor;
+    const bool floor_fresh_start_recovery =
+        request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start;
+
+    if ((!exact_anchor_recovery && !floor_fresh_start_recovery) ||
+        (exact_anchor_recovery &&
+            (!request_data->recovery_plan.anchor_found ||
+                !request_data->recovery_plan.anchor_pin_recorded ||
+                request_data->pin_list.pin_count() == 0U)) ||
+        (floor_fresh_start_recovery &&
+            (request_data->recovery_plan.anchor_found ||
+                request_data->recovery_plan.anchor_pin_recorded ||
+                !cnr3_frame_number_is_valid(request_data->recovery_floor_frame) ||
+                request_data->recovery_floor_frame >= n))) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 D.3 floor-fresh-start proof: invalid recovery branch foundation."
+        );
+        return nullptr;
+    }
+
+    Cnr3CacheRecoverySearchPlan& recovery_plan = request_data->recovery_plan;
+
+    if (floor_fresh_start_recovery) {
+        const int floor_frame = request_data->recovery_floor_frame;
+
+        if (!cnr3_live_recovery_source_was_requested(*request_data, floor_frame)) {
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.3 floor-fresh-start proof: floor source was not requested at arInitial."
+            );
+            return nullptr;
+        }
+
+        const Cnr3Status floor_adopt_status = data.output_cache.lookup_frame_and_record_pin(
+            floor_frame,
+            request_data->pin_list
+        );
+
+        if (cnr3_status_is_ok(floor_adopt_status)) {
+            request_data->recovery_floor_outcome =
+                Cnr3LiveRecoveryHoleOutcome::adopted_skipped;
+        }
+        else if (floor_adopt_status != Cnr3Status::not_found) {
+            (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.3 floor-fresh-start proof: pre-compute floor adopt-and-skip lookup failed."
+            );
+            return nullptr;
+        }
+        else {
+            const VSFrame* floor_source_frame = vsapi->getFrameFilter(
+                floor_frame,
+                data.source,
+                frame_ctx
+            );
+
+            if (floor_source_frame == nullptr) {
+                (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 D.3 floor-fresh-start proof: floor source frame retrieval failed."
+                );
+                return nullptr;
+            }
+
+            VSFrame* floor_output_frame = vsapi->copyFrame(floor_source_frame, core);
+
+            if (floor_output_frame == nullptr) {
+                vsapi->freeFrame(floor_source_frame);
+                (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 D.3 floor-fresh-start proof: floor copyFrame failed."
+                );
+                return nullptr;
+            }
+
+            if (floor_output_frame == floor_source_frame) {
+                vsapi->freeFrame(floor_output_frame);
+                (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 D.3 floor-fresh-start proof: floor copyFrame returned the source frame alias."
+                );
+                return nullptr;
+            }
+
+            vsapi->freeFrame(floor_source_frame);
+            floor_source_frame = nullptr;
+
+            Cnr3OwnedFrameRef floor_owned_frame{};
+            const Cnr3Status adopt_floor_status = floor_owned_frame.reset_to_owned_frame(
+                floor_output_frame,
+                vsapi
+            );
+
+            if (!cnr3_status_is_ok(adopt_floor_status)) {
+                vsapi->freeFrame(floor_output_frame);
+                (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 D.3 floor-fresh-start proof: failed to adopt floor fresh-start output."
+                );
+                return nullptr;
+            }
+
+            floor_output_frame = nullptr;
+
+            Cnr3CacheAs2StoreRecordSummary floor_store_summary{};
+            const Cnr3Status floor_store_status =
+                data.output_cache.store_owned_frame_and_record_pin(
+                    floor_frame,
+                    std::move(floor_owned_frame),
+                    cnr3_live_output_frame_is_checkpoint(floor_frame),
+                    request_data->pin_list,
+                    floor_store_summary
+                );
+
+            if (!cnr3_status_is_ok(floor_store_status) ||
+                !floor_store_summary.pin_recorded) {
+                (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 D.3 floor-fresh-start proof: failed to store/pin floor fresh-start output."
+                );
+                return nullptr;
+            }
+
+            request_data->recovery_floor_outcome =
+                floor_store_summary.duplicate_existing_slot
+                ? Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser
+                : Cnr3LiveRecoveryHoleOutcome::computed;
+        }
+    }
+
+    if (floor_fresh_start_recovery) {
+        /*
+            The bounded-search plan had no pre-existing anchor. After the floor
+            output has been fresh-started or adopted, stored, and pinned, record
+            that materialized floor as the carried plan's anchor so the existing
+            planned-hole AS2 wrapper can validate the walked holes.
+
+            This is a now-true consumer-foundation fact, not a bypassed
+            precondition. The wrapper validates the structural walk contract: a
+            present, pinned foundation at anchor_frame_number, plus contiguous
+            holes above it. It does not care whether that foundation was found by
+            the bounded search or created by the floor fallback.
+
+            Keep this after the floor pin is recorded in pin_list and before any
+            planned-hole wrapper call. Moving it earlier would assert a premature
+            anchor; moving it later would make the hole wrapper see the old
+            no-anchor plan.
+        */
+        recovery_plan.anchor_found = true;
+        recovery_plan.anchor_frame_number = request_data->recovery_floor_frame;
+        recovery_plan.anchor_is_checkpoint =
+            cnr3_live_output_frame_is_checkpoint(request_data->recovery_floor_frame);
+        recovery_plan.anchor_pin_recorded = true;
+    }
 
     for (std::size_t hole_index = 0U;
         hole_index < recovery_plan.hole_frame_numbers.size();
@@ -706,7 +933,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: hole source was not requested at arInitial."
+                "CNR3 D.3 floor-fresh-start proof: hole source was not requested at arInitial."
             );
             return nullptr;
         }
@@ -727,7 +954,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: pre-compute hole adopt-and-skip lookup failed."
+                "CNR3 D.3 floor-fresh-start proof: pre-compute hole adopt-and-skip lookup failed."
             );
             return nullptr;
         }
@@ -745,7 +972,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: failed to acquire hole predecessor compute reference."
+                "CNR3 D.3 floor-fresh-start proof: failed to acquire hole predecessor compute reference."
             );
             return nullptr;
         }
@@ -762,7 +989,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: hole source frame retrieval failed."
+                "CNR3 D.3 floor-fresh-start proof: hole source frame retrieval failed."
             );
             return nullptr;
         }
@@ -776,7 +1003,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: hole copyFrame failed."
+                "CNR3 D.3 floor-fresh-start proof: hole copyFrame failed."
             );
             return nullptr;
         }
@@ -788,7 +1015,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: hole copyFrame returned the source frame alias."
+                "CNR3 D.3 floor-fresh-start proof: hole copyFrame returned the source frame alias."
             );
             return nullptr;
         }
@@ -818,7 +1045,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: P.11B hole processing failed."
+                "CNR3 D.3 floor-fresh-start proof: P.11B hole processing failed."
             );
             return nullptr;
         }
@@ -835,7 +1062,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: failed to adopt computed hole output."
+                "CNR3 D.3 floor-fresh-start proof: failed to adopt computed hole output."
             );
             return nullptr;
         }
@@ -859,7 +1086,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.2 recovery proof: failed to store/pin computed recovery hole."
+                "CNR3 D.3 floor-fresh-start proof: failed to store/pin computed recovery hole."
             );
             return nullptr;
         }
@@ -875,7 +1102,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: target source was not requested at arInitial."
+            "CNR3 D.3 floor-fresh-start proof: target source was not requested at arInitial."
         );
         return nullptr;
     }
@@ -894,7 +1121,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed to acquire target predecessor compute reference."
+            "CNR3 D.3 floor-fresh-start proof: failed to acquire target predecessor compute reference."
         );
         return nullptr;
     }
@@ -907,7 +1134,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: target source frame retrieval failed."
+            "CNR3 D.3 floor-fresh-start proof: target source frame retrieval failed."
         );
         return nullptr;
     }
@@ -921,7 +1148,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: target copyFrame failed."
+            "CNR3 D.3 floor-fresh-start proof: target copyFrame failed."
         );
         return nullptr;
     }
@@ -933,7 +1160,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: target copyFrame returned the source frame alias."
+            "CNR3 D.3 floor-fresh-start proof: target copyFrame returned the source frame alias."
         );
         return nullptr;
     }
@@ -963,7 +1190,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: P.11B target processing failed."
+            "CNR3 D.3 floor-fresh-start proof: P.11B target processing failed."
         );
         return nullptr;
     }
@@ -988,7 +1215,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed to store/return authoritative target output."
+            "CNR3 D.3 floor-fresh-start proof: failed to store/return authoritative target output."
         );
         return nullptr;
     }
@@ -996,6 +1223,12 @@ const VSFrame* cnr3_complete_live_recovery(
     (void)target_store_status;
     (void)returned_cached_winner;
 
+    const Cnr3LiveRecoveryBranch recovery_branch_for_trace =
+        request_data->recovery_branch;
+    const int recovery_floor_frame_for_trace =
+        request_data->recovery_floor_frame;
+    const Cnr3LiveRecoveryHoleOutcome floor_outcome_for_trace =
+        request_data->recovery_floor_outcome;
     const Cnr3CacheRecoverySearchPlan recovery_plan_for_trace =
         request_data->recovery_plan;
     const std::vector<int> source_requests_for_trace =
@@ -1015,7 +1248,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed to discharge recovery pin-list."
+            "CNR3 D.3 floor-fresh-start proof: failed to discharge recovery pin-list."
         );
         return nullptr;
     }
@@ -1023,6 +1256,9 @@ const VSFrame* cnr3_complete_live_recovery(
     cnr3_trace_live_recovery(
         data,
         n,
+        recovery_branch_for_trace,
+        recovery_floor_frame_for_trace,
+        floor_outcome_for_trace,
         recovery_plan_for_trace,
         source_requests_for_trace,
         hole_outcomes_for_trace,

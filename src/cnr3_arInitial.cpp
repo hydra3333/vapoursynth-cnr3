@@ -45,7 +45,7 @@ const VSFrame* cnr3_publish_live_cache_hit_return(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: invalid cache-hit frameData publication."
+            "CNR3 D.3 floor-fresh-start proof: invalid cache-hit frameData publication."
         );
         return nullptr;
     }
@@ -83,7 +83,7 @@ const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predece
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: invalid predecessor-present pinned start."
+            "CNR3 D.3 floor-fresh-start proof: invalid predecessor-present pinned start."
         );
         return nullptr;
     }
@@ -110,7 +110,7 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: invalid frame-0 frameData publication."
+            "CNR3 D.3 floor-fresh-start proof: invalid frame-0 frameData publication."
         );
         return nullptr;
     }
@@ -161,11 +161,31 @@ bool cnr3_exact_anchor_recovery_plan_is_accepted(
     return true;
 }
 
+bool cnr3_floor_fresh_start_recovery_plan_is_accepted(
+    int n,
+    const Cnr3CacheRecoverySearchPlan& plan
+) noexcept {
+    if (n <= 0 ||
+        plan.anchor_found ||
+        plan.anchor_pin_recorded ||
+        !plan.search_interval_has_frames ||
+        !cnr3_frame_number_is_valid(plan.search_lower_frame) ||
+        plan.search_lower_frame >= n ||
+        plan.requested_frame != n ||
+        !plan.requested_frame_is_repair_target ||
+        plan.requested_frame_is_in_hole_catalogue ||
+        !plan.hole_frame_numbers.empty()) {
+        return false;
+    }
+
+    return true;
+}
+
 const char* cnr3_recovery_refusal_reason(
     const Cnr3CacheRecoverySearchPlan& plan
 ) noexcept {
     return !plan.anchor_found
-        ? "no-in-window-anchor"
+        ? "structural-recovery-refusal"
         : "non-exact-or-non-contiguous-plan";
 }
 
@@ -224,21 +244,66 @@ Cnr3Status cnr3_fill_recovery_source_request_numbers(
 ) {
     request_data.source_request_frame_numbers.clear();
 
-    const std::size_t request_count =
-        request_data.recovery_plan.hole_frame_numbers.size() + 1U;
-
     try {
+        if (request_data.recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+            const int floor_frame = request_data.recovery_floor_frame;
+
+            if (!cnr3_frame_number_is_valid(floor_frame) || floor_frame >= n) {
+                return Cnr3Status::invalid_argument;
+            }
+
+            const std::size_t request_count =
+                static_cast<std::size_t>(n - floor_frame + 1);
+            request_data.source_request_frame_numbers.reserve(request_count);
+
+            for (int source_frame = floor_frame; source_frame <= n; ++source_frame) {
+                request_data.source_request_frame_numbers.push_back(source_frame);
+            }
+
+            return Cnr3Status::ok;
+        }
+
+        const std::size_t request_count =
+            request_data.recovery_plan.hole_frame_numbers.size() + 1U;
         request_data.source_request_frame_numbers.reserve(request_count);
+
+        for (const int hole_frame : request_data.recovery_plan.hole_frame_numbers) {
+            request_data.source_request_frame_numbers.push_back(hole_frame);
+        }
+
+        request_data.source_request_frame_numbers.push_back(n);
     }
     catch (const std::bad_alloc&) {
         return Cnr3Status::allocation_failed;
     }
 
-    for (const int hole_frame : request_data.recovery_plan.hole_frame_numbers) {
-        request_data.source_request_frame_numbers.push_back(hole_frame);
+    return Cnr3Status::ok;
+}
+
+Cnr3Status cnr3_fill_floor_fresh_start_hole_numbers(
+    int n,
+    Cnr3LiveGetFrameFrameData& request_data
+) {
+    const int floor_frame = request_data.recovery_floor_frame;
+
+    if (!cnr3_frame_number_is_valid(floor_frame) || floor_frame >= n) {
+        return Cnr3Status::invalid_argument;
     }
 
-    request_data.source_request_frame_numbers.push_back(n);
+    request_data.recovery_plan.hole_frame_numbers.clear();
+
+    try {
+        request_data.recovery_plan.hole_frame_numbers.reserve(
+            static_cast<std::size_t>(n - floor_frame - 1)
+        );
+
+        for (int hole_frame = floor_frame + 1; hole_frame < n; ++hole_frame) {
+            request_data.recovery_plan.hole_frame_numbers.push_back(hole_frame);
+        }
+    }
+    catch (const std::bad_alloc&) {
+        return Cnr3Status::allocation_failed;
+    }
 
     return Cnr3Status::ok;
 }
@@ -255,7 +320,7 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: invalid recovery frameData start."
+            "CNR3 D.3 floor-fresh-start proof: invalid recovery frameData start."
         );
         return nullptr;
     }
@@ -274,12 +339,27 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: bounded recovery plan failed."
+            "CNR3 D.3 floor-fresh-start proof: bounded recovery plan failed."
         );
         return nullptr;
     }
 
-    if (!cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
+    Cnr3LiveRecoveryBranch recovery_branch = Cnr3LiveRecoveryBranch::none;
+    int recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
+
+    if (cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
+        recovery_branch = Cnr3LiveRecoveryBranch::exact_anchor;
+    }
+    else if (cnr3_floor_fresh_start_recovery_plan_is_accepted(n, recovery_plan)) {
+        /*
+            No anchor exists yet. The floor-start path will materialize,
+            store, and pin output[floor] before arAllFramesReady treats that
+            floor output as the consumer foundation for the walked holes.
+        */
+        recovery_branch = Cnr3LiveRecoveryBranch::floor_fresh_start;
+        recovery_floor_frame = recovery_plan.search_lower_frame;
+    }
+    else {
         const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
         cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
 
@@ -291,15 +371,32 @@ const VSFrame* cnr3_start_live_recovery(
             vsapi,
             cnr3_status_is_ok(discard_status)
             ? refusal_reason
-            : "CNR3 D.2 recovery proof: recovery refusal pin discharge failed."
+            : "CNR3 D.3 floor-fresh-start proof: recovery refusal pin discharge failed."
         );
         return nullptr;
     }
 
     request_data->branch = Cnr3LiveGetFrameBranch::recovery;
+    request_data->recovery_branch = recovery_branch;
     request_data->requested_frame = n;
     request_data->predecessor_frame = n - 1;
+    request_data->recovery_floor_frame = recovery_floor_frame;
     request_data->recovery_plan = std::move(recovery_plan);
+
+    if (request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+        const Cnr3Status floor_holes_status =
+            cnr3_fill_floor_fresh_start_hole_numbers(n, *request_data);
+
+        if (!cnr3_status_is_ok(floor_holes_status)) {
+            cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                "CNR3 D.3 floor-fresh-start proof: failed to derive floor-start holes."
+            );
+            return nullptr;
+        }
+    }
 
     const Cnr3Status source_plan_status =
         cnr3_fill_recovery_source_request_numbers(n, *request_data);
@@ -309,7 +406,7 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed to derive recovery source request set."
+            "CNR3 D.3 floor-fresh-start proof: failed to derive recovery source request set."
         );
         return nullptr;
     }
@@ -325,7 +422,7 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed to allocate per-hole outcome state."
+            "CNR3 D.3 floor-fresh-start proof: failed to allocate per-hole outcome state."
         );
         return nullptr;
     }
@@ -356,7 +453,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: frameData was unexpectedly non-null at arInitial."
+            "CNR3 D.3 floor-fresh-start proof: frameData was unexpectedly non-null at arInitial."
         );
         return nullptr;
     }
@@ -368,7 +465,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed to allocate frameData."
+            "CNR3 D.3 floor-fresh-start proof: failed to allocate frameData."
         );
         return nullptr;
     }
@@ -396,7 +493,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed during cache-hit pin attempt."
+            "CNR3 D.3 floor-fresh-start proof: failed during cache-hit pin attempt."
         );
         return nullptr;
     }
@@ -443,7 +540,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.2 recovery proof: failed during predecessor pin attempt."
+            "CNR3 D.3 floor-fresh-start proof: failed during predecessor pin attempt."
         );
         return nullptr;
     }

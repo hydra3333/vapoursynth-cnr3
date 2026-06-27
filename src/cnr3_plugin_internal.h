@@ -43,6 +43,12 @@ enum class Cnr3LiveGetFrameBranch {
     recovery
 };
 
+enum class Cnr3LiveRecoveryBranch {
+    none,
+    exact_anchor,
+    floor_fresh_start
+};
+
 enum class Cnr3LiveRecoveryHoleOutcome {
     none,
     computed,
@@ -57,7 +63,10 @@ struct Cnr3LiveGetFrameFrameData {
     bool source_requested = false;
     bool predecessor_pin_taken = false;
     bool cache_hit_pin_taken = false;
+    Cnr3LiveRecoveryBranch recovery_branch = Cnr3LiveRecoveryBranch::none;
     Cnr3CacheRecoverySearchPlan recovery_plan{};
+    int recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
+    Cnr3LiveRecoveryHoleOutcome recovery_floor_outcome = Cnr3LiveRecoveryHoleOutcome::none;
     std::vector<int> source_request_frame_numbers{};
     std::vector<Cnr3LiveRecoveryHoleOutcome> per_hole_outcomes{};
     Cnr3CachePinList pin_list{};

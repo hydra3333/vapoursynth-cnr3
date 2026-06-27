@@ -1,10 +1,11 @@
 # CNR3 — THIS-CHAT DELTA: keystone through K.1F (current-state companion)
 
-**Version:** v4.1 (DELTA through K.1G + CMS07.10)
+**Version:** v4.6 (DELTA through D.1; + charter into CMS07.11 + D.2 scope v2 decisions ledgered)
 **Date:** 2026-06-26
 **Supersedes:** the v2/v3 DELTA (which covered K.1A–K.1E branch-(c)). This v4.x carries the state
 forward across the K.1E.2, K.1E.3, ledger/rules refresh, CMS07.9, Recovery-Step-0, K.1F,
-CMS07.10, and K.1G commits, and states the immediate next action (branch-(d) D.1 recovery).
+CMS07.10, K.1G, and D.1 commits, and states the immediate next action (branch-(d) D.2 multi-hole recovery).
+(v4.4 records D.1 landed: the live getFrame dispatch now handles ALL FOUR branches including recovery.)
 (v4.1 adds the K.1G plugin source split.)
 **Role:** newest current-state record. Companion to Document B (Document B = format-of-record;
 this = freshest delta). **If this conflicts with the repository on build state, the repository
@@ -16,31 +17,38 @@ action.
 ## 1. CURRENT BASELINE (confirm from repo)
 
 ```text
-Committed/pushed through:  CMS07-K.1G-plugin-source-split-no-behaviour-proof
-                           (K.1G = source-organisation-only split of the live getFrame path;
-                            no behaviour change; proven four-way 49/49 + K.1F live harness, both
-                            configs. The K.1F cache-hit return is the last behavioural keystone.)
-Selftest count:            49/49 PASS  (forced-fail 48/49 exit 1; verbose 49/49)  [unchanged by K.1G]
+Committed/pushed through:  CMS07-D.1-live-exact-anchor-single-hole-recovery-proof
+                           (D.1 = first live branch-(d) recovery: reconstruct absent output[N-1]
+                            from a pinned anchor at N-2, then compute output[N]. A-safe-1 routing.
+                            Proven both configs: recovery 128/147/109 branch=RECOVER anchor=0
+                            holes=[1] outcome=computed pin_balance=0; branch-c regression 145/111
+                            & 147/109; K.1F cache-hit 147/109; negative control; four-way 49/49.
+                            Prior: K.1G plugin source split (no behaviour change); K.1F cache-hit.)
+Selftest count:            49/49 PASS  (forced-fail 48/49 exit 1; verbose 49/49)  [unchanged by D.1;
+                           D.1 is plugin-only, no cache-core change]
 Branch:                    dev_cache_manager
 Repo:                      github.com/hydra3333/vapoursynth-cnr3
 Controlling CMS:           CMS07.10  (cnr3_cache_manager_design_v7_10.md)
 Companion (non-normative): v7.10     (CNR3_CMS_Future_Investigations_and_Open_Questions_v7_10.md)
-Production Spec:           v2.8      (§3A register; PDAP / R-PROCESS-20..23)
+Production Spec:           v2.9      (§3A register; PDAP / R-PROCESS-20..23)
 Filter registration:       fmUnordered, dependency { source, rpGeneral }, no no-cache flag
 Default response config:   threshold_8bit=255, strength_8bit=255, curve=narrow (all planes)
                            (CNR3_K1E2_PROOF_DEFAULT_*, vapoursynth-Cnr3.cpp ~L183-184)
 ```
 
-**NOTE on a pending doc fix:** the corrected CMS07.10 (four editorial/consistency fixes —
-§9.7.1 branch-(b) wording aligned to R-LIFECYCLE, 07.10 front-matter summary, companion version
-pointer, correction-block heading) was staged at end of this chat and is to be committed FIRST
-next session (overwrite the committed v7.10 with the corrected one; no companion change needed).
-If the repo's committed v7.10 still says "no source is requested" in §9.7.1 branch-(b), it is the
-pre-fix version and the corrected one should replace it before D.1.
+**CMS07.10 status (reconciled; VERIFY against the repo, do not assume):** the corrected CMS07.10
+(four editorial/consistency fixes — §9.7.1 branch-(b) wording aligned to R-LIFECYCLE, 07.10
+front-matter summary, companion version pointer, correction-block heading) was committed during the
+producing session along with the refreshed handover set (see §7). FIRST ACTION before D.1: CONFIRM the
+repo's committed cnr3_cache_manager_design_v7_10.md §9.7.1 branch-(b) reads "no source is needed or
+consumed for the result" (corrected), NOT "no source is requested" (pre-fix). If for any reason the
+repo still holds the pre-fix version, commit the corrected one before D.1. (This supersedes an earlier
+draft note that said the corrected CMS07.10 was merely staged; it was subsequently committed. The
+later doc updates — DELTA v4.1/v4.2, and any post-K.1G refresh — may still be uncommitted; verify.)
 
 ---
 
-## 2. THE LIVE getFrame DISPATCH — NOW COMPLETE EXCEPT RECOVERY
+## 2. THE LIVE getFrame DISPATCH — NOW COMPLETE (ALL FOUR BRANCHES LIVE)
 
 **Source layout since K.1G (where D.1 wiring lands):** the live getFrame path is split into
 `src/cnr3_arInitial.cpp` (branch-START: present-N cache-hit start, n>2 refusal, predecessor start,
@@ -53,15 +61,17 @@ activation-reason dispatcher (`cnr3_get_frame_keystone_live_k1f_proof`). D.1 add
 `_start_`/`_complete_` pair into these two files alongside the proven branches — NOT a new monolith.
 The new .cpp files are in the cnr3 DLL project only; the selftest project compiles neither.
 
-The live dispatch handles all four branches except recovery's absent-N fall-through:
+The live dispatch handles ALL FOUR branches (recovery landed in D.1 as the absent-N fall-through):
 
 ```text
-arInitial dispatch order (present-N FIRST):
-  1. output[N] present        -> CACHE-HIT          (branch-b)  DONE (K.1F)
-  2. else N > 2               -> clean refusal (after-frame2-before-recovery-wiring)
-  3. else N == 1 || N == 2    -> PREDECESSOR-PRESENT (branch-c)  DONE (K.1E.2/E.3)
-  4. else N == 0              -> FRAME0-FRESH-START  (branch-a)  DONE (K.1D)
-  (recovery branch-d will become the absent-N fall-through, replacing the n>2 refusal)
+arInitial dispatch order (A-safe-1; each decision is a find-and-pin, no naked peek):
+  1. try-pin output[N]         -> CACHE-HIT           (branch-b)  DONE (K.1F)
+  2. else N == 0               -> FRAME0-FRESH-START   (branch-a)  DONE (K.1D)
+  3. else try-pin output[N-1]  -> PREDECESSOR-PRESENT  (branch-c)  DONE (K.1E.2/E.3; entry contract
+                                  changed in D.1 to accept the already-recorded predecessor pin)
+  4. else                      -> RECOVERY             (branch-d)  DONE (D.1, exact-anchor single-hole;
+                                  D.1 accept gate restricts to hole_count==1&anchor==N-2 or
+                                  hole_count==0&anchor==N-1; other plans clean-refuse pending D.2/D.3)
 
 arAllFramesReady: dispatched by the frameData branch tag set at arInitial
   (Cnr3LiveGetFrameBranch: none / cache_hit_return / frame0_fresh_start /
@@ -173,11 +183,21 @@ test_K1F_once_only_harness_AB.vpy / .bat + check_y4m_constant_plane.py (committe
 
 ---
 
-## 5. IMMEDIATE NEXT ACTION — branch-(d) D.1 (exact-anchor single-hole recovery)
+## 5. branch-(d) D.1 (exact-anchor single-hole recovery) — DONE; NEXT IS D.2
 
-**Sequencing:** (1) commit the corrected CMS07.10 (§1 note). (2) Then D.1.
+**STATUS:** D.1 is COMMITTED and proven both configs (see §1). The brief below is retained as the
+design record of how D.1 was built and how the D.2-D.5 arc continues. IMMEDIATE NEXT ACTION is now
+**D.2 (exact-anchor MULTI-hole, k>=2 — multi-pin discharge load-bearing — plus bounded-window
+refusal)**. The D.1 recovery harness (test_D1_once_only_harness_AB.vpy/.bat, reusing the K.1F y4m
+checker) exists and must stay green as a D.2 regression. The settled D.1 routing/design (A-safe-1,
+no-naked-peek hard floor, dissolved source window, authoritative target return, P.11C deferral) is
+the foundation D.2 extends; the D.1 accept gate is widened in D.2 to admit k>=2 holes with the
+multi-pin discharge becoming the load-bearing new proof.
 
-**D.1 shape:** request output[N], where output[N-1] is ABSENT and output[N-2] is PRESENT (the
+**Sequencing (historical, D.1):** the corrected CMS07.10 was confirmed committed, then D.1 was
+built, reviewed, proven both configs, and committed.
+
+**D.1 shape (as built):** request output[N], where output[N-1] is ABSENT and output[N-2] is PRESENT (the
 anchor). Recovery is the slot-4 absent-N fall-through, reached only when N absent AND N-1 absent,
 sitting cleanly on the K.1F-complete dispatch.
 ```text
@@ -197,7 +217,7 @@ one lock; H.3A per-hole AS2 consumer; Step-0 batch discharge; P.11B compute; K.1
 pin-gap pattern). getFrame currently has ZERO recovery wiring. Carried plan struct
 Cnr3KeystoneRequestPlan already has hole_frame_numbers AND source_request_frame_numbers.
 
-**Owed before the coder scope (designer actions):**
+**Owed before the coder scope (designer actions) — ALL COMPLETED for D.1:**
 1. COMPUTE the D.1 golden chain — output[N-2] anchor, output[N-1] filled hole, output[N] — each
    byte-distinct from source / passthrough / wrong-anchor, verified against the real response
    tables (threshold 255 / strength 255 / narrow) and the P.11B blend math
@@ -226,8 +246,8 @@ Cnr3KeystoneRequestPlan already has hole_frame_numbers AND source_request_frame_
 
 **Branch-(d) ARC (one step at a time, each harness-proven Debug+Release):**
 ```text
-D.1  exact-anchor SINGLE-hole recovery                         <- NEXT
-D.2  exact-anchor MULTI-hole (k>=2; multi-pin discharge load-bearing) + bounded-window refusal
+D.1  exact-anchor SINGLE-hole recovery                         DONE (committed; both configs)
+D.2  exact-anchor MULTI-hole (k>=2; multi-pin discharge load-bearing) + bounded-window refusal  <- NEXT
 D.3  floor-fresh-start recovery (copyFrame base + walk forward)
 D.4  pre-compute adopt-and-skip, synthetically forced (proves CMS07.9 §9.6.5 two-outcomes)
 D.5  recovery under live prune pressure
@@ -239,8 +259,67 @@ do NOT fold cache-hit into it (it is already its own committed keystone).
 
 ---
 
-## 6. OWED-ITEMS LEDGER (none blocking D.1)
+## 6. OWED-ITEMS LEDGER (none blocking D.2)
 
+- **D.2 BOUNDED-WINDOW REFUSAL — code reports only what the bounded search observed (decided, scope v2).**
+  D.2's recovery refusal emits a SINGLE honest reason: **no-in-window-anchor** (anchor_found==false for
+  the bounded interval [max(0,N-B), N-1], B=50). The code does NOT distinguish "an older anchor exists
+  beyond the window" from "no prior output exists at all" — both are identical to a bounded search, and
+  telling them apart would require an UNBOUNDED out-of-window search, defeating the purpose of bounding.
+  The HARNESS proves the bounded-window-exceeded case BY CONSTRUCTION (Run C: establish output[0], then
+  request output[52]; nearest anchor is 52 back > B=50). No cache-core helper or out-of-window search is
+  added merely to enrich a reason string. (If an EXISTING primitive distinguishes the two for free, the
+  richer label may be emitted, but nothing is to be added for it.) Rationale: diagnostic honesty (a label
+  means only what the code knows) + avoid an unbounded scan in a refusal path. Decided designer+coder
+  2026-06-27 (D.2 scope v2, coder review correction 2).
+
+- **CMS-GAP CANDIDATE (pending coordinator decision) — make the bounded-search reporting semantics
+  explicit in the CMS.** The D.2 refusal decision above rests on a principle that recurs in D.3 (floor-
+  fresh-start) and D.5 (prune pressure): *the bounded recovery search reports presence/absence only
+  within [max(0,N-B), N-1]; absence within the window is not distinguished from absence of any prior
+  output, and no out-of-window search is performed.* This is arguably ENTAILED by "bounded search" and
+  may need no CMS text — OR a one-line clarification in CMS §9.1/§9.5 would make the boundary's semantics
+  explicit for every recovery phase and would have prevented the D.2 scope's initial over-specification.
+  RAISED as a CMS-GAP candidate (charter case b, low bar) for coordinator decision: add the clarifying
+  line at the next CMS edit (e.g. bundled with the Doc A regeneration session), defer, or judge it
+  already-implied and skip. NOT blocking D.2 (scope v2 stands regardless). Recorded so the principle is
+  not silently re-introduced as an overreach in a later phase.
+
+- **DOC-SET REGENERATION — Document A and Document B (deferred to a near-future dedicated session).**
+  The current-era handover docs are refreshed (Production Spec v2.10, Role Handover v1.9, Reviewer
+  Introduction v3.2, Coder Restart Introduction v6.0, this DELTA) and all carry the new Design
+  Alignment and Escalation Charter (full text in Production Spec §3A.5.0 and Role Handover Part 3 §D0).
+  STILL OWED:
+    * **Document A** is at **v3.4 on the stale K.1D / CMS07.8 / 47-47 baseline** (it self-describes as
+      "only a version number bump"; the Production Spec long noted "until Document A is regenerated").
+      Needs a full STATE regeneration to **v3.5**: CMS07.8 -> CMS07.10, committed-through K.1D -> D.1,
+      47/47 -> 49/49, K.1E-branch-(c)-in-flight -> all-four-branches-live, AND it must faithfully
+      reproduce the Production Spec §3A register INCLUDING the charter at §3A.5.0 (per R-PACK-02:
+      Document A reproduces §3A; on mismatch §3A wins).
+    * **Document B** — confirm the committed current version (a v3.5 with the K.1F update block was
+      produced; verify it is the repo's latest and bump to carry the D.1 + K.1G state + charter
+      pointer if not already present). Target **v3.5** (or higher).
+  ACTION TRIGGER: the **Coder Restart Introduction v6.0 already forward-references Document A v3.5 and
+  Document B v3.5** as expected current versions (with a built-in warning that an older Doc A is stale).
+  Do this in a near-future dedicated session — it is a large rewrite, deliberately NOT rushed at the
+  tail of a long chat (the lesson from prior sudden chat deaths). NOT blocking D.2.
+
+- **SCENE-CHANGE / P.11C deferral (shared across ALL live branches — record kept here so it is
+  actioned, not lost).** The live getFrame keystones (branch-c K.1E.3, and branch-d D.1 onward)
+  compute via P.11B and DEFER the P.11C scene-change/reset check, emitting
+  `p11c_called=0 scene_change_deferred=1`. CMS §9.2 / §6.4 specify the COMPLETE recovery+compute as
+  scene-change-aware: a cut detected during compute makes that output a fresh-start (copy source
+  chroma, skip the recursive blend) and stores it WITH the checkpoint flag set (a cut frame is the
+  ideal recovery anchor, §9.5/§12B). Deferring P.11C is correctness-safe ONLY while inputs contain no
+  cuts (true for the synthetic constant-plane harnesses); on real footage a missed cut would blend
+  across a scene boundary (wrong output) AND fail to establish the cut-checkpoint that recovery relies
+  on. ACTION TRIGGER (action reasonably as soon as safe): wire P.11C UNIFORMLY across branch-a/c/d as
+  its own keystone — NOT folded into any single branch — at the FIRST of: (i) before any real-footage /
+  non-synthetic test; (ii) before branch-(d) is exercised on content where cuts can occur; (iii) once
+  the live dispatch is otherwise complete (post-D.1..D.5) and before the keystone series is declared
+  done. It must not be deferred past the point where real video is processed. Owning: CMS §9.2 (compute
+  scene-change-aware), §6.4 (cut frame -> checkpoint), §A4 (in-compute accumulation/threshold), P.11C
+  (proven in cache-core selftest, awaiting live wiring).
 - branch-(d) isolated-pin causal proof.
 - K.1E.2/E.3/K.1F proof-default response-table config -> real instance-config option parsing.
 - longer sequential run beyond N==2; end-of-run integrity report + abort_on_error (default False)
@@ -271,6 +350,10 @@ document on build state.
 Introduction **v3.1**, Role Handover **v1.8**, Document B **v3.5**, Production Spec **v2.9**,
 CMS **v7.10** (corrected) + companion **v7.10**, and this DELTA. All committed. The superseded
 CMS design docs v7.7.1/v7.8 were pruned (retained in git history). Build state is now committed
-through **K.1G** (plugin source split, no behaviour change); count 49/49.
+through **K.1G** (plugin source split, no behaviour change); count 49/49. CMS housekeeping (non-blocking): the
+CMS §8.7 AS4 note still describes the single-lock batch discharge as "owed as recovery-step-0" and
+`discharge_all` as "one lock per token" — both now COMMITTED (recovery-step-0). A tiny CMS currency
+touch-up (owed -> committed) can ride the next CMS edit; it is description-lag, not an incorrectness,
+and does not block D.1.
 
 — End of CNR3 THIS-CHAT DELTA through K.1F, v4.

@@ -1,14 +1,25 @@
 # CNR3 Cache Manager Design Specification
-**Date:** 2026-06-24 (CMS07.9; supersedes CMS07.8 dated 2026-06-23, which superseded
+**Date:** 2026-06-27 (CMS07.11; supersedes CMS07.10 dated 2026-06-25, which superseded CMS07.9 dated 2026-06-24, which superseded CMS07.8 dated 2026-06-23, which superseded
 CMS07.7 dated 2026-06-21, which superseded CMS07.3 dated 2026-06-19, which superseded
 CMS07.2 dated 2026-06-17, which superseded CMS07.1 dated 2026-06-17, which superseded
 CMS07.0 dated 2026-06-12)
-**Version:** CMS07.9
+**Version:** CMS07.11
 **Status:** Design specification — architectural supersession. COMPLETE: all verify
 items V1–V8 resolved (several against authoritative sources: the CNR2 reference code,
 the local R76 VapourSynth4.h header); section-level bring-across audit of the
 CMS06.11 body done (§9A); final self-review pass done. Controlling design authority
 for the CNR3 restart; ready for coder study and the isolated cache-core milestone.
+CMS07.11 is a GOVERNANCE addition over CMS07.10: it adds §0A (the Design Alignment and Escalation
+Charter) and changes NO design rule, decision, constant, AS scope, or section number. CMS07.10 was a
+CORRECTION over CMS07.9: it corrected §9A.1.1 for the K.1F-proven
+R-LIFECYCLE triggering-request rule. A dependency-filter cache-hit activation must not
+rely on zero-request arInitial->NULL (not guaranteed an arAllFramesReady callback under
+API4/R76); every CNR3 branch requests at least one real source frame at arInitial and
+returns only at arAllFramesReady. Branch-(b) cache-hit uses source[N] as a lifecycle
+trigger, pins cached output[N] across the activation gap, retrieves/frees the trigger
+source (not consumed), and returns the cached output via lookup-and-add-ref plus AS4
+batch discharge. This correction does not change the CMS07.9 recovery model, AS scopes,
+constants, or branch-(d) plan.
 CMS07.9 is an ADDITIVE revision over CMS07.8, made to bring an fmParallel/two-instance
 consequence forward into normative text rather than discover it at the parallel phase
 (the standing mandate is to build toward the fmParallel + two-instance-interlaced end
@@ -45,7 +56,7 @@ material only.
 **Companion document (non-normative).** This CMS has a companion working document,
 `CNR3_CMS_Future_Investigations_and_Open_Questions_vXX.Y.md`, which always carries the
 **same version number as this CMS** (XX.Y = this CMS version; for this version,
-`_v7.8.md`). It records deferred design questions and open tuning investigations. It is
+`_v7.10.md`). It records deferred design questions and open tuning investigations. It is
 **NOT part of this specification, NOT controlling, and NOT part of the coder handover
 pack**; nothing in it is implemented without formal prior approval and a corresponding
 CMS revision. It exists only so that open questions are not lost between sessions. Refer
@@ -76,6 +87,65 @@ prior (CMS06.11 / sequential-fast-path-through-H15.5) state. Development restart
 against this spec; old source is reference material for verifiable salvage only.
 **Versioning** where the text mentions CMS07.0, it should be read as referring to
 the currently prevailing version of the CMS which may be later than 7.0 (eg  CMS07.1).
+---
+## 0A. Design Alignment and Escalation Charter (governance — how the CMS is used)
+This charter governs HOW the designer/reviewer, coder, and coordinator use this CMS. It is governance,
+not a design rule: it adds, changes, and removes nothing in §1–§15. It is reproduced identically in the
+Production Spec §3A.5.0 and the Role Handover §D0; on any wording drift, those and this must be
+reconciled to one agreed text. The CMS is the controlling DESIGN authority; this charter says when
+strict alignment yields to a surfaced issue.
+
+```text
+(Three-way working charter: designer/reviewer, coder, coordinator. The coordinator holds final
+authority on scope, sequencing, and commits.)
+
+1. CMS is the controlling guide; strict alignment is the default. Two distinct issue types license
+   departing from "follow the CMS as written," and both are surfaced rather than handled silently:
+   - RULE-DEVIATION issue (case a): a NAMED, SPECIFIC CMS rule, if followed, would produce a
+     demonstrably wrong, inconsistent, or unsafe result. This bar is HIGH: comparable to the
+     evidence that produced the CMS07.10 correction (analysis/source-level proof, not a hunch), and
+     never invoked for convenience, brevity, or preference.
+   - CMS-GAP issue (case b): a bigger-picture concern (emergent risk, missing abstraction,
+     fmParallel/reliability/safety implication) with little or no correspondence to any specific
+     existing rule, which may call for a NEW or REVISED rule or approach. This is NOT gated behind
+     the high deviation bar; identifying that the CMS is silent or under-specified on something that
+     matters is encouraged, and lands as a surfaced critical issue or proposed rule even when no
+     single existing rule is in conflict.
+   - Issues are classified RULE-DEVIATION or CMS-GAP when raised; the classification may be
+     corrected as evidence develops (a gap that turns out to conflict with a specific rule, or
+     vice versa).
+
+2. On either issue type: stop and raise -- never route around silently. Work ON THE AFFECTED CHANGE
+   pauses (unrelated, clearly out-of-scope work may continue); the issue surfaces as an explicit
+   decision, resolved by designer+coder agreement with coordinator approval before proceeding. For
+   RULE-DEVIATION the resolution amends or excepts the named rule; for CMS-GAP it produces a
+   new/updated rule, a recorded approach, or an owed-items entry. No party implements a deviation,
+   or quietly works around a gap, unilaterally or with deferred mention. Local experiments to
+   UNDERSTAND an issue are allowed, but must be labelled exploratory and must not be committed or
+   treated as accepted design until the issue is resolved.
+
+3. Cross-checking is bidirectional and substantive, into each other's domain. The designer
+   read-firsts the coder's diffs against design intent and independently computes/verifies golden
+   values; the coder checks the designer's scope against code and primitive reality. Each verifies
+   the other's home turf rather than deferring to it. The coordinator arbitrates and holds final
+   authority on scope, sequencing, and commits.
+
+4. Weight scales to risk. Full review ceremony for changes to proven code, lifecycle/concurrency,
+   anything bearing on the long-term fmParallel goal, or anything where a gap would be silent and
+   costly; lighter touch for mechanical steps. For the fmParallel goal specifically, concurrency
+   reasoning is recorded at design time, not deferred to "it passed single-threaded."
+
+5. Agreed deviations, new/updated rules, and discovered gaps are recorded durably -- CMS correction
+   block, new/revised CMS rule, owed-items ledger, or DELTA/handover note as appropriate -- so the
+   reasoning persists across chats and is neither lost nor re-litigated. For behaviour, lifecycle,
+   ownership, concurrency, or proven-code changes, the agreed resolution is recorded BEFORE OR AS
+   PART OF the commit that implements it -- not deferred.
+```
+
+Note on this charter's own status: it is a CMS-GAP-class addition (governance the CMS previously left
+implicit), agreed designer+coder+coordinator 2026-06-27, recorded here so the design authority itself
+carries the escalation model rather than relying on it living only in the handover docs.
+
 ---
 ## 1. Project context (orientation — adapted from handover Document A §A2/§A3/§A4)
 CNR3 is a VapourSynth **API4-only**, **integer-YUV-only** recursive temporal chroma
@@ -746,10 +816,15 @@ Determine the predecessor in this order. Every branch is specified in an owning 
            [Owning: §9.2 fresh-start definition; §9.5 "as if frame 0"; §6.3 frame 0 is
             always a checkpoint and is never pruned.]
 (b) output[N] already present in cache
-        -> RETURN IT DIRECTLY. No predecessor is sought, no source is requested, no pixel
-           path runs. (Cache-hit fast path for repeated/duplicate requests and seeks.)
+        -> RETURN IT DIRECTLY. No predecessor is sought, and no source is needed or
+           consumed for the result; no pixel path runs. (Cache-hit fast path for
+           repeated/duplicate requests and seeks.) Under R-LIFECYCLE (§9A.1.1), CNR3 as a
+           dependency filter still requests source[N] as a lifecycle TRIGGER for
+           callback-safety, retrieves and immediately frees it (not consumed), and returns
+           the cached output at arAllFramesReady; "direct" means "no predecessor, no result
+           source, no pixel path" -- NOT "no request and not from arInitial."
            [Owning: §9.3 first-in-best-dressed; the cached frame's ref is transferred to
-            VapourSynth on return, §4.8.]
+            VapourSynth on return, §4.8; §9A.1.1 R-LIFECYCLE for the trigger-request timing.]
 (c) N > 0, output[N] absent, output[N-1] PRESENT in cache
         -> USE output[N-1] as the predecessor (find-and-pin). Request source[N] only.
            Blend output[N] = f(source[N], output[N-1]).
@@ -943,14 +1018,46 @@ The "return a finished frame directly from arInitial" pattern is the **source-fi
 exception — for a filter with NO input node that synthesises frames from nothing. It does
 **NOT** apply to CNR3. Consequence for §9.7.1 branch (b) (output[N] already cached → return it
 directly): for a dependency filter this still occurs through the normal cycle — at arInitial
-the activation requests nothing (the output is already in the CMS7 cache, and the filter never
-requests its OWN outputs from the engine, §3.4) and returns NULL; at arAllFramesReady it
-returns the cached frame (ref transferred, §4.8). "Return it directly" means "no predecessor
-sought, no source requested, no pixel path run" — NOT "returned from arInitial." Together with
-VS-LIFECYCLE-01: **request-in-arInitial, retrieve-and-return-in-arAllFramesReady.** A request
-decision (including the dissolved holes-only source set, §9.5.1) must therefore be complete at
-arInitial time using only arInitial-time information; the output is produced and returned one
-activation-reason later. (Confirmed against the local R76 VapourSynth4.h.)
+the activation returns NULL; at arAllFramesReady it returns the cached frame (ref transferred,
+§4.8). "Return it directly" means "no predecessor sought, no pixel path run" — NOT "returned
+from arInitial." Together with VS-LIFECYCLE-01: **request-in-arInitial,
+retrieve-and-return-in-arAllFramesReady.** A request decision (including the dissolved
+holes-only source set, §9.5.1) must therefore be complete at arInitial time using only
+arInitial-time information; the output is produced and returned one activation-reason later.
+(Confirmed against the local R76 VapourSynth4.h.)
+
+*** CMS07.10 CORRECTION TO CMS07.9 §9A.1.1 — R-LIFECYCLE (the triggering-request rule). Proven live by
+keystone K.1F (live direct cached-output return), 2026-06-25. ***
+The paragraph above previously stated that at arInitial the branch-(b) cache-hit activation
+"requests nothing ... and returns NULL." Investigation for K.1F (multiple authoritative-source
+reviews + the R76 vsthreadpool completion path) established that this is **NOT safe**: under
+API4/R76, a getFrame activation that requests ZERO input frames at arInitial and returns NULL
+is **not guaranteed an arAllFramesReady callback** (the disputed-but-unrefuted reading is that
+zero-pending + NULL-return is treated as terminal; it is not confirmable from quotable core
+source, so CNR3 does not rely on it). Two zero-/early-return alternatives were therefore
+REJECTED as unverified for a non-source filter under fmParallel: (A) returning the cached frame
+directly at arInitial (source-filter pattern, not established safe for a dependency filter under
+fmParallel), and (B) zero-request arInitial→NULL then return at arAllFramesReady (the callback
+may never fire). CNR3 adopts no unverified method.
+**R-LIFECYCLE (normative): EVERY CNR3 getFrame branch requests at least one REAL source frame at
+arInitial and returns its output ONLY at arAllFramesReady.** For the branch-(b) cache hit, which
+needs no source for its result, the branch requests exactly **source[N] as a lifecycle TRIGGER**
+(Option C): at arInitial it pins the cached output[N] (consumer pin recorded in frameData, so a
+concurrent prune cannot evict it across the activation gap — the §9.1 AS1 rationale applies
+here too), requests source[N], and returns NULL; at arAllFramesReady it retrieves source[N],
+**immediately frees it** (a normal owned ref — not consumed for compute, not stored, freed
+outside any cache lock), acquires the return ref via lookup-and-add-ref on the pinned output[N]
+(present by pin; if absent it is an invariant violation, surfaced — never a garbage return),
+discharges the pin-list (the AS4 single-lock batch discharge, recovery-step-0), and transfers
+the cached frame. HONEST COST: a branch-(b) return can be blocked by a source[N] retrieval
+failure even though the cached output already exists; accepted, because output[N] was previously
+produced from that same source in the same graph, so a source[N] failure on re-request is an
+anomaly. The trigger request is the dependency-filter price of staying on the documented
+request-in-arInitial / return-in-arAllFramesReady contract. (Branches and the act-time dispatch
+are keyed on a per-invocation frameData branch tag set at arInitial, never on re-inspecting
+frame state at arAllFramesReady, so a concurrent cache change cannot cause a different branch to
+execute than the one planned.)
+*** end CMS07.10 CORRECTION ***
 **9A.2 Reference-count discipline RC1–RC8 (carried; helper NAMES indicative — the
 restart coder names them; the OBLIGATIONS are mandatory).**
 - **RC1 — Single store helper.** All cache-owned `addFrameRef` calls occur only in
@@ -1304,6 +1411,13 @@ eliminate. Importing it would defeat the architecture.
   648). No `[VERIFY]` remains for the cache.
 ---
 ## 14. Changelog
+**CMS07.11 (2026-06-27) — GOVERNANCE addition; adds §0A (Design Alignment and Escalation Charter); no design rule/decision/constant/AS-scope/section-number changed or removed.**
+- Added **§0A** — the three-way (designer/reviewer, coder, coordinator) Design Alignment and Escalation Charter: CMS is the controlling guide and strict alignment is the default; two issue types are surfaced rather than routed around silently — RULE-DEVIATION (a named CMS rule, if followed, would be wrong/inconsistent/unsafe — HIGH bar, CMS07.10-correction-level evidence) and CMS-GAP (a bigger-picture/fmParallel/reliability/safety concern with little or no correspondence to a specific rule — encouraged, low bar, may call for a new/revised rule); on either, work on the affected change pauses, resolved by designer+coder agreement with coordinator approval, recorded durably before/as part of the implementing commit; cross-checking is bidirectional (designer read-firsts diffs + recomputes goldens; coder checks scope against code reality); weight scales to risk; concurrency reasoning for the fmParallel goal is recorded at design time. Reproduced identically in Production Spec §3A.5.0 and Role Handover §D0.
+- **Governance only.** No change to §1–§13, §9A, the constants/CR1–CR5, the AS register, or any V-resolution. The charter governs how the CMS is *used*; it asserts nothing about cache/recovery behaviour.
+
+**CMS07.10 (2026-06-25) — CORRECTION to §9A.1.1 (R-LIFECYCLE); proven live by keystone K.1F.**
+- §9A.1.1 previously stated the branch-(b) cache-hit activation "requests nothing ... and returns NULL" at arInitial. K.1F investigation established that a ZERO-request arInitial→NULL is NOT guaranteed an arAllFramesReady callback under API4/R76, so that statement was unsafe to implement literally. Added **R-LIFECYCLE**: every CNR3 getFrame branch requests at least one REAL source frame at arInitial and returns only at arAllFramesReady; the branch-(b) cache hit requests source[N] as a lifecycle TRIGGER (Option C), pins output[N] across the gap, retrieves-and-frees the trigger source (not consumed), returns the pinned cached frame at arAllFramesReady via lookup-and-add-ref + AS4 batch discharge. Rejected as unverified-for-non-source-under-fmParallel: (A) return-at-arInitial, (B) zero-request-then-return. Recorded the honest cost (a cache-hit return can be blocked by a source[N] failure) and the frameData-branch-tag dispatch discipline (act-time dispatch keyed on the arInitial-set tag, never on re-inspecting frame state). This is a CORRECTION of a previously-stated arInitial behaviour, not purely additive; the request-in-arInitial / return-in-arAllFramesReady contract and all other §9A.1.1 text stand. Proven live: K.1F harness, Debug+Release, branch=CACHE-HIT returns output[2]=128/163/93 with no compute, core cache defeated via SetVideoCache(mode=0), balanced pin/trigger/return ledgers; repeated-frame-0 proves present-N dispatch precedes the n==0 gate; four-way selftest unchanged 49/49.
+
 **CMS07.9 (2026-06-24) — additive revision; one new subsection (§9.6.5); no rule/decision/constant/section-number removed.**
 - Made the per-hole **pre-compute adopt-and-skip** check NORMATIVE in **§9.2** (ascending recovery fill): before computing a recovery hole K, under the cache lock check whether output[K] is already present; if present, pin-and-record and SKIP the compute and store; only if absent, compute outside the lock and proceed to the existing AS2 store-and-pin with first-in-best-dressed. Consolidated as new **§9.6.5**, which also states the correctness-vs-efficiency relationship: the POST-compute first-in-best-dressed path (§9.3, since CMS07.1) already guarantees CORRECTNESS under concurrency; the PRE-compute check adds EFFICIENCY by avoiding redundant full-frame recompute of holes a concurrent activation filled during the arInitial→arAllFramesReady gap — expected and frequent under fmParallel and under two interlaced single-field instances each running fmParallel.
 - Clarified **§9.6.2** and the **§8.7 AS3 STATUS NOTE** to separate two things earlier wording conflated: the DEFERRED item is the PLANNER extension to sparse reused-intermediate frames (no such plan shape under the current contiguous-hole planner; awaits a future approved sparse-plan revision); the NORMATIVE item (CMS07.9) is the AS3 find-and-pin PRIMITIVE applied at fill act-time (the §9.2/§9.6.5 pre-compute check). The old "AS3 has no reachable trigger" statement was correct only about the planner extension and only at plan time; it never denied the act-time gap-fill race, which §9.6.3 Category A always recognised as expected.

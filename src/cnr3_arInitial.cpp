@@ -11,21 +11,26 @@
 #include "cnr3_build_config.h"
 #include "cnr3_plugin_internal.h"
 
+#include <cstdio>
 #include <new>
+#include <string>
 #include <utility>
 
 namespace {
 
-void cnr3_delete_unpublished_frame_data(
+Cnr3Status cnr3_delete_unpublished_frame_data(
     Cnr3LiveGetFrameFrameData* request_data,
     Cnr3OutputCacheCore& output_cache
 ) noexcept {
     if (request_data == nullptr) {
-        return;
+        return Cnr3Status::ok;
     }
 
-    (void)request_data->pin_list.discharge_all(output_cache);
+    const Cnr3Status discharge_status =
+        request_data->pin_list.discharge_all(output_cache);
+
     delete request_data;
+    return discharge_status;
 }
 
 const VSFrame* cnr3_publish_live_cache_hit_return(
@@ -40,7 +45,7 @@ const VSFrame* cnr3_publish_live_cache_hit_return(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: invalid cache-hit frameData publication."
+            "CNR3 D.2 recovery proof: invalid cache-hit frameData publication."
         );
         return nullptr;
     }
@@ -78,7 +83,7 @@ const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predece
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: invalid predecessor-present pinned start."
+            "CNR3 D.2 recovery proof: invalid predecessor-present pinned start."
         );
         return nullptr;
     }
@@ -105,7 +110,7 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: invalid frame-0 frameData publication."
+            "CNR3 D.2 recovery proof: invalid frame-0 frameData publication."
         );
         return nullptr;
     }
@@ -120,19 +125,97 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
     return nullptr;
 }
 
-bool cnr3_d1_recovery_plan_is_accepted(
+bool cnr3_exact_anchor_recovery_plan_is_accepted(
     int n,
     const Cnr3CacheRecoverySearchPlan& plan
 ) noexcept {
-    if (!plan.anchor_found || !plan.anchor_pin_recorded) {
+    if (!plan.anchor_found || !plan.anchor_pin_recorded || n <= 0) {
         return false;
     }
 
     const std::size_t hole_count = plan.hole_frame_numbers.size();
 
-    return
-        (hole_count == 1U && plan.anchor_frame_number == n - 2) ||
-        (hole_count == 0U && plan.anchor_frame_number == n - 1);
+    if (hole_count > static_cast<std::size_t>(n)) {
+        return false;
+    }
+
+    const int expected_anchor_frame = n - static_cast<int>(hole_count) - 1;
+
+    if (plan.anchor_frame_number != expected_anchor_frame) {
+        return false;
+    }
+
+    const int first_hole_frame = n - static_cast<int>(hole_count);
+
+    for (std::size_t hole_index = 0U;
+        hole_index < hole_count;
+        ++hole_index
+        ) {
+        const int expected_hole_frame = first_hole_frame + static_cast<int>(hole_index);
+
+        if (plan.hole_frame_numbers[hole_index] != expected_hole_frame) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+const char* cnr3_recovery_refusal_reason(
+    const Cnr3CacheRecoverySearchPlan& plan
+) noexcept {
+    return !plan.anchor_found
+        ? "no-in-window-anchor"
+        : "non-exact-or-non-contiguous-plan";
+}
+
+std::string cnr3_join_recovery_refusal_frame_numbers_for_kdt(
+    const std::vector<int>& frame_numbers
+) {
+    std::string joined{"["};
+
+    for (std::size_t i = 0U; i < frame_numbers.size(); ++i) {
+        if (i != 0U) {
+            joined += ",";
+        }
+
+        joined += std::to_string(frame_numbers[i]);
+    }
+
+    joined += "]";
+    return joined;
+}
+
+void cnr3_trace_live_recovery_refusal(
+    const Cnr3FilterData& data,
+    int requested_frame,
+    const Cnr3CacheRecoverySearchPlan& plan,
+    const char* refusal_reason
+) noexcept {
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+    const std::string holes_text =
+        cnr3_join_recovery_refusal_frame_numbers_for_kdt(plan.hole_frame_numbers);
+
+    std::fprintf(
+        stderr,
+        "[KDT] instance=%d N=%d REFUSED branch=%s "
+        "anchor_found=%d anchor_pin_recorded=%d anchor=%d "
+        "hole_count=%zu holes=%s pin_balance=0\n",
+        data.config.instance_id.value,
+        requested_frame,
+        refusal_reason != nullptr ? refusal_reason : "unknown-recovery-refusal",
+        plan.anchor_found ? 1 : 0,
+        plan.anchor_pin_recorded ? 1 : 0,
+        plan.anchor_frame_number,
+        plan.hole_frame_numbers.size(),
+        holes_text.c_str()
+    );
+#else
+    (void)data;
+    (void)requested_frame;
+    (void)plan;
+    (void)refusal_reason;
+#endif
 }
 
 Cnr3Status cnr3_fill_recovery_source_request_numbers(
@@ -172,7 +255,7 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: invalid recovery frameData start."
+            "CNR3 D.2 recovery proof: invalid recovery frameData start."
         );
         return nullptr;
     }
@@ -191,18 +274,24 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: bounded recovery plan failed."
+            "CNR3 D.2 recovery proof: bounded recovery plan failed."
         );
         return nullptr;
     }
 
-    if (!cnr3_d1_recovery_plan_is_accepted(n, recovery_plan)) {
-        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
-        cnr3_trace_live_after_frame2_not_yet_implemented(data, n);
+    if (!cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
+        const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
+        cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
+
+        const Cnr3Status discard_status =
+            cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: recovery plan is outside the single-hole exact-anchor scope."
+            cnr3_status_is_ok(discard_status)
+            ? refusal_reason
+            : "CNR3 D.2 recovery proof: recovery refusal pin discharge failed."
         );
         return nullptr;
     }
@@ -220,7 +309,7 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed to derive recovery source request set."
+            "CNR3 D.2 recovery proof: failed to derive recovery source request set."
         );
         return nullptr;
     }
@@ -236,7 +325,7 @@ const VSFrame* cnr3_start_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed to allocate per-hole outcome state."
+            "CNR3 D.2 recovery proof: failed to allocate per-hole outcome state."
         );
         return nullptr;
     }
@@ -267,7 +356,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: frameData was unexpectedly non-null at arInitial."
+            "CNR3 D.2 recovery proof: frameData was unexpectedly non-null at arInitial."
         );
         return nullptr;
     }
@@ -279,7 +368,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed to allocate frameData."
+            "CNR3 D.2 recovery proof: failed to allocate frameData."
         );
         return nullptr;
     }
@@ -307,7 +396,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed during cache-hit pin attempt."
+            "CNR3 D.2 recovery proof: failed during cache-hit pin attempt."
         );
         return nullptr;
     }
@@ -354,7 +443,7 @@ const VSFrame* cnr3_arInitial(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed during predecessor pin attempt."
+            "CNR3 D.2 recovery proof: failed during predecessor pin attempt."
         );
         return nullptr;
     }

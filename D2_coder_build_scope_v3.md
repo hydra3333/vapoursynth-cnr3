@@ -1,5 +1,6 @@
-CNR3 — D.2 branch-(d) exact-anchor MULTI-hole recovery + bounded-window refusal. BUILD SCOPE v2 (coder review incorporated).
-v2 folds in the coder's two required corrections: (1) search interval is [max(0,N-B), N-1] (N is the
+CNR3 — D.2 branch-(d) exact-anchor MULTI-hole recovery + bounded-window refusal. BUILD SCOPE v3 (coder review incorporated; build-ready).
+v3 fixes one leftover KDT example (refusal emits no-in-window-anchor, not bounded-window-exceeded).
+v2 folded in the coder's two required corrections: (1) search interval is [max(0,N-B), N-1] (N is the
 target, never an anchor candidate); (2) the refusal path emits no-in-window-anchor only -- the code does
 NOT distinguish out-of-window-anchor from no-prior-anchor (that would need an unbounded search; the
 harness proves the bounded-window case by construction). No cache-core change for a reason string.
@@ -125,8 +126,12 @@ KDT: the recovery trace is already vector-driven (holes=join(hole_frame_numbers)
   source_requests=join(...), per-hole outcome lines). For K==2 it should naturally emit hole_count=2
   holes=[1,2] source_requests=[1,2,3] and two "hole=N outcome=computed" lines. ADD/CONFIRM
   pin_list_size in the trace so the three-pin discharge is visible. The refusal path should emit a
-  distinct KDT (e.g. NOT-YET / REFUSED branch=bounded-window-exceeded) so the harness can prove the
-  refusal fired for the right reason (not a crash, not a silent wrong-branch).
+  distinct KDT, e.g. NOT-YET / REFUSED branch=no-in-window-anchor (or
+  recover_refusal_reason=no-in-window-anchor), so the harness can prove the refusal fired cleanly and
+  for the right reason (not a crash, not a silent wrong-branch). The code emits no-in-window-anchor (it
+  reports only what its bounded search observed); the bounded-window-exceeded NATURE is proven by the
+  harness construction, NOT by a code-emitted "exceeded" label. (A separate reason applies when an
+  in-window anchor WAS found but the plan failed the exact-anchor/contiguity gate.)
 
 FIVE GUARDS (unchanged from D.1; re-verify under K>=2):
   1. N (requested_frame) is the final TARGET, computed after holes filled -- not a hole.

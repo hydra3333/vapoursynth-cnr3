@@ -688,7 +688,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: invalid recovery frameData lifecycle."
+            "CNR3 D.2 recovery proof: invalid recovery frameData lifecycle."
         );
         return nullptr;
     }
@@ -706,7 +706,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: hole source was not requested at arInitial."
+                "CNR3 D.2 recovery proof: hole source was not requested at arInitial."
             );
             return nullptr;
         }
@@ -727,7 +727,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: pre-compute hole adopt-and-skip lookup failed."
+                "CNR3 D.2 recovery proof: pre-compute hole adopt-and-skip lookup failed."
             );
             return nullptr;
         }
@@ -745,7 +745,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: failed to acquire hole predecessor compute reference."
+                "CNR3 D.2 recovery proof: failed to acquire hole predecessor compute reference."
             );
             return nullptr;
         }
@@ -762,7 +762,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: hole source frame retrieval failed."
+                "CNR3 D.2 recovery proof: hole source frame retrieval failed."
             );
             return nullptr;
         }
@@ -776,7 +776,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: hole copyFrame failed."
+                "CNR3 D.2 recovery proof: hole copyFrame failed."
             );
             return nullptr;
         }
@@ -788,7 +788,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: hole copyFrame returned the source frame alias."
+                "CNR3 D.2 recovery proof: hole copyFrame returned the source frame alias."
             );
             return nullptr;
         }
@@ -818,7 +818,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: P.11B hole processing failed."
+                "CNR3 D.2 recovery proof: P.11B hole processing failed."
             );
             return nullptr;
         }
@@ -835,7 +835,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: failed to adopt computed hole output."
+                "CNR3 D.2 recovery proof: failed to adopt computed hole output."
             );
             return nullptr;
         }
@@ -859,7 +859,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.1 recovery proof: failed to store/pin computed recovery hole."
+                "CNR3 D.2 recovery proof: failed to store/pin computed recovery hole."
             );
             return nullptr;
         }
@@ -875,7 +875,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: target source was not requested at arInitial."
+            "CNR3 D.2 recovery proof: target source was not requested at arInitial."
         );
         return nullptr;
     }
@@ -894,7 +894,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed to acquire target predecessor compute reference."
+            "CNR3 D.2 recovery proof: failed to acquire target predecessor compute reference."
         );
         return nullptr;
     }
@@ -907,7 +907,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: target source frame retrieval failed."
+            "CNR3 D.2 recovery proof: target source frame retrieval failed."
         );
         return nullptr;
     }
@@ -921,7 +921,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: target copyFrame failed."
+            "CNR3 D.2 recovery proof: target copyFrame failed."
         );
         return nullptr;
     }
@@ -933,7 +933,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: target copyFrame returned the source frame alias."
+            "CNR3 D.2 recovery proof: target copyFrame returned the source frame alias."
         );
         return nullptr;
     }
@@ -963,7 +963,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: P.11B target processing failed."
+            "CNR3 D.2 recovery proof: P.11B target processing failed."
         );
         return nullptr;
     }
@@ -988,7 +988,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed to store/return authoritative target output."
+            "CNR3 D.2 recovery proof: failed to store/return authoritative target output."
         );
         return nullptr;
     }
@@ -1015,7 +1015,7 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.1 recovery proof: failed to discharge recovery pin-list."
+            "CNR3 D.2 recovery proof: failed to discharge recovery pin-list."
         );
         return nullptr;
     }

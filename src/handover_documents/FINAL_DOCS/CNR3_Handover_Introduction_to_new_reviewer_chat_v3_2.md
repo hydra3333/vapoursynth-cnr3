@@ -1,10 +1,15 @@
 # CNR3 — Handover Introduction & Role Description for the Reviewer
 
-**Version:** v3.0
-**Date:** 2026-06-23
+**Version:** v3.2
+**Date:** 2026-06-25
 **Supersedes:** v2.0 (whose Part 2/3 baseline was the **obsolete CMS06.11 / H15.6B cache era** —
 far older than the pixel arc; that state is gone). v3.0 re-points the project context to the
-**keystone era** (K.1A–K.1D committed, K.1E branch-(c) in flight) and **reconciles the role
+**keystone era**. v3.2 advances the pointers to the current baseline: **committed through D.1 (first live
+branch-(d) recovery), selftest count 49/49, CMS07.10**; the live getFrame dispatch now handles
+**ALL FOUR branches** (cache-hit, fresh-start, predecessor-present, recovery), and **branch-(d) D.2
+(exact-anchor multi-hole recovery) is the next phase**. v3.2 also points to the **CNR3 Design
+Alignment and Escalation Charter** (full text in the Role Handover Part 3 / Production Spec §3A.5.0). v3.0 originally re-pointed off the
+obsolete CMS06.11/H15.6B era and **reconciles the role
 description to "designer / reviewer"** (consistent with the Role Handover and with how the work
 has actually been performed), where v2.0 framed it more narrowly as "compliance auditor."
 
@@ -15,11 +20,12 @@ triggers, worked examples), this carries the orientation.
 
 **How to start (do this in order):**
 1. Read this document.
-2. Read **`CNR3_Designer_Reviewer_Role_Handover_v1.6.md`** (the role, disciplines D1–D15,
-   triggers, worked examples) and **the CMS** (`cnr3_cache_manager_design_v7_8.md`, the design
+2. Read **`CNR3_Designer_Reviewer_Role_Handover_v1_7.md`** (the role, disciplines D1–D16,
+   triggers, worked examples) and **the CMS** (`cnr3_cache_manager_design_v7_10.md`, the design
    authority).
-3. Read **`CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md`** for the current state and
-   the immediate next action.
+3. Read **`CNR3_THIS_CHAT_DELTA_keystone_through_K1F_v4.md`** for the current state and
+   the immediate next action (it is the newest current-state record; Document B is the
+   format-of-record companion).
 4. **Confirm the actual build state from the REPOSITORY, not from any document** — check
    `CNR3_EDIT_VERSION` and the selftest count in the committed source. Documents can lag; the repo
    is truth.
@@ -63,7 +69,7 @@ safe and auditable, that it does not disturb proven code, and that it is structu
 later phases.
 
 ### 1.3 Review methodology (at each phase)
-- **Design compliance** — faithful to the CMS (currently CMS07.8 / v7.8)?
+- **Design compliance** — faithful to the CMS (currently CMS07.10 / v7.10)?
 - **Scope discipline** — only the changes authorised for this subphase; flag scope creep and
   premature implementation of later phases; **any contact with proven / cache-core / selftest /
   project / VS-header code must be reported BEFORE coding**, not discovered in the diff.
@@ -106,14 +112,14 @@ output, never assumed output.
 
 ### 2.1 The authoritative document set (current versions)
 ```text
-CMS (design authority)     cnr3_cache_manager_design_v7_8.md
-Production Spec            CNR3_Handover_Pack_Production_Spec_v2_7.md   (§3A Prevailing Rules Register, incl. PDAP / R-PROCESS-20..22)
+CMS (design authority)     cnr3_cache_manager_design_v7_10.md   (CMS07.10; R-LIFECYCLE correction proven by K.1F)
+Production Spec            CNR3_Handover_Pack_Production_Spec_v2_9.md   (§3A Prevailing Rules Register, incl. PDAP / R-PROCESS-20..23)
 Diagnostics spec          cnr3_diagnostics_specification_v1_5.md       (§2.8 = the temporary keystone KDT, removed post-K.1G)
-Companion (non-normative)  CNR3_CMS_Future_Investigations_and_Open_Questions_v7_8.md   (FI-04 resolved into CMS §9.7.7; NOT in the coder pack)
-Role/Reviewer Handover    CNR3_Designer_Reviewer_Role_Handover_v1.6.md  (the role + disposition depth)
-Current-state             Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_2_9.md
-This-chat delta           CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md   (companion to Document B; newest state)
-This document             CNR3_Handover_Introduction_to_new_chat_v3.0.md
+Companion (non-normative)  CNR3_CMS_Future_Investigations_and_Open_Questions_v7_10.md   (FI-04..08; NOT in the coder pack)
+Role/Reviewer Handover    CNR3_Designer_Reviewer_Role_Handover_v1_7.md  (the role + disposition depth)
+Current-state             Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_4.md
+This-chat delta           CNR3_THIS_CHAT_DELTA_keystone_through_K1F_v4.md   (companion to Document B; NEWEST state)
+This document             CNR3_Handover_Introduction_to_new_chat_v3_1.md
 ```
 
 **Authority hierarchy:** CMS → Production Spec §3A → diagnostics spec → handover pack. If documents
@@ -122,15 +128,18 @@ repository wins.**
 
 ### 2.2 Current status (snapshot — confirm from the repo and the DELTA)
 ```text
-Committed/pushed through:  CMS07-K.1D  (live frame-0 fresh-start store/return — first REAL output frame)
-Selftests:                 47/47 PASS  (forced-fail 46/47, exit 1; verbose 47/47 with all priors)
+Committed/pushed through:  CMS07-K.1F  (live direct cached-output return — branch-b cache hit)
+Selftests:                 49/49 PASS  (forced-fail 48/49, exit 1; verbose 49/49 with all priors)
 Branch:                    dev_cache_manager
-In flight:                 CMS07-K.1E branch-(c) (predecessor-present frame-1 compute) — acknowledgement
-                           accepted, PRE-PATCH; the fourth confirmation is drafted but NOT yet sent (DELTA §4).
+Controlling CMS:           CMS07.10 (R-LIFECYCLE correction to §9A.1.1, proven by K.1F)
+Next phase:                branch-(d) D.1 (exact-anchor single-hole recovery) — see DELTA v4 §5.
+                           (First action next session: commit the corrected CMS07.10 — DELTA v4 §1.)
 ```
-The full delta of everything since Document B v3.2.8 — the four keystone commits, the K.1D
-reorientation, the K.1E investigation and branch-(c) status, the owed-items ledger, the open
-scaffold audit, and the reinforced disciplines — is in **the DELTA document**. Read it for current
+The full delta of everything since the K.1D era — K.1E.2/E.3 (branch-c, R-ARCH-06 closed),
+CMS07.9 (pre-compute adopt-and-skip normative; fmParallel assumption caught), Recovery-Step-0
+(AS4 batch discharge), K.1F (branch-b live cache-hit, with the settled Option-C / R-LIFECYCLE
+lifecycle finding), CMS07.10, the owed-items ledger, and the D.1 starting brief — is in **the
+DELTA v4 document** (`CNR3_THIS_CHAT_DELTA_keystone_through_K1F_v4.md`). Read it for current
 state.
 
 ### 2.3 The keystone (what the current work IS)
@@ -144,64 +153,53 @@ It is being decomposed K.1A–K.1G:
 K.1A  request-plan structures + temporary KDT dev-trace          DONE (count 46)
 K.1B  direct cached-output-return ownership (synthetic)          DONE (count 47)
 K.1C  live getFrame passthrough scaffold                         DONE (plugin-only)
-K.1D  first REAL output[0] via copyFrame (fresh-start)           DONE (plugin-only)
-K.1E  branch (c): predecessor-present frame-1 compute            IN FLIGHT (pre-patch)
-...   branch (d) recovery; multi-frame VS-LIFECYCLE-01; etc.     OWED (DELTA §10)
+K.1D  first REAL output[0] via copyFrame (fresh-start)           DONE (branch-a)
+K.1E.2/E.3  branch (c): predecessor-present compute (N==1,2)     DONE (R-ARCH-06 closed)
+Recovery-Step-0  AS4 single-lock batch discharge                 DONE (count 48->49)
+K.1F  branch (b): live direct cached-output return (cache hit)   DONE (count 49)
+D.1   branch (d): exact-anchor single-hole recovery              NEXT  (DELTA v4 §5)
+D.2-D.5  multi-hole / floor-fresh-start / adopt-skip / prune     OWED  (DELTA v4 §5)
 ```
 
 ---
 
-## PART 3 — CURRENT PHASE-SPECIFIC AUDIT REQUIREMENTS (K.1E branch-(c))
+## PART 3 — CURRENT PHASE-SPECIFIC REQUIREMENTS (branch-(d) D.2 multi-hole recovery)
 
-**(This replaces v2.0's H15.6B audit section, which is obsolete.)**
+**(Orientation only; the live current-state record is the DELTA — read it for depth.)**
 
-**K.1E = `CMS07-K.1E-live-predecessor-present-frame1-compute-proof`.** N==1 after K.1D stored
-output[0]: at `arInitial`, acquire cached output[0] as predecessor (real lookup/addref, carried in
-frameData) and request source[1]; at `arAllFramesReady`, retrieve source[1], compute output[1] via
-the **proven P.11B** composition, **release** the predecessor after use, store output[1] per existing
-checkpoint policy, return output[1]. N>1 is a clean refusal
-(`NOT-YET-IMPLEMENTED branch=after-frame1-before-recovery-wiring`). **Proves N==1 only.**
+**Where the live dispatch stands:** ALL FOUR getFrame branches are wired and proven both configs —
+cache-hit (b, K.1F), fresh-start (a, K.1D), predecessor-present (c, K.1E.2/E.3), and **recovery
+(d, D.1)**. The dispatch is feature-complete; remaining branch-(d) work is generalisation.
 
-**The four confirmations (three accepted; the fourth NOT yet sent — send it first, DELTA §4):**
-1. **Scene-change deferred** — K.1E proves predecessor-present composition only; P.11C already proves
-   reset for a given threshold. Live scene-change threshold derivation + reset wiring is deferred.
-2. **Frame-1 acceptance = predecessor WIRING proof, not blend math.** P.11B owns the blend math.
-   K.1E must prove the predecessor was **specifically cached output[0]** (KDT: `pred=0`,
-   `pred_source=output_cache`, `pred_lookup=hit`) and was released (`pred_released=1`,
-   `pred_balance=0`), AND there must be **at least one known-answer vector** giving frame 1 a real
-   byte-check (not pure KDT self-report). KDT self-report alone is insufficient for a load-bearing
-   claim.
-3. **P.11B-call scope = thin exposure of proven code only.** Any `cnr3_frame_processing.cpp/.h`
-   contact must be ONLY to expose/call the proven P.11B path; **P.11C body untouched**; no re-routing
-   of proven internals; no new pixel/copy algorithm; **report-before-broadening**. This is the bar to
-   watch hardest (see the K.1D reorientation in the DELTA §2 for why).
-4. **[NOT YET SENT] Temporary-code marking + scaffold-removal question.** Temporary live-path code (the
-   N==1 gate / N>1 refusal control-flow, any scene-change-deferral stub, the KDT line) must be
-   **uniformly, greppably marked** AND annotated with **what replaces it and when**, so cleanup is
-   grep-and-remove, not archaeology. Also ask the coder to confirm the K.1C scaffold is fully removed
-   from the committed tree.
+**THE GOVERNING DISCIPLINE — the Design Alignment and Escalation Charter.** Before phase specifics,
+internalise the three-way charter (full text: Role Handover Part 3 §D0, and Production Spec §3A.5.0).
+In brief: the CMS is the controlling guide and strict alignment is the default; two issue types are
+surfaced (never routed around) — **RULE-DEVIATION** (a named CMS rule, if followed, would be wrong/
+unsafe — HIGH bar) and **CMS-GAP** (a bigger-picture/fmParallel/safety concern with no specific rule
+— encouraged, low bar); on either, work on the affected change pauses, resolved by designer+coder
+agreement with coordinator approval, recorded durably before/as part of the commit. Cross-checking is
+bidirectional (designer read-firsts diffs + recomputes goldens; coder checks scope against code
+reality). The D.1 design road is the worked example of this charter operating.
 
-**Ownership bar for branch (c) (the core proof) — OPPOSITE tail to K.1B:**
-```text
-predecessor lookup/addref:  acquired = 1
-predecessor used as input, NOT transferred to VapourSynth
-released after compute / on every error path before compute:  released = 1
-                                                               transferred = 0
-                                                               balance = 0
-```
-**Dependency declaration:** `rpStrictSpatial` → `rpGeneral` (resolves FI-04; conservative-correct for
-a recursive filter). **`fmUnordered` stays.** `requestPattern` is a SEPARATE layer from `filterMode`
-and does NOT affect the CMS7 cache design (DELTA §8).
+**D.2 = exact-anchor MULTI-hole recovery (k>=2).** Request output[N] where output[N-1] AND output[N-2]
+are ABSENT and output[N-3] is PRESENT (the anchor). Extends the proven D.1 recovery: the accept gate
+widens to admit k>=2 holes (anchor at N-(k+1)); the **multi-pin discharge becomes the load-bearing new
+proof** (the pin-list grows with hole count; D.1 already discharges two pins, D.2 stresses a larger
+list); source-request derivation from multiple holes ({N} U all hole sources); plus the **bounded-
+window refusal** (nearest anchor beyond the back-radius -> clean refuse; distinct from D.3 floor-fresh-
+start). Builds on D.1's A-safe-1 routing, dissolved source window, authoritative return, and the
+recovery-shaped frameData/KDT vocabulary (deliberately designed to take extra holes without reshaping).
 
-**Patch-review bars (verify against the diff):** P.11B-call scope (P.11C byte-unchanged); ownership
-balance as above; the five-fence pattern; KDT getFrame-only / stderr-only / no `SCAFFOLD_NOT_FILTERED`;
-N>1 gated before arInitial.
+**Designer actions owed before the coder scope:** (1) compute + verify the D.2 multi-hole golden chain
+against the real response tables (threshold 255 / strength 255 / narrow) and P.11B blend — same method
+that produced the D.1 chain; note adjacent filtered frames differ by ~1 LSB at high threshold, so the
+robust D.2 proof is the KDT mechanism (hole_count=2, both computed, balanced multi-pin discharge) plus
+direct hole-byte checks via cache-hit follow-up, not the target margin alone; (2) draft the D.2 scope;
+(3) the D.1 recovery harness is the regression base (D.2 must keep D.1 green).
 
-**Acceptance:** four-way unchanged (47/47) + the K.1E-shaped harness (frame-0 A/B byte-identical;
-frame-1 KDT check + known-answer byte-check; N>1 clean refusal). The harness is coordinator-side and
-is **not yet built** (DELTA §5).
-
----
+**Settled lifecycle finding to carry (do NOT re-derive):** every CNR3 getFrame branch requests >=1 real
+source at arInitial and returns only at arAllFramesReady (R-LIFECYCLE, CMS §9A.1.1). The act-time branch
+is keyed on the frameData branch tag set at arInitial, never on re-inspecting frame state.
 
 ## PART 4 — TECHNICAL STANDING RULES & CONSTRAINTS
 

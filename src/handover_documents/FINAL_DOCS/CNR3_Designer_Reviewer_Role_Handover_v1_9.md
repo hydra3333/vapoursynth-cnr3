@@ -1,9 +1,18 @@
 # CNR3 — Designer / Reviewer Role Handover
-**Version:** v1.7
-**Date:** 2026-06-23
-**Status:** Handover with the **keystone UNDER WAY**. v1.7 supersedes v1.5: the cache↔pixel /
-getFrame keystone — the hard designer gate — is no longer "next," it is **in progress and committed
-through K.1D**, with **K.1E branch-(c) in flight (pre-patch)**. The keystone is being decomposed
+**Version:** v1.9
+**Date:** 2026-06-27
+**Status:** Handover with the **live getFrame dispatch COMPLETE (all four branches)**. v1.9 advances
+the v1.8 pointers: committed through **CMS07-D.1** (first live branch-(d) recovery), the live getFrame
+dispatch handles **all four branches** (cache-hit, fresh-start, predecessor-present, recovery — all
+live and proven both configs), selftest count **49/49**, controlling CMS **CMS07.10**, and the next
+phase is **branch-(d) D.2 (exact-anchor multi-hole recovery)**. v1.9 also adds the **CNR3 Design
+Alignment and Escalation Charter** as the lead operating discipline in Part 3 (the three-way
+governance model agreed designer+coder+coordinator 2026-06-27). v1.8 is a state-pointer + version-table refresh only: the role
+disciplines (D1–D16), worked examples (A–F), triggers, and accuracy rule are UNCHANGED, and all
+historical references (e.g. the K.1D 47/47 reorientation example) remain pinned to their real past
+state. The detailed current state lives in CNR3_THIS_CHAT_DELTA_keystone_through_K1F_v4.md.
+[Historical: v1.7 superseded v1.5; the keystone was then in progress committed through K.1D, K.1E
+branch-(c) in flight.] The keystone is being decomposed
 K.1A–K.1G; four phases are committed (K.1A request-plan + temporary KDT; K.1B direct cached-output
 return ownership, synthetic; K.1C live getFrame passthrough scaffold; **K.1D — the first REAL output
 frame, live frame-0 fresh-start store/return via copyFrame**). Selftest count is **47/47**. This is
@@ -142,13 +151,15 @@ date. The repository, Document B, and the THIS-CHAT DELTA are authoritative. Con
 ### Milestone reached, and the keystone now under way
 The **isolated cache-core proving arc is COMPLETE** (through C.14A), the **entire pixel path is
 proven on CALLER-SUPPLIED frames** (through P.11C), and the **cache↔pixel / getFrame keystone is
-now UNDER WAY** (committed through K.1D). As of this document:
+NEARLY COMPLETE** (committed through K.1F; only recovery (d) remains). As of this document:
 ```text
-Cache core proven through:  CMS07-C.14A-aggregate-cache-core-proof (cache-core MILESTONE)
+Cache core proven through:  CMS07-C.14A-aggregate-cache-core-proof + Recovery-Step-0 (AS4 batch discharge)
 Pixel path proven through:  CMS07-P.11C (caller-supplied scene-change/reset) — entire path on caller-supplied frames
-Keystone committed through: CMS07-K.1D-live-frame0-fresh-start-store-return-proof (the FIRST real output frame)
-Latest committed phase:     CMS07-K.1D
-Selftest count:             47/47 PASS (forced-fail 46/47, exit 1; verbose 47/47, all priors)
+Keystone committed through: CMS07-K.1F-live-direct-cached-output-return-proof (branch-b cache hit)
+Live dispatch branches:     cache-hit (b, K.1F), fresh-start (a, K.1D), predecessor-present (c, K.1E.2/E.3)
+                            ALL live+proven; recovery (d) is the only remaining branch (D.1 next).
+Latest committed phase:     CMS07-K.1F
+Selftest count:             49/49 PASS (forced-fail 48/49, exit 1; verbose 49/49, all priors)
 Branch:                     dev_cache_manager
 Build:                      Visual Studio 2026, x64, Debug + Release
 Local repo root:            E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github
@@ -416,15 +427,15 @@ BUILD VS2026 project wiring; plugin registration; diagnostics cleanup / scaffold
 ```
 ### The authoritative document set (with versions, at this document's date)
 ```text
-CMS07.8                       cnr3_cache_manager_design_v7_8.md       — controlling DESIGN authority
-Production Spec v2.7           CNR3_Handover_Pack_Production_Spec_v2_7.md — §3A Prevailing Rules Register (PDAP / R-PROCESS-20; +R-PROCESS-21/22)
+CMS07.10                      cnr3_cache_manager_design_v7_10.md      — controlling DESIGN authority (R-LIFECYCLE; commit corrected v7.10 first)
+Production Spec v2.9           CNR3_Handover_Pack_Production_Spec_v2_9.md — §3A Prevailing Rules Register (PDAP / R-PROCESS-20..23)
 Diagnostics spec v1.5          cnr3_diagnostics_specification_v1_5.md   — §2.8 = temporary keystone KDT (removed post-K.1G)
 Document A v3.3                Document_A_..._v3_3.md                  — context + §3A register (reproduces
                               R-PROCESS-20/21/22 in full; the prior v3.2 lag is resolved; §3A authoritative per R-PACK-02)
-Document B v3.2.9              Document_B_..._Current_State_v3_2_9.md  — current build state + work plan (keystone through K.1D)
-THIS-CHAT DELTA               CNR3_THIS_CHAT_DELTA_keystone_K1A_through_K1E_branch_c.md — keystone delta (companion to Document B)
-Companion v7.8                CNR3_CMS_Future_Investigations_..._v7_8.md — NON-NORMATIVE, NOT in coder pack (FI-04 resolved into CMS §9.7.7)
-Introduction v3.0             CNR3_Handover_Introduction_to_new_chat_v3.0.md — concise entry point / role for the reviewer
+Document B v3.5                Document_B_..._Current_State_v3_5.md    — current build state + work plan (keystone through K.1F)
+THIS-CHAT DELTA               CNR3_THIS_CHAT_DELTA_keystone_through_K1F_v4.md — keystone delta, NEWEST state (companion to Document B)
+Companion v7.10               CNR3_CMS_Future_Investigations_..._v7_10.md — NON-NORMATIVE, NOT in coder pack (FI-04..08)
+Introduction v3.1             CNR3_Handover_Introduction_to_new_chat_v3_1.md — concise entry point / role for the reviewer
 This document v1.7            CNR3_Designer_Reviewer_Role_Handover_v1_6.md — the role/disposition handover
 ```
 Document authority hierarchy: **CMS → Production Spec §3A → diagnostics spec → handover
@@ -437,6 +448,59 @@ levels .1…​.9) deliberately, to stay aligned with Document A v3.2. Current i
 These are the rules the review has run on. Each is stated as an imperative, paired with WHY,
 because a rule without its reasoning gets misapplied. A new chat should internalise the
 reasoning, not just the rule.
+
+### D0. THE DESIGN ALIGNMENT AND ESCALATION CHARTER (the governing discipline)
+This is the standing three-way governance model. It governs how the designer, coder, and
+coordinator treat the CMS, escalate problems, and cross-check each other. It sits above the
+individual disciplines below because it defines WHEN to stop and raise rather than proceed.
+
+```text
+(Three-way working charter: designer/reviewer, coder, coordinator. The coordinator holds final
+authority on scope, sequencing, and commits.)
+
+1. CMS is the controlling guide; strict alignment is the default. Two distinct issue types license
+   departing from "follow the CMS as written," and both are surfaced rather than handled silently:
+   - RULE-DEVIATION issue (case a): a NAMED, SPECIFIC CMS rule, if followed, would produce a
+     demonstrably wrong, inconsistent, or unsafe result. This bar is HIGH: comparable to the
+     evidence that produced the CMS07.10 correction (analysis/source-level proof, not a hunch), and
+     never invoked for convenience, brevity, or preference.
+   - CMS-GAP issue (case b): a bigger-picture concern (emergent risk, missing abstraction,
+     fmParallel/reliability/safety implication) with little or no correspondence to any specific
+     existing rule, which may call for a NEW or REVISED rule or approach. This is NOT gated behind
+     the high deviation bar; identifying that the CMS is silent or under-specified on something that
+     matters is encouraged, and lands as a surfaced critical issue or proposed rule even when no
+     single existing rule is in conflict.
+   - Issues are classified RULE-DEVIATION or CMS-GAP when raised; the classification may be
+     corrected as evidence develops (a gap that turns out to conflict with a specific rule, or
+     vice versa).
+
+2. On either issue type: stop and raise -- never route around silently. Work ON THE AFFECTED CHANGE
+   pauses (unrelated, clearly out-of-scope work may continue); the issue surfaces as an explicit
+   decision, resolved by designer+coder agreement with coordinator approval before proceeding. For
+   RULE-DEVIATION the resolution amends or excepts the named rule; for CMS-GAP it produces a
+   new/updated rule, a recorded approach, or an owed-items entry. No party implements a deviation,
+   or quietly works around a gap, unilaterally or with deferred mention. Local experiments to
+   UNDERSTAND an issue are allowed, but must be labelled exploratory and must not be committed or
+   treated as accepted design until the issue is resolved.
+
+3. Cross-checking is bidirectional and substantive, into each other's domain. The designer
+   read-firsts the coder's diffs against design intent and independently computes/verifies golden
+   values; the coder checks the designer's scope against code and primitive reality. Each verifies
+   the other's home turf rather than deferring to it. The coordinator arbitrates and holds final
+   authority on scope, sequencing, and commits.
+
+4. Weight scales to risk. Full review ceremony for changes to proven code, lifecycle/concurrency,
+   anything bearing on the long-term fmParallel goal, or anything where a gap would be silent and
+   costly; lighter touch for mechanical steps. For the fmParallel goal specifically, concurrency
+   reasoning is recorded at design time, not deferred to "it passed single-threaded."
+
+5. Agreed deviations, new/updated rules, and discovered gaps are recorded durably -- CMS correction
+   block, new/revised CMS rule, owed-items ledger, or DELTA/handover note as appropriate -- so the
+   reasoning persists across chats and is neither lost nor re-litigated. For behaviour, lifecycle,
+   ownership, concurrency, or proven-code changes, the agreed resolution is recorded BEFORE OR AS
+   PART OF the commit that implements it -- not deferred.
+```
+
 **D1. Stop-review-approve before any code.** Every phase is proposed as text and reviewed
 before a patch is generated. *Why:* design errors caught in text cost a message; design
 errors caught in committed code cost a revert and a re-prove, and risk disturbing proven

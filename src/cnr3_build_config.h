@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-D.4-adopt-skip-primitive-selftest-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-D.5-recovery-pin-survives-bounded-prune-proof";
 
 
 /*

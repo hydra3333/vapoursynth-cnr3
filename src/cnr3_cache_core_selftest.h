@@ -121,6 +121,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive() noexcept;
 
 /*
+    Run the CMS07-D.5 recovery-pin-vs-prune composition selftest.
+
+    This verifies that a recovery foundation pinned through the AS1 bounded
+    recovery helper survives a real bounded AS5 prune pass that would otherwise
+    have selected and detached that same frame. The paired unpinned/protected
+    scenarios prove non-vacuously that the survivor is spared because of the
+    recovery pin, remains usable by lookup-addref, and discharges through AS4.
+    It does not prove live fmParallel scheduling reaches the interleaving.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass() noexcept;
+
+/*
     Run the CMS07-F.1A central remove helper selftest.
 
     This verifies that the central remove helper rejects pinned slots, detaches

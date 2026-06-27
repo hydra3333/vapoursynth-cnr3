@@ -1781,6 +1781,363 @@ Cnr3Status cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive
     return Cnr3Status::ok;
 }
 
+Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    constexpr int checkpoint_frame_number = 0;
+    constexpr int hot_zone_observation_frame = 100;
+    constexpr int foundation_frame_number = 165;
+    constexpr int expected_protected_victim_frame_number = 164;
+    constexpr int requested_frame = foundation_frame_number + 1;
+    constexpr int recovery_back_radius = 1;
+    constexpr int stored_last_frame_number = foundation_frame_number;
+    constexpr std::size_t stored_frame_count =
+        static_cast<std::size_t>(stored_last_frame_number + 1);
+    constexpr std::uint64_t prune_frame_byte_count =
+        CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL;
+    constexpr std::size_t retain_checkpoint_count = 1U;
+    constexpr std::size_t max_remove_count = 1U;
+
+    auto fail = []() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    auto store_frame = [](Cnr3OutputCacheCore& cache,
+        int frame_number,
+        bool is_checkpoint,
+        const VSFrame* frame,
+        const VSAPI* vsapi
+    ) noexcept -> Cnr3Status {
+        Cnr3OwnedFrameRef owned_frame{};
+
+        const Cnr3Status adopt_status =
+            owned_frame.reset_to_owned_frame(frame, vsapi);
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        const Cnr3Status store_status =
+            is_checkpoint
+            ? cache.store_checkpoint_owned_frame(
+                frame_number,
+                std::move(owned_frame)
+            )
+            : cache.store_noncheckpoint_owned_frame(
+                frame_number,
+                std::move(owned_frame)
+            );
+
+        if (!cnr3_status_is_ok(store_status)) {
+            return store_status;
+        }
+
+        if (owned_frame.has_frame()) {
+            return Cnr3Status::ownership_violation;
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    auto build_prune_state = [store_frame](Cnr3OutputCacheCore& cache,
+        const std::vector<int>& frame_storage,
+        const VSAPI* vsapi
+    ) noexcept -> Cnr3Status {
+        if (
+            frame_storage.size() < stored_frame_count ||
+            cache.record_hot_zone_observation(hot_zone_observation_frame) !=
+                Cnr3Status::ok
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (int frame_number = checkpoint_frame_number;
+            frame_number <= stored_last_frame_number;
+            ++frame_number) {
+            const VSFrame* frame =
+                reinterpret_cast<const VSFrame*>(&frame_storage[frame_number]);
+            const bool is_checkpoint = (frame_number == checkpoint_frame_number);
+
+            const Cnr3Status store_status =
+                store_frame(cache, frame_number, is_checkpoint, frame, vsapi);
+
+            if (!cnr3_status_is_ok(store_status)) {
+                return store_status;
+            }
+        }
+
+        if (
+            cache.slot_count() != stored_frame_count ||
+            cache.checkpoint_count() != 1U ||
+            cache.total_pin_count() != 0
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    std::vector<int> control_frame_storage(stored_frame_count);
+    std::vector<int> protected_frame_storage(stored_frame_count);
+
+    if (
+        control_frame_storage.size() != stored_frame_count ||
+        protected_frame_storage.size() != stored_frame_count
+        ) {
+        return fail();
+    }
+
+    for (std::size_t i = 0; i < stored_frame_count; ++i) {
+        control_frame_storage[i] = static_cast<int>(1000U + i);
+        protected_frame_storage[i] = static_cast<int>(2000U + i);
+    }
+
+    const VSFrame* control_foundation_frame =
+        reinterpret_cast<const VSFrame*>(
+            &control_frame_storage[foundation_frame_number]
+        );
+    const VSFrame* control_next_victim_frame =
+        reinterpret_cast<const VSFrame*>(
+            &control_frame_storage[expected_protected_victim_frame_number]
+        );
+    const VSFrame* control_checkpoint_frame =
+        reinterpret_cast<const VSFrame*>(
+            &control_frame_storage[checkpoint_frame_number]
+        );
+    const VSFrame* protected_foundation_frame =
+        reinterpret_cast<const VSFrame*>(
+            &protected_frame_storage[foundation_frame_number]
+        );
+    const VSFrame* protected_next_victim_frame =
+        reinterpret_cast<const VSFrame*>(
+            &protected_frame_storage[expected_protected_victim_frame_number]
+        );
+    const VSFrame* protected_checkpoint_frame =
+        reinterpret_cast<const VSFrame*>(
+            &protected_frame_storage[checkpoint_frame_number]
+        );
+    const VSFrame* protected_hot_zone_frame =
+        reinterpret_cast<const VSFrame*>(
+            &protected_frame_storage[hot_zone_observation_frame]
+        );
+
+    vsapi_state.tracked_release_frames[0] = control_foundation_frame;
+    vsapi_state.tracked_release_frames[1] = control_next_victim_frame;
+    vsapi_state.tracked_release_frames[2] = control_checkpoint_frame;
+    vsapi_state.tracked_release_frames[3] = protected_foundation_frame;
+    vsapi_state.tracked_release_frames[4] = protected_next_victim_frame;
+    vsapi_state.tracked_release_frames[5] = protected_checkpoint_frame;
+    vsapi_state.tracked_release_frames[6] = protected_hot_zone_frame;
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        if (
+            build_prune_state(cache, control_frame_storage, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        Cnr3CachePruneExecutionSummary prune_summary{};
+        const int free_count_before_prune = vsapi_state.free_frame_count;
+
+        if (
+            cache.execute_bounded_prune_pass(
+                prune_frame_byte_count,
+                retain_checkpoint_count,
+                max_remove_count,
+                prune_summary
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !prune_summary.trigger_decision.prune_is_required ||
+            prune_summary.trigger_decision.current_slot_count !=
+                stored_frame_count ||
+            prune_summary.bounded_remove_limit != max_remove_count ||
+            prune_summary.selected_candidate_count != 1U ||
+            prune_summary.detached_count != 1U ||
+            cache.slot_count() != stored_frame_count - 1U ||
+            cache.checkpoint_count() != 1U ||
+            cache.total_pin_count() != 0 ||
+            vsapi_state.free_frame_count != free_count_before_prune + 1 ||
+            vsapi_state.tracked_release_counts[0] != 1 ||
+            vsapi_state.tracked_release_counts[1] != 0 ||
+            vsapi_state.tracked_release_counts[2] != 0
+            ) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!cache.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (
+            vsapi_state.tracked_release_counts[0] != 1 ||
+            vsapi_state.tracked_release_counts[1] != 1 ||
+            vsapi_state.tracked_release_counts[2] != 1
+            ) {
+            return fail();
+        }
+    }
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (
+            build_prune_state(cache, protected_frame_storage, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            cache.plan_bounded_recovery_search_and_record_anchor_pin(
+                requested_frame,
+                recovery_back_radius,
+                pin_list,
+                plan
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !plan.anchor_found ||
+            plan.anchor_frame_number != foundation_frame_number ||
+            plan.anchor_is_checkpoint ||
+            !plan.anchor_pin_recorded ||
+            !plan.hole_frame_numbers.empty() ||
+            pin_list.pin_count() != 1U ||
+            cache.total_pin_count() != 1
+            ) {
+            return fail();
+        }
+
+        Cnr3CachePruneExecutionSummary prune_summary{};
+        const int free_count_before_prune = vsapi_state.free_frame_count;
+
+        if (
+            cache.execute_bounded_prune_pass(
+                prune_frame_byte_count,
+                retain_checkpoint_count,
+                max_remove_count,
+                prune_summary
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !prune_summary.trigger_decision.prune_is_required ||
+            prune_summary.trigger_decision.current_slot_count !=
+                stored_frame_count ||
+            prune_summary.bounded_remove_limit != max_remove_count ||
+            prune_summary.selected_candidate_count != 1U ||
+            prune_summary.detached_count != 1U ||
+            cache.slot_count() != stored_frame_count - 1U ||
+            cache.checkpoint_count() != 1U ||
+            cache.total_pin_count() != 1 ||
+            pin_list.pin_count() != 1U ||
+            vsapi_state.free_frame_count != free_count_before_prune + 1 ||
+            vsapi_state.tracked_release_counts[3] != 0 ||
+            vsapi_state.tracked_release_counts[4] != 1 ||
+            vsapi_state.tracked_release_counts[5] != 0 ||
+            vsapi_state.tracked_release_counts[6] != 0
+            ) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef survivor_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                foundation_frame_number,
+                &vsapi,
+                survivor_lookup
+            ) != Cnr3Status::ok ||
+            !survivor_lookup.has_frame() ||
+            survivor_lookup.get() != protected_foundation_frame
+            ) {
+            survivor_lookup.reset();
+            return fail();
+        }
+
+        if (vsapi_state.add_frame_ref_count != 1) {
+            survivor_lookup.reset();
+            return fail();
+        }
+
+        survivor_lookup.reset();
+
+        if (vsapi_state.tracked_release_counts[3] != 1) {
+            return fail();
+        }
+
+        if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!pin_list.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!cache.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (
+            vsapi_state.tracked_release_counts[3] != 2 ||
+            vsapi_state.tracked_release_counts[4] != 1 ||
+            vsapi_state.tracked_release_counts[5] != 1 ||
+            vsapi_state.tracked_release_counts[6] != 1
+            ) {
+            return fail();
+        }
+    }
+
+    if (vsapi_state.add_frame_ref_count != 1) {
+        return fail();
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "D.5 recovery pin survives bounded prune-pass scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    control: unpinned foundation frame 165 is the single prune victim"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    protected: recovery-pinned frame 165 survives the same prune pressure"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    protected: frame 164 is detached instead and AS4 discharge balances"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    survivor remains lookup-addref usable as the original predecessor"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -14590,6 +14947,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "d4_first_in_best_dressed_duplicate_primitive",
             cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive
+        },
+        {
+            "d5_recovery_pin_survives_bounded_prune_pass",
+            cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass
         },
         {
             "central_remove_helper_lifecycle",

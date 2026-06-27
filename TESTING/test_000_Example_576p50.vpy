@@ -269,7 +269,7 @@ else:           # INTERLACED source
 #   DEV-TRACE MARKER: the keystone build emits one stderr line per frame prefixed [KDT]
 #   (KeystoneDevTrace), plus one [KDT-SUMMARY] line at the end. Grep "[KDT]" to isolate the
 #   trace; the "Dev-trace watch" notes below describe what those [KDT] lines should show.
-#   (These tokens must match the coder-side build — compile guard CNR3_KEYSTONE_DEV_TRACE.)   
+#   (These tokens must match the coder-side build — compile guard CNR3_KEYSTONE_DEV_TRACE.)
 #
 #   S1..S8 = functional scenarios.  B1..B7 = boundary / stress scenarios.
 # ==============================================================================

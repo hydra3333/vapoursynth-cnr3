@@ -22,7 +22,17 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-D.5-recovery-pin-survives-bounded-prune-proof";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-P.11C.2-live-scene-config-store-kdt-skeleton";
+
+/*
+    CMS07-P.11C.2 live scene-change default.
+
+    This is the internal/defaulted CNR2 semantic sensitivity scalar. Plugin
+    parameter exposure is deliberately deferred to the later option-surface
+    phase. The per-instance live path stores the derived native int64
+    scene-change threshold in Cnr3SceneChangeConfig.
+*/
+inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
 
 
 /*

@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include "cnr3_build_config.h"
 #include "cnr3_cache_core.h"
 #include "cnr3_common.h"
 #include "cnr3_frame_processing.h"
@@ -33,6 +34,13 @@ struct Cnr3FilterData {
     int bits_per_sample = 0;
     int sub_sampling_w = -1;
     int sub_sampling_h = -1;
+    double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
+    Cnr3SceneChangeConfig scene_change_config{};
+};
+
+struct Cnr3LiveOutputStoreRequest {
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    bool force_checkpoint = false;
 };
 
 enum class Cnr3LiveGetFrameBranch {
@@ -89,7 +97,7 @@ bool cnr3_live_store_status_allows_return(
 
 Cnr3Status cnr3_store_live_output_frame_for_return(
     Cnr3FilterData& data,
-    int frame_number,
+    const Cnr3LiveOutputStoreRequest& request,
     VSFrame* output_frame,
     const VSAPI* vsapi
 ) noexcept;

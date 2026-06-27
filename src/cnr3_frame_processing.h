@@ -92,10 +92,11 @@
     real-frame pixel path. It accepts an already-computed integer scene-change
     threshold, accumulates the vscnr2-style luma and optional chroma difference
     metric over the chroma grid, and when diff_total > threshold stages current
-    source chroma unchanged instead of recursive chroma blend. It still does
-    not parse instance options, calculate the plugin threshold from scdthr,
-    request/retrieve frames, source predecessors, promote checkpoints, or
-    connect to getFrame/cache lifecycle.
+    source chroma unchanged instead of recursive chroma blend. P.11C.2 adds
+    only the helper that derives that native threshold from the CNR2 scdthr
+    semantic scalar for live integration. Request/retrieve lifecycle,
+    predecessor sourcing, checkpoint promotion, and getFrame/cache connection
+    remain outside this pixel module.
 
     Accuracy upgrades are permitted only where vsCnr2 is accidentally lossy.
     Definitional integer arithmetic is reproduced bit-exactly. P.3A therefore
@@ -293,6 +294,17 @@ struct Cnr3SceneChangeConfig {
     std::int64_t scene_change_threshold = 0;
     bool scene_chroma = false;
 };
+
+[[nodiscard]] Cnr3Status cnr3_make_scene_change_config_from_vscnr2_scdthr(
+    double scdthr,
+    int full_width,
+    int full_height,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    bool scene_chroma,
+    Cnr3SceneChangeConfig& out_config
+) noexcept;
 
 [[nodiscard]] Cnr3Status cnr3_native_storage_bytes_for_bit_depth(
     int bits_per_sample,

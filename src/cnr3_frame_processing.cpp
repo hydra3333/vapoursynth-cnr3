@@ -4,6 +4,7 @@
 
 #include "VapourSynth4.h"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -275,6 +276,12 @@ void cnr3_publish_vapoursynth_plane_summary(
     int sub_sampling
 ) noexcept {
     return sub_sampling >= 0 && sub_sampling <= 1;
+}
+
+[[nodiscard]] bool cnr3_scdthr_is_valid(
+    double scdthr
+) noexcept {
+    return std::isfinite(scdthr) && scdthr >= 0.0 && scdthr <= 100.0;
 }
 
 [[nodiscard]] bool cnr3_luma_chroma_dimensions_match_subsampling(
@@ -772,6 +779,76 @@ void cnr3_publish_chroma_copy_summary_from_scalar_plane(
 
 
 } // namespace
+
+Cnr3Status cnr3_make_scene_change_config_from_vscnr2_scdthr(
+    double scdthr,
+    int full_width,
+    int full_height,
+    int bits_per_sample,
+    int sub_sampling_w,
+    int sub_sampling_h,
+    bool scene_chroma,
+    Cnr3SceneChangeConfig& out_config
+) noexcept {
+    out_config = Cnr3SceneChangeConfig{};
+
+    int sample_peak = 0;
+
+    if (
+        !cnr3_scdthr_is_valid(scdthr) ||
+        full_width <= 0 ||
+        full_height <= 0 ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling_w) ||
+        !cnr3_subsampling_factor_is_valid(sub_sampling_h) ||
+        cnr3_sample_peak_for_bit_depth(bits_per_sample, sample_peak) != Cnr3Status::ok
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    /*
+        vsCnr2 derives diff_max from full-frame dimensions, not chroma-grid
+        dimensions. CNR3's detector walks the chroma grid but shifts each luma
+        difference up by sub_sampling_w + sub_sampling_h, which preserves the
+        same full-frame luma-area unit. Using chroma-grid dimensions here would
+        make the threshold too small for subsampled formats.
+
+        The luma-only branch is deliberately bare 219. In the scene_chroma
+        branch, the combined luma+chroma ceiling is shifted down by the
+        subsampling area, matching the vsCnr2 conditional-expression shape.
+    */
+    const int max_pixel_diff = scene_chroma
+        ? ((219 + (224 * 2)) >> (sub_sampling_w + sub_sampling_h))
+        : 219;
+
+    /*
+        CNR3 deliberately applies the same accuracy policy used for P.2A native
+        parameter scaling: keep the 8-bit-domain threshold full precision, scale
+        to native depth by sample_peak / 255, then round once. This is a recorded
+        improvement over vsCnr2's power-of-two depth factor and truncation.
+    */
+    const long double base8 =
+        (static_cast<long double>(scdthr) *
+            static_cast<long double>(full_width) *
+            static_cast<long double>(full_height) *
+            static_cast<long double>(max_pixel_diff)) /
+        100.0L;
+
+    const long double native_threshold =
+        base8 * static_cast<long double>(sample_peak) / 255.0L;
+
+    if (
+        native_threshold < 0.0L ||
+        native_threshold > static_cast<long double>(std::numeric_limits<std::int64_t>::max())
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    out_config.scene_change_threshold =
+        static_cast<std::int64_t>(std::llround(native_threshold));
+    out_config.scene_chroma = scene_chroma;
+
+    return Cnr3Status::ok;
+}
 
 Cnr3Status cnr3_downsample_luma_tap_coordinates(
     int chroma_x,

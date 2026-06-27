@@ -212,6 +212,22 @@ Cnr3Status cnr3_initialise_k1e2_live_pixel_config(
     data.bits_per_sample = format->bitsPerSample;
     data.sub_sampling_w = format->subSamplingW;
     data.sub_sampling_h = format->subSamplingH;
+    data.scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
+
+    Cnr3Status status = cnr3_make_scene_change_config_from_vscnr2_scdthr(
+        data.scene_change_scdthr,
+        video_info.width,
+        video_info.height,
+        data.bits_per_sample,
+        data.sub_sampling_w,
+        data.sub_sampling_h,
+        false,
+        data.scene_change_config
+    );
+
+    if (!cnr3_status_is_ok(status)) {
+        return status;
+    }
 
     const int sample_peak = (1 << data.bits_per_sample) - 1;
     const Cnr3ResponseTableConfig table_config =

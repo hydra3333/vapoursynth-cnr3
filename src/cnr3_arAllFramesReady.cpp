@@ -34,7 +34,10 @@ void cnr3_trace_live_frame0_fresh_start(
 #if defined(CNR3_KEYSTONE_DEV_TRACE) && defined(CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF)
     std::fprintf(
         stderr,
-        "[KDT] instance=%d N=%d FRAME0-FRESH-START req=%d got=%d copyFrame=%s store=%s ret=%d flag=REAL_OUTPUT_FRAME0\n",
+        "[KDT] instance=%d N=%d FRAME0-FRESH-START req=%d got=%d copyFrame=%s store=%s ret=%d "
+        "p11c_called=0 scene_change_detection_used=0 scene_change_deferred=0 "
+        "scene_change_not_applicable=1 scene_change_not_applicable_reason=no_previous_filtered_output "
+        "flag=REAL_OUTPUT_FRAME0\n",
         data.config.instance_id.value,
         requested_frame,
         source_requested ? 1 : 0,
@@ -246,6 +249,8 @@ void cnr3_trace_live_recovery(
             stderr,
             "[KDT] instance=%d N=%d branch=RECOVER recover_branch=%s "
             "floor=%d floor_outcome=%s "
+            "floor_scene_change_detection_used=0 floor_scene_change_deferred=0 "
+            "floor_scene_change_not_applicable=1 "
             "hole_count=%zu holes=%s source_requests=%s %s "
             "pixel_compute=%d p11b_called=%d p11c_called=0 scene_change_deferred=1 "
             "pin_list_size=%zu pin_balance=0 "
@@ -367,13 +372,24 @@ bool cnr3_live_output_frame_is_checkpoint(
         (frame_number > 0 && (frame_number % CNR3_CACHE_CHECKPOINT_INTERVAL) == 0);
 }
 
+bool cnr3_live_output_frame_should_store_as_checkpoint(
+    const Cnr3LiveOutputStoreRequest& request
+) noexcept {
+    return request.force_checkpoint ||
+        cnr3_live_output_frame_is_checkpoint(request.frame_number);
+}
+
 Cnr3Status cnr3_store_live_output_frame_for_return(
     Cnr3FilterData& data,
-    int frame_number,
+    const Cnr3LiveOutputStoreRequest& request,
     VSFrame* output_frame,
     const VSAPI* vsapi
 ) noexcept {
-    if (output_frame == nullptr || vsapi == nullptr) {
+    if (
+        request.frame_number < 0 ||
+        output_frame == nullptr ||
+        vsapi == nullptr
+        ) {
         return Cnr3Status::invalid_argument;
     }
 
@@ -394,15 +410,15 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
         return adopt_status;
     }
 
-    if (cnr3_live_output_frame_is_checkpoint(frame_number)) {
+    if (cnr3_live_output_frame_should_store_as_checkpoint(request)) {
         return data.output_cache.store_checkpoint_owned_frame(
-            frame_number,
+            request.frame_number,
             std::move(cache_owned_frame)
         );
     }
 
     return data.output_cache.store_noncheckpoint_owned_frame(
-        frame_number,
+        request.frame_number,
         std::move(cache_owned_frame)
     );
 }
@@ -410,7 +426,7 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
 
 Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
     Cnr3FilterData& data,
-    int frame_number,
+    const Cnr3LiveOutputStoreRequest& request,
     VSFrame* output_frame,
     const VSAPI* vsapi,
     const VSFrame*& out_return_frame,
@@ -432,7 +448,7 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
 
     out_store_status = cnr3_store_live_output_frame_for_return(
         data,
-        frame_number,
+        request,
         output_frame,
         vsapi
     );
@@ -457,7 +473,7 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
 
     Cnr3OwnedFrameRef cached_winner_ref{};
     const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
-        frame_number,
+        request.frame_number,
         vsapi,
         cached_winner_ref
     );
@@ -674,7 +690,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     const Cnr3Status return_status =
         cnr3_store_live_output_frame_for_authoritative_return(
             data,
-            n,
+            Cnr3LiveOutputStoreRequest{ n, false },
             output_frame,
             vsapi,
             return_frame,
@@ -1201,7 +1217,7 @@ const VSFrame* cnr3_complete_live_recovery(
     const Cnr3Status target_return_status =
         cnr3_store_live_output_frame_for_authoritative_return(
             data,
-            n,
+            Cnr3LiveOutputStoreRequest{ n, false },
             target_output_frame,
             vsapi,
             return_frame,

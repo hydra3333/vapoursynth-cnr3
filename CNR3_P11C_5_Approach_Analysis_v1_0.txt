@@ -1,0 +1,117 @@
+================================================================================
+CNR3 P.11C.5 -- SCENE-CUT CHECKPOINT FOUND AS RECOVERY ANCHOR -- APPROACH ANALYSIS
+================================================================================
+Designer pre-scope analysis, verified against post-.4 source. The FINALE of the
+P.11C arc: the end-to-end checkpoint EFFECT that .3 and .4 honestly deferred with
+resulting_slot_is_checkpoint_expected. Next: coder read, then scope, then proof.
+
+Baseline: committed through CMS07-P.11C.4-branch-d-recovery-scene-detection-enable.
+Branch-c (.3) and branch-d (.4) scene detection PROVEN. P.11C.5 closes the loop.
+
+--------------------------------------------------------------------------------
+1. WHAT P.11C.5 PROVES
+--------------------------------------------------------------------------------
+That a checkpoint CREATED BY A SCENE CUT (P.11C.3/.4) actually does its job: it
+SURVIVES prune when ordinary outputs around it are evicted, and a LATER recovery
+search descending into that now-cold region FINDS it as the exact-anchor start point.
+This is the "the checkpoint did its job" link -- from "we marked it a checkpoint"
+(.3/.4 expected) to "the checkpoint was used as a real recovery anchor" (observed).
+
+--------------------------------------------------------------------------------
+2. KEY FINDING -- P.11C.5 IS A COMPOSITION OF ALREADY-PROVEN MECHANISMS
+--------------------------------------------------------------------------------
+Two source facts (verified post-.4):
+
+(a) is_checkpoint IS A SINGLE BOOL WITH NO PROVENANCE. A scene-cut checkpoint and a
+    grid checkpoint are BYTE-IDENTICAL on the cache slot (Cnr3CacheSlot::is_checkpoint).
+    The recovery search neither knows nor cares HOW a checkpoint was created.
+
+(b) THE RECOVERY SEARCH SELECTS FIRST-PRESENT DESCENDING, REGARDLESS OF CHECKPOINT
+    FLAG. Checkpoints are NOT preferred; they simply SURVIVE eviction (non-checkpoint
+    pool prunes; checkpoint pool retained, MIN_RETAIN..MAX_RETAIN, frame 0 never pruned).
+    In a cold (seeked-into) region the surviving present frames ARE the checkpoints, so
+    the search finds them because they survived, not because it seeks them.
+
+Therefore the "scene-cut checkpoint found as anchor" behaviour is the COMPOSITION of:
+  - P.11C.4 (PROVEN): a scene cut during recovery creates a checkpoint (is_checkpoint=1).
+  - D.5 (PROVEN): a pinned checkpoint survives a real bounded prune pass.
+  - D.1 / D.2 (PROVEN): exact-anchor recovery descends and anchors on a present cached
+    output (the D3 harness even has a d2regress exact-anchor mode).
+Because the code path is provenance-blind, there is NO NEW UNIT-LEVEL CODE PATH to
+prove. P.11C.5 is an END-TO-END / INTEGRATION proof that the composition behaves as
+intended -- NOT a new mechanism.
+
+--------------------------------------------------------------------------------
+3. LIKELY SCOPE -- PROOF-ONLY (no source change expected)
+--------------------------------------------------------------------------------
+Expectation: P.11C.5 needs NO source change. The .3/.4 patches already create scene-cut
+checkpoints; the cache-core already survives prune and anchors on present checkpoints.
+P.11C.5 = a .vpy scenario that:
+  (i)   processes/establishes a frame region where a SCENE CUT creates a checkpoint at
+        some frame C (via the live branch-c or branch-d path);
+  (ii)  causes the ordinary (non-checkpoint) outputs around C to be EVICTED (drive enough
+        other frames / rely on the bounded pools so C's neighbours prune but C survives);
+  (iii) then issues a LATER cold request for a frame N > C whose nearer predecessors are
+        all evicted, so the bounded descending search reaches C and anchors on it;
+  (iv)  asserts via KDT: branch=RECOVER recover_branch=exact-anchor anchor=C, and that C
+        is the scene-cut checkpoint (C was the detected-cut frame from step i).
+If, and only if, the proof reveals a missing observability field (e.g. the recovery KDT
+does not currently print anchor= or whether the anchor was a checkpoint), a SMALL KDT-only
+addition may be needed -- to be confirmed by the coder against the recovery trace. No
+behavioural change.
+
+--------------------------------------------------------------------------------
+4. THE HARNESS CHALLENGE (the real work of .5)
+--------------------------------------------------------------------------------
+The difficulty is constructing a .vpy that deterministically:
+  - creates a scene-cut checkpoint at a known frame C, AND
+  - evicts C's ordinary neighbours but RETAINS C, AND
+  - forces a later bounded recovery that descends to C.
+This needs enough frames to exercise the prune (the bounded pools have real capacities --
+non-checkpoint pool ~110 with overflow, checkpoint pool max 16 / min 6 retained), which is
+a MUCH larger synthetic clip than the 4-frame D-harnesses. Two sub-questions for the coder:
+  Q1. What is the minimum frame count / request pattern that reliably (a) creates a scene-cut
+      checkpoint, (b) prunes its non-checkpoint neighbours, (c) leaves it as the first-present
+      anchor for a later cold request? (Depends on the live pool capacities + CHECKPOINT_INTERVAL.)
+  Q2. Does the recovery KDT already print the anchor frame number AND a flag/means to confirm
+      the anchor slot is a checkpoint (so the proof can assert "anchored on the scene-cut C")?
+      If not, a small KDT-only field may be the single source change.
+
+--------------------------------------------------------------------------------
+5. ALTERNATIVE / FALLBACK FRAMING (if a full prune-driven .vpy is impractical)
+--------------------------------------------------------------------------------
+If deterministically driving the live prune from a .vpy proves too fragile (the pools are
+sized for realistic workloads, so forcing eviction may need hundreds of frames and precise
+request ordering), an acceptable alternative is a CACHE-CORE SELFTEST that composes the
+proven primitives directly: store a scene-flagged checkpoint, store+prune enough non-
+checkpoint neighbours, then run the bounded search and assert it anchors on the scene
+checkpoint. This is the same composition, proven at the unit level where eviction is
+deterministic. Designer leans: TRY the .vpy first (true end-to-end); fall back to a selftest
+composition if the .vpy cannot deterministically drive the prune. Coder to advise which is
+more reliable given the live pool sizes.
+
+--------------------------------------------------------------------------------
+6. DESIGNER READ
+--------------------------------------------------------------------------------
+P.11C.5 is the arc's capstone but is mechanically the LIGHTEST subphase: it proves a
+COMPOSITION of already-proven, provenance-blind mechanisms, almost certainly with no
+behavioural source change (at most a small KDT observability field). The real work is a
+harness that drives the live prune deterministically -- larger than the D-harnesses -- with
+a selftest-composition fallback if the .vpy prune-driving is too fragile. No new atomic, no
+new pixel maths, no new checkpoint mechanism.
+
+--------------------------------------------------------------------------------
+7. QUESTIONS FOR THE CODER (read-first)
+--------------------------------------------------------------------------------
+Q1. Minimum reliable frame count / request pattern to create a scene-cut checkpoint, prune
+    its non-checkpoint neighbours, and force a later bounded recovery that anchors on it
+    (given live pool capacities + CHECKPOINT_INTERVAL)?
+Q2. Does the recovery KDT already print anchor=<frame> AND a means to confirm the anchor is
+    a checkpoint? If not, is a small KDT-only field the cleanest single addition?
+Q3. .vpy end-to-end vs cache-core selftest composition -- which is more RELIABLE for driving
+    the prune deterministically? (Designer leans .vpy-first, selftest fallback.)
+Q4. Confirm no behavioural source change is needed (provenance-blind is_checkpoint + already-
+    proven exact-anchor recovery + D.5 survival) -- i.e. .5 is proof-only modulo any KDT field.
+================================================================================
+END P.11C.5 APPROACH ANALYSIS
+================================================================================

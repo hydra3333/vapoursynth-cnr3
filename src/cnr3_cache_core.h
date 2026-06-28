@@ -377,12 +377,12 @@ struct Cnr3PruneCandidateDistanceOrderEntry {
 }
 
 /*
-    Active-ceiling prune trigger decision.
+    Active-ceiling and checkpoint-retention prune trigger decision.
 
-    CMS07-G.10A proves the section 7.2 trigger arithmetic only. The decision
-    tells a later AS5 phase whether a prune pass should run and how far the
-    cache should be reduced. It does not select victims, detach slots, release
-    frames, wire D-SUM counters, or perform production prune integration.
+    prune_is_required remains the CMS07 section 7.2 capacity trigger only.
+    checkpoint_prune_is_required is the independent CMS07.14 section 7.4
+    checkpoint-retention trigger. Later AS5 execution may run when either
+    trigger is active, but selection/detach/free remain separate steps.
 */
 struct Cnr3CachePruneTriggerDecision {
     std::uint64_t frame_byte_count = 0U;
@@ -392,6 +392,11 @@ struct Cnr3CachePruneTriggerDecision {
     bool prune_is_required = false;
     std::size_t target_slot_count_after_prune = 0U;
     std::size_t target_remove_count = 0U;
+    std::size_t current_checkpoint_count = 0U;
+    std::size_t checkpoint_retain_target_count = 0U;
+    bool checkpoint_prune_is_required = false;
+    std::size_t checkpoint_target_count_after_prune = 0U;
+    std::size_t checkpoint_target_remove_count = 0U;
 };
 
 /*
@@ -569,16 +574,18 @@ void cnr3_keystone_dev_trace_summary_observe_plan(
 #endif
 
 /*
-    Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
-    trigger decision from a frame byte size and a current slot count.
+    Calculate the CMS07 section 7.2 active-ceiling / overflow-factor trigger
+    and the CMS07.14 section 7.4 checkpoint-retention trigger.
 
-    The trigger fires only when current_slot_count is strictly greater than
-    active_ceiling * OVERFLOW_FACTOR. When it fires, the target is the active
-    ceiling, not the overflow trigger threshold and not an empty cache.
+    prune_is_required fires only when current_slot_count is strictly greater
+    than active_ceiling * OVERFLOW_FACTOR. checkpoint_prune_is_required fires
+    independently when the checkpoint-flagged count exceeds MAX_RETAIN.
 */
 [[nodiscard]] Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
     std::uint64_t frame_byte_count,
     std::size_t current_slot_count,
+    std::size_t current_checkpoint_count,
+    std::size_t retain_checkpoint_count,
     Cnr3CachePruneTriggerDecision& out_decision
 ) noexcept;
 

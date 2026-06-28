@@ -503,6 +503,8 @@ bool cnr3_cache_hot_zone_model_invariants_hold(
 Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
     std::uint64_t frame_byte_count,
     std::size_t current_slot_count,
+    std::size_t current_checkpoint_count,
+    std::size_t retain_checkpoint_count,
     Cnr3CachePruneTriggerDecision& out_decision
 ) noexcept {
     out_decision = Cnr3CachePruneTriggerDecision{};
@@ -527,6 +529,12 @@ Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
         (active_ceiling * CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR) /
         CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR;
     const bool prune_is_required = current_slot_count > overflow_trigger;
+    const bool checkpoint_prune_is_required =
+        current_checkpoint_count > CNR3_CACHE_CHECKPOINT_MAX_RETAIN;
+    const std::size_t checkpoint_target_count =
+        checkpoint_prune_is_required
+        ? std::min(current_checkpoint_count, retain_checkpoint_count)
+        : current_checkpoint_count;
 
     out_decision.frame_byte_count = frame_byte_count;
     out_decision.active_ceiling_frame_count = active_ceiling;
@@ -537,6 +545,12 @@ Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
         prune_is_required ? active_ceiling : current_slot_count;
     out_decision.target_remove_count =
         prune_is_required ? (current_slot_count - active_ceiling) : 0U;
+    out_decision.current_checkpoint_count = current_checkpoint_count;
+    out_decision.checkpoint_retain_target_count = retain_checkpoint_count;
+    out_decision.checkpoint_prune_is_required = checkpoint_prune_is_required;
+    out_decision.checkpoint_target_count_after_prune = checkpoint_target_count;
+    out_decision.checkpoint_target_remove_count =
+        current_checkpoint_count - checkpoint_target_count;
 
     return Cnr3Status::ok;
 }
@@ -2556,6 +2570,8 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
     Cnr3Status status = cnr3_calculate_cache_prune_trigger_decision(
         frame_byte_count,
         slot_count_locked(),
+        checkpoint_count_locked(),
+        retain_checkpoint_count,
         out_summary.trigger_decision
     );
 
@@ -2563,12 +2579,20 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
         return status;
     }
 
-    if (!out_summary.trigger_decision.prune_is_required || max_remove_count == 0U) {
+    if (
+        (!out_summary.trigger_decision.prune_is_required &&
+         !out_summary.trigger_decision.checkpoint_prune_is_required) ||
+        max_remove_count == 0U
+        ) {
         return Cnr3Status::ok;
     }
 
-    const std::size_t remove_limit = std::min(
+    const std::size_t requested_remove_count = std::max(
         out_summary.trigger_decision.target_remove_count,
+        out_summary.trigger_decision.checkpoint_target_remove_count
+    );
+    const std::size_t remove_limit = std::min(
+        requested_remove_count,
         max_remove_count
     );
 
@@ -2578,16 +2602,19 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
         return Cnr3Status::ok;
     }
 
+    const bool noncheckpoint_capacity_permits =
+        out_summary.trigger_decision.prune_is_required;
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
     const std::size_t hot_zone_prune_rejection_count =
         count_prune_candidates_rejected_by_hot_zone_locked(
-            true,
+            noncheckpoint_capacity_permits,
             retain_checkpoint_count
         );
 #endif
 
     status = select_composite_prune_candidates_bounded_locked(
-        true,
+        noncheckpoint_capacity_permits,
         retain_checkpoint_count,
         remove_limit,
         candidate_order,

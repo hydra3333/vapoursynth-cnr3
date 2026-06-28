@@ -1,0 +1,1122 @@
+diff --git a/src/cnr3_cache_core.cpp b/src/cnr3_cache_core.cpp
+index ccb6821..49964b1 100644
+--- a/src/cnr3_cache_core.cpp
++++ b/src/cnr3_cache_core.cpp
+@@ -496,20 +496,22 @@ bool cnr3_cache_hot_zone_model_invariants_hold(
+             return false;
+         }
+     }
+ 
+     return true;
+ }
+ 
+ Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
+     std::uint64_t frame_byte_count,
+     std::size_t current_slot_count,
++    std::size_t current_checkpoint_count,
++    std::size_t retain_checkpoint_count,
+     Cnr3CachePruneTriggerDecision& out_decision
+ ) noexcept {
+     out_decision = Cnr3CachePruneTriggerDecision{};
+ 
+     if (frame_byte_count == 0U) {
+         return Cnr3Status::invalid_argument;
+     }
+ 
+     std::uint64_t raw_ceiling =
+         CNR3_CACHE_BYTE_BUDGET_BYTES / frame_byte_count;
+@@ -520,30 +522,42 @@ Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
+ 
+     if (raw_ceiling > CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES) {
+         raw_ceiling = CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES;
+     }
+ 
+     const std::size_t active_ceiling = static_cast<std::size_t>(raw_ceiling);
+     const std::size_t overflow_trigger =
+         (active_ceiling * CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR) /
+         CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR;
+     const bool prune_is_required = current_slot_count > overflow_trigger;
++    const bool checkpoint_prune_is_required =
++        current_checkpoint_count > CNR3_CACHE_CHECKPOINT_MAX_RETAIN;
++    const std::size_t checkpoint_target_count =
++        checkpoint_prune_is_required
++        ? std::min(current_checkpoint_count, retain_checkpoint_count)
++        : current_checkpoint_count;
+ 
+     out_decision.frame_byte_count = frame_byte_count;
+     out_decision.active_ceiling_frame_count = active_ceiling;
+     out_decision.overflow_trigger_frame_count = overflow_trigger;
+     out_decision.current_slot_count = current_slot_count;
+     out_decision.prune_is_required = prune_is_required;
+     out_decision.target_slot_count_after_prune =
+         prune_is_required ? active_ceiling : current_slot_count;
+     out_decision.target_remove_count =
+         prune_is_required ? (current_slot_count - active_ceiling) : 0U;
++    out_decision.current_checkpoint_count = current_checkpoint_count;
++    out_decision.checkpoint_retain_target_count = retain_checkpoint_count;
++    out_decision.checkpoint_prune_is_required = checkpoint_prune_is_required;
++    out_decision.checkpoint_target_count_after_prune = checkpoint_target_count;
++    out_decision.checkpoint_target_remove_count =
++        current_checkpoint_count - checkpoint_target_count;
+ 
+     return Cnr3Status::ok;
+ }
+ 
+ bool Cnr3OutputCacheCore::empty() const {
+     const std::lock_guard<std::mutex> lock(cache_mutex_);
+ 
+     return empty_locked();
+ }
+ 
+@@ -2549,52 +2563,65 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
+         return Cnr3Status::invalid_argument;
+     }
+ 
+     if (!cache_state_invariants_hold_locked()) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     Cnr3Status status = cnr3_calculate_cache_prune_trigger_decision(
+         frame_byte_count,
+         slot_count_locked(),
++        checkpoint_count_locked(),
++        retain_checkpoint_count,
+         out_summary.trigger_decision
+     );
+ 
+     if (!cnr3_status_is_ok(status)) {
+         return status;
+     }
+ 
+-    if (!out_summary.trigger_decision.prune_is_required || max_remove_count == 0U) {
++    if (
++        (!out_summary.trigger_decision.prune_is_required &&
++         !out_summary.trigger_decision.checkpoint_prune_is_required) ||
++        max_remove_count == 0U
++        ) {
+         return Cnr3Status::ok;
+     }
+ 
+-    const std::size_t remove_limit = std::min(
++    const std::size_t requested_remove_count = std::max(
+         out_summary.trigger_decision.target_remove_count,
++        out_summary.trigger_decision.checkpoint_target_remove_count
++    );
++    const std::size_t remove_limit = std::min(
++        requested_remove_count,
+         max_remove_count
+     );
+ 
+     out_summary.bounded_remove_limit = remove_limit;
+ 
+     if (remove_limit == 0U) {
+         return Cnr3Status::ok;
+     }
+ 
++    const bool noncheckpoint_capacity_permits =
++        out_summary.trigger_decision.prune_is_required;
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+     const std::size_t hot_zone_prune_rejection_count =
+         count_prune_candidates_rejected_by_hot_zone_locked(
+-            true,
++            noncheckpoint_capacity_permits,
+             retain_checkpoint_count
+         );
+ #endif
+ 
+     status = select_composite_prune_candidates_bounded_locked(
+-        true,
++        noncheckpoint_capacity_permits,
+         retain_checkpoint_count,
+         remove_limit,
+         candidate_order,
+         checkpoint_candidate_order
+     );
+ 
+     if (!cnr3_status_is_ok(status)) {
+         return status;
+     }
+ 
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 2d9783e..9c620bf 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -370,35 +370,40 @@ struct Cnr3PruneCandidateDistanceOrderEntry {
+ 
+ [[nodiscard]] constexpr bool cnr3_prune_candidate_distance_order_entry_is_valid(
+     Cnr3PruneCandidateDistanceOrderEntry entry
+ ) noexcept {
+     return
+         cnr3_frame_number_is_valid(entry.frame_number) &&
+         entry.nearest_hot_zone_distance >= 0;
+ }
+ 
+ /*
+-    Active-ceiling prune trigger decision.
++    Active-ceiling and checkpoint-retention prune trigger decision.
+ 
+-    CMS07-G.10A proves the section 7.2 trigger arithmetic only. The decision
+-    tells a later AS5 phase whether a prune pass should run and how far the
+-    cache should be reduced. It does not select victims, detach slots, release
+-    frames, wire D-SUM counters, or perform production prune integration.
++    prune_is_required remains the CMS07 section 7.2 capacity trigger only.
++    checkpoint_prune_is_required is the independent CMS07.14 section 7.4
++    checkpoint-retention trigger. Later AS5 execution may run when either
++    trigger is active, but selection/detach/free remain separate steps.
+ */
+ struct Cnr3CachePruneTriggerDecision {
+     std::uint64_t frame_byte_count = 0U;
+     std::size_t active_ceiling_frame_count = 0U;
+     std::size_t overflow_trigger_frame_count = 0U;
+     std::size_t current_slot_count = 0U;
+     bool prune_is_required = false;
+     std::size_t target_slot_count_after_prune = 0U;
+     std::size_t target_remove_count = 0U;
++    std::size_t current_checkpoint_count = 0U;
++    std::size_t checkpoint_retain_target_count = 0U;
++    bool checkpoint_prune_is_required = false;
++    std::size_t checkpoint_target_count_after_prune = 0U;
++    std::size_t checkpoint_target_remove_count = 0U;
+ };
+ 
+ /*
+     Bounded AS5 prune execution summary.
+ 
+     CMS07-G.11A reports what the AS5 decide/detach/free proof did without
+     exposing cache internals. It records the trigger decision, the externally
+     supplied bounded-remove cap, the effective bounded remove limit, how many
+     candidates were selected under the cache lock, and how many slots were
+     actually detached under that same lock. Detached frame references are
+@@ -562,30 +567,32 @@ void cnr3_keystone_dev_trace_summary_observe_plan(
+ ) noexcept;
+ 
+ [[nodiscard]] Cnr3Status cnr3_keystone_format_dev_trace_summary(
+     const Cnr3KeystoneDevTraceSummary& summary,
+     char* out_buffer,
+     std::size_t out_buffer_size
+ ) noexcept;
+ #endif
+ 
+ /*
+-    Calculate the CMS07 section 7.2 active-ceiling / overflow-factor prune
+-    trigger decision from a frame byte size and a current slot count.
++    Calculate the CMS07 section 7.2 active-ceiling / overflow-factor trigger
++    and the CMS07.14 section 7.4 checkpoint-retention trigger.
+ 
+-    The trigger fires only when current_slot_count is strictly greater than
+-    active_ceiling * OVERFLOW_FACTOR. When it fires, the target is the active
+-    ceiling, not the overflow trigger threshold and not an empty cache.
++    prune_is_required fires only when current_slot_count is strictly greater
++    than active_ceiling * OVERFLOW_FACTOR. checkpoint_prune_is_required fires
++    independently when the checkpoint-flagged count exceeds MAX_RETAIN.
+ */
+ [[nodiscard]] Cnr3Status cnr3_calculate_cache_prune_trigger_decision(
+     std::uint64_t frame_byte_count,
+     std::size_t current_slot_count,
++    std::size_t current_checkpoint_count,
++    std::size_t retain_checkpoint_count,
+     Cnr3CachePruneTriggerDecision& out_decision
+ ) noexcept;
+ 
+ /*
+     Ordered frame-number index.
+ 
+     The value is the vector position of the slot in Cnr3OutputCacheCore::slots_.
+     This intentionally remains an internal implementation detail. Future phases
+     may replace the storage strategy without changing cache semantics.
+ 
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index dab63f3..a9d1f9f 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -2469,20 +2469,587 @@ Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor()
+     );
+     cnr3_cache_core_selftest_trace_line(
+         "    read-only bounded recovery for frame 167 anchors on checkpoint 165"
+     );
+ 
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
+ }
+ 
++Cnr3Status cnr3_cache_core_selftest_w1_checkpoint_retention_trigger() noexcept {
++    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
++    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
++
++    constexpr std::uint64_t below_capacity_frame_byte_count =
++        CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL;
++    constexpr std::size_t retain_checkpoint_count =
++        CNR3_CACHE_CHECKPOINT_MIN_RETAIN;
++    constexpr std::size_t full_trim_checkpoint_count = 60U;
++    constexpr std::size_t full_trim_max_remove_count = 64U;
++    constexpr std::size_t expected_full_trim_detached_count =
++        full_trim_checkpoint_count - CNR3_CACHE_CHECKPOINT_MIN_RETAIN;
++
++    static_assert(CNR3_CACHE_CHECKPOINT_MAX_RETAIN == 48U);
++    static_assert(CNR3_CACHE_CHECKPOINT_MIN_RETAIN == 10U);
++    static_assert(full_trim_checkpoint_count > CNR3_CACHE_CHECKPOINT_MAX_RETAIN);
++    static_assert(expected_full_trim_detached_count == 50U);
++
++    auto fail = []() noexcept -> Cnr3Status {
++        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++        return Cnr3Status::invariant_violation;
++    };
++
++    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++
++    const auto store_frame = [&vsapi](
++        Cnr3OutputCacheCore& cache,
++        int frame_number,
++        bool is_checkpoint,
++        const VSFrame* frame
++    ) noexcept -> Cnr3Status {
++        Cnr3OwnedFrameRef owned_frame{};
++
++        const Cnr3Status adopt_status =
++            owned_frame.reset_to_owned_frame(frame, &vsapi);
++
++        if (!cnr3_status_is_ok(adopt_status)) {
++            return adopt_status;
++        }
++
++        const Cnr3Status store_status =
++            is_checkpoint
++            ? cache.store_checkpoint_owned_frame(
++                frame_number,
++                std::move(owned_frame)
++            )
++            : cache.store_noncheckpoint_owned_frame(
++                frame_number,
++                std::move(owned_frame)
++            );
++
++        if (!cnr3_status_is_ok(store_status)) {
++            return store_status;
++        }
++
++        return owned_frame.has_frame()
++            ? Cnr3Status::ownership_violation
++            : Cnr3Status::ok;
++    };
++
++    const auto fill_storage = [](std::vector<int>& storage, int base) noexcept {
++        for (std::size_t index = 0U; index < storage.size(); ++index) {
++            storage[index] = base + static_cast<int>(index);
++        }
++    };
++
++    const auto store_checkpoint_range = [store_frame](
++        Cnr3OutputCacheCore& cache,
++        std::vector<int>& frame_storage,
++        std::size_t checkpoint_count
++    ) noexcept -> Cnr3Status {
++        if (frame_storage.size() < checkpoint_count) {
++            return Cnr3Status::invariant_violation;
++        }
++
++        for (std::size_t frame_index = 0U;
++            frame_index < checkpoint_count;
++            ++frame_index) {
++            const int frame_number = static_cast<int>(frame_index);
++            const VSFrame* frame =
++                reinterpret_cast<const VSFrame*>(&frame_storage[frame_index]);
++
++            const Cnr3Status store_status =
++                store_frame(cache, frame_number, true, frame);
++
++            if (!cnr3_status_is_ok(store_status)) {
++                return store_status;
++            }
++        }
++
++        return Cnr3Status::ok;
++    };
++
++    const auto lookup_present = [&vsapi](
++        Cnr3OutputCacheCore& cache,
++        int frame_number,
++        const VSFrame* expected_frame
++    ) noexcept -> bool {
++        Cnr3OwnedFrameRef lookup{};
++
++        const Cnr3Status lookup_status = cache.lookup_frame_and_add_ref(
++            frame_number,
++            &vsapi,
++            lookup
++        );
++
++        const bool matched =
++            cnr3_status_is_ok(lookup_status) &&
++            lookup.has_frame() &&
++            lookup.get() == expected_frame;
++
++        lookup.reset();
++        return matched;
++    };
++
++    const auto lookup_absent = [&vsapi](
++        Cnr3OutputCacheCore& cache,
++        int frame_number
++    ) noexcept -> bool {
++        Cnr3OwnedFrameRef lookup{};
++
++        const Cnr3Status lookup_status = cache.lookup_frame_and_add_ref(
++            frame_number,
++            &vsapi,
++            lookup
++        );
++
++        const bool absent =
++            lookup_status == Cnr3Status::not_found &&
++            !lookup.has_frame();
++
++        lookup.reset();
++        return absent;
++    };
++
++    {
++        std::vector<int> checkpoint_storage(full_trim_checkpoint_count);
++        std::vector<int> noncheckpoint_storage(4U);
++        fill_storage(checkpoint_storage, 10000);
++        fill_storage(noncheckpoint_storage, 11000);
++
++        Cnr3OutputCacheCore cache{};
++
++        if (
++            store_checkpoint_range(
++                cache,
++                checkpoint_storage,
++                full_trim_checkpoint_count
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        for (std::size_t index = 0U; index < noncheckpoint_storage.size(); ++index) {
++            const int frame_number = 1000 + static_cast<int>(index);
++            const VSFrame* frame =
++                reinterpret_cast<const VSFrame*>(&noncheckpoint_storage[index]);
++
++            if (store_frame(cache, frame_number, false, frame) != Cnr3Status::ok) {
++                return fail();
++            }
++        }
++
++        if (
++            cache.slot_count() !=
++                full_trim_checkpoint_count + noncheckpoint_storage.size() ||
++            cache.checkpoint_count() != full_trim_checkpoint_count ||
++            cache.total_pin_count() != 0
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary summary{};
++        const int free_count_before_prune = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                full_trim_max_remove_count,
++                summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            summary.trigger_decision.prune_is_required ||
++            !summary.trigger_decision.checkpoint_prune_is_required ||
++            summary.trigger_decision.current_slot_count !=
++                full_trim_checkpoint_count + noncheckpoint_storage.size() ||
++            summary.trigger_decision.current_checkpoint_count !=
++                full_trim_checkpoint_count ||
++            summary.trigger_decision.checkpoint_target_remove_count !=
++                expected_full_trim_detached_count ||
++            summary.bounded_remove_limit != expected_full_trim_detached_count ||
++            summary.selected_candidate_count != expected_full_trim_detached_count ||
++            summary.detached_count != expected_full_trim_detached_count ||
++            cache.checkpoint_count() != CNR3_CACHE_CHECKPOINT_MIN_RETAIN ||
++            cache.slot_count() !=
++                CNR3_CACHE_CHECKPOINT_MIN_RETAIN + noncheckpoint_storage.size() ||
++            cache.total_pin_count() != 0 ||
++            vsapi_state.free_frame_count !=
++                free_count_before_prune +
++                static_cast<int>(expected_full_trim_detached_count)
++            ) {
++            return fail();
++        }
++
++        if (
++            !lookup_present(
++                cache,
++                0,
++                reinterpret_cast<const VSFrame*>(&checkpoint_storage[0])
++            )
++            ) {
++            return fail();
++        }
++
++        for (std::size_t index = 0U; index < noncheckpoint_storage.size(); ++index) {
++            const int frame_number = 1000 + static_cast<int>(index);
++            const VSFrame* frame =
++                reinterpret_cast<const VSFrame*>(&noncheckpoint_storage[index]);
++
++            if (!lookup_present(cache, frame_number, frame)) {
++                return fail();
++            }
++        }
++    }
++
++    {
++        std::vector<int> checkpoint_storage(full_trim_checkpoint_count);
++        fill_storage(checkpoint_storage, 12000);
++
++        Cnr3OutputCacheCore cache{};
++        Cnr3CachePinList pin_list{};
++        constexpr int pinned_checkpoint_frame_number = 55;
++
++        if (
++            store_checkpoint_range(
++                cache,
++                checkpoint_storage,
++                full_trim_checkpoint_count
++            ) != Cnr3Status::ok ||
++            cache.lookup_frame_and_record_pin(
++                pinned_checkpoint_frame_number,
++                pin_list
++            ) != Cnr3Status::ok ||
++            cache.total_pin_count() != 1 ||
++            pin_list.pin_count() != 1U
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary summary{};
++        const int free_count_before_prune = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                full_trim_max_remove_count,
++                summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            summary.trigger_decision.prune_is_required ||
++            !summary.trigger_decision.checkpoint_prune_is_required ||
++            summary.selected_candidate_count != expected_full_trim_detached_count ||
++            summary.detached_count != expected_full_trim_detached_count ||
++            cache.checkpoint_count() != CNR3_CACHE_CHECKPOINT_MIN_RETAIN ||
++            cache.total_pin_count() != 1 ||
++            vsapi_state.free_frame_count !=
++                free_count_before_prune +
++                static_cast<int>(expected_full_trim_detached_count)
++            ) {
++            return fail();
++        }
++
++        if (
++            !lookup_present(
++                cache,
++                pinned_checkpoint_frame_number,
++                reinterpret_cast<const VSFrame*>(
++                    &checkpoint_storage[
++                        static_cast<std::size_t>(
++                            pinned_checkpoint_frame_number
++                        )
++                    ]
++                )
++            )
++            ) {
++            return fail();
++        }
++
++        if (
++            pin_list.discharge_all(cache) != Cnr3Status::ok ||
++            cache.total_pin_count() != 0 ||
++            !pin_list.empty()
++            ) {
++            return fail();
++        }
++    }
++
++    {
++        std::vector<int> checkpoint_storage(full_trim_checkpoint_count);
++        fill_storage(checkpoint_storage, 13000);
++
++        Cnr3OutputCacheCore cache{};
++        constexpr int hot_zone_observation_frame = 100;
++        constexpr int hot_zone_protected_frame_number = 55;
++        constexpr std::size_t expected_hot_zone_detached_count = 49U;
++        constexpr std::size_t expected_hot_zone_checkpoint_count =
++            full_trim_checkpoint_count - expected_hot_zone_detached_count;
++
++        if (
++            cache.record_hot_zone_observation(hot_zone_observation_frame) !=
++                Cnr3Status::ok ||
++            store_checkpoint_range(
++                cache,
++                checkpoint_storage,
++                full_trim_checkpoint_count
++            ) != Cnr3Status::ok ||
++            !cache.frame_is_inside_hot_zone(hot_zone_protected_frame_number)
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary summary{};
++        const int free_count_before_prune = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                full_trim_max_remove_count,
++                summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            summary.trigger_decision.prune_is_required ||
++            !summary.trigger_decision.checkpoint_prune_is_required ||
++            summary.bounded_remove_limit != expected_full_trim_detached_count ||
++            summary.selected_candidate_count != expected_hot_zone_detached_count ||
++            summary.detached_count != expected_hot_zone_detached_count ||
++            cache.checkpoint_count() != expected_hot_zone_checkpoint_count ||
++            cache.total_pin_count() != 0 ||
++            vsapi_state.free_frame_count !=
++                free_count_before_prune +
++                static_cast<int>(expected_hot_zone_detached_count)
++            ) {
++            return fail();
++        }
++
++        if (
++            !lookup_present(
++                cache,
++                hot_zone_protected_frame_number,
++                reinterpret_cast<const VSFrame*>(
++                    &checkpoint_storage[
++                        static_cast<std::size_t>(
++                            hot_zone_protected_frame_number
++                        )
++                    ]
++                )
++            )
++            ) {
++            return fail();
++        }
++    }
++
++    {
++        constexpr std::size_t distance_checkpoint_count = 50U;
++        constexpr std::size_t distance_max_remove_count = 1U;
++        constexpr int farthest_candidate_frame_number = 1;
++        constexpr int nearer_candidate_frame_number = 49;
++        constexpr int hot_zone_observation_frame = 100;
++        std::vector<int> checkpoint_storage(distance_checkpoint_count);
++        fill_storage(checkpoint_storage, 14000);
++
++        Cnr3OutputCacheCore cache{};
++
++        if (
++            cache.record_hot_zone_observation(hot_zone_observation_frame) !=
++                Cnr3Status::ok ||
++            store_checkpoint_range(
++                cache,
++                checkpoint_storage,
++                distance_checkpoint_count
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary summary{};
++        const int free_count_before_prune = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                distance_max_remove_count,
++                summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            summary.trigger_decision.prune_is_required ||
++            !summary.trigger_decision.checkpoint_prune_is_required ||
++            summary.bounded_remove_limit != distance_max_remove_count ||
++            summary.selected_candidate_count != distance_max_remove_count ||
++            summary.detached_count != distance_max_remove_count ||
++            cache.checkpoint_count() != distance_checkpoint_count - 1U ||
++            vsapi_state.free_frame_count != free_count_before_prune + 1
++            ) {
++            return fail();
++        }
++
++        if (
++            !lookup_absent(cache, farthest_candidate_frame_number) ||
++            !lookup_present(
++                cache,
++                nearer_candidate_frame_number,
++                reinterpret_cast<const VSFrame*>(
++                    &checkpoint_storage[
++                        static_cast<std::size_t>(
++                            nearer_candidate_frame_number
++                        )
++                    ]
++                )
++            ) ||
++            !lookup_present(
++                cache,
++                0,
++                reinterpret_cast<const VSFrame*>(&checkpoint_storage[0])
++            )
++            ) {
++            return fail();
++        }
++    }
++
++    {
++        constexpr std::size_t k_bound_max_remove_count = 8U;
++        std::vector<int> checkpoint_storage(full_trim_checkpoint_count);
++        fill_storage(checkpoint_storage, 15000);
++
++        Cnr3OutputCacheCore cache{};
++
++        if (
++            store_checkpoint_range(
++                cache,
++                checkpoint_storage,
++                full_trim_checkpoint_count
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary first_summary{};
++        const int free_count_before_first = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                k_bound_max_remove_count,
++                first_summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            first_summary.trigger_decision.prune_is_required ||
++            !first_summary.trigger_decision.checkpoint_prune_is_required ||
++            first_summary.bounded_remove_limit != k_bound_max_remove_count ||
++            first_summary.detached_count != k_bound_max_remove_count ||
++            cache.checkpoint_count() != 52U ||
++            vsapi_state.free_frame_count !=
++                free_count_before_first +
++                static_cast<int>(k_bound_max_remove_count)
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary second_summary{};
++        const int free_count_before_second = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                k_bound_max_remove_count,
++                second_summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            second_summary.trigger_decision.prune_is_required ||
++            !second_summary.trigger_decision.checkpoint_prune_is_required ||
++            second_summary.bounded_remove_limit != k_bound_max_remove_count ||
++            second_summary.detached_count != k_bound_max_remove_count ||
++            cache.checkpoint_count() != 44U ||
++            vsapi_state.free_frame_count !=
++                free_count_before_second +
++                static_cast<int>(k_bound_max_remove_count)
++            ) {
++            return fail();
++        }
++
++        Cnr3CachePruneExecutionSummary third_summary{};
++        const int free_count_before_third = vsapi_state.free_frame_count;
++
++        if (
++            cache.execute_bounded_prune_pass(
++                below_capacity_frame_byte_count,
++                retain_checkpoint_count,
++                k_bound_max_remove_count,
++                third_summary
++            ) != Cnr3Status::ok
++            ) {
++            return fail();
++        }
++
++        if (
++            third_summary.trigger_decision.prune_is_required ||
++            third_summary.trigger_decision.checkpoint_prune_is_required ||
++            third_summary.selected_candidate_count != 0U ||
++            third_summary.detached_count != 0U ||
++            cache.checkpoint_count() != 44U ||
++            vsapi_state.free_frame_count != free_count_before_third
++            ) {
++            return fail();
++        }
++    }
++
++    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++
++    cnr3_cache_core_selftest_trace_line(
++        "W.1 checkpoint-retention trigger scenario"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    pure checkpoint trigger fires below capacity and uses the composite selector"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    non-checkpoint controls survive when capacity pressure is absent"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    frame 0, pinned checkpoints, and hot-zone-covered checkpoints are retained"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    greatest-distance-first order and K-bounded trim-while-over-MAX are proven"
++    );
++
++    return Cnr3Status::ok;
++}
++
+ Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept {
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+     int first_frame_storage = 1;
+     int middle_frame_storage = 2;
+     int checkpoint_last_frame_storage = 3;
+     int pinned_frame_storage = 4;
+ 
+     const VSFrame* first_frame =
+@@ -7165,52 +7732,66 @@ Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexce
+ }
+ 
+ 
+ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept {
+     Cnr3CachePruneTriggerDecision decision{};
+ 
+     if (
+         cnr3_calculate_cache_prune_trigger_decision(
+             0U,
+             0U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             decision
+         ) != Cnr3Status::invalid_argument
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     if (
+         decision.frame_byte_count != 0U ||
+         decision.active_ceiling_frame_count != 0U ||
+         decision.overflow_trigger_frame_count != 0U ||
+         decision.current_slot_count != 0U ||
+         decision.prune_is_required ||
+         decision.target_slot_count_after_prune != 0U ||
+-        decision.target_remove_count != 0U
++        decision.target_remove_count != 0U ||
++        decision.current_checkpoint_count != 0U ||
++        decision.checkpoint_retain_target_count != 0U ||
++        decision.checkpoint_prune_is_required ||
++        decision.checkpoint_target_count_after_prune != 0U ||
++        decision.checkpoint_target_remove_count != 0U
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     const auto expect_decision = [](
+         std::uint64_t frame_byte_count,
+         std::size_t current_slot_count,
++        std::size_t current_checkpoint_count,
++        std::size_t retain_checkpoint_count,
+         std::size_t expected_active_ceiling,
+         std::size_t expected_trigger,
+         bool expected_prune_required,
+         std::size_t expected_target_after_prune,
+-        std::size_t expected_remove_count
++        std::size_t expected_remove_count,
++        bool expected_checkpoint_prune_required,
++        std::size_t expected_checkpoint_target_after_prune,
++        std::size_t expected_checkpoint_remove_count
+     ) noexcept -> Cnr3Status {
+         Cnr3CachePruneTriggerDecision observed{};
+ 
+         const Cnr3Status status = cnr3_calculate_cache_prune_trigger_decision(
+             frame_byte_count,
+             current_slot_count,
++            current_checkpoint_count,
++            retain_checkpoint_count,
+             observed
+         );
+ 
+         if (!cnr3_status_is_ok(status)) {
+             return status;
+         }
+ 
+         if (observed.frame_byte_count != frame_byte_count) {
+             return Cnr3Status::invariant_violation;
+         }
+@@ -7232,105 +7813,167 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+         }
+ 
+         if (observed.target_slot_count_after_prune != expected_target_after_prune) {
+             return Cnr3Status::invariant_violation;
+         }
+ 
+         if (observed.target_remove_count != expected_remove_count) {
+             return Cnr3Status::invariant_violation;
+         }
+ 
++        if (observed.current_checkpoint_count != current_checkpoint_count) {
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (
++            observed.checkpoint_retain_target_count !=
++            retain_checkpoint_count
++            ) {
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (
++            observed.checkpoint_prune_is_required !=
++            expected_checkpoint_prune_required
++            ) {
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (
++            observed.checkpoint_target_count_after_prune !=
++            expected_checkpoint_target_after_prune
++            ) {
++            return Cnr3Status::invariant_violation;
++        }
++
++        if (
++            observed.checkpoint_target_remove_count !=
++            expected_checkpoint_remove_count
++            ) {
++            return Cnr3Status::invariant_violation;
++        }
++
+         return Cnr3Status::ok;
+     };
+ 
+     const std::uint64_t one_mebibyte = 1024ULL * 1024ULL;
+     const std::uint64_t two_mebibytes = 2ULL * 1024ULL * 1024ULL;
+ 
+     if (
+         expect_decision(
+             one_mebibyte,
+             1100U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             1000U,
+             1100U,
+             false,
+             1100U,
++            0U,
++            false,
++            0U,
+             0U
+         ) != Cnr3Status::ok
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     if (
+         expect_decision(
+             one_mebibyte,
+             1101U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             1000U,
+             1100U,
+             true,
+             1000U,
+-            101U
++            101U,
++            false,
++            0U,
++            0U
+         ) != Cnr3Status::ok
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     if (
+         expect_decision(
+             two_mebibytes,
+             563U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             512U,
+             563U,
+             false,
+             563U,
++            0U,
++            false,
++            0U,
+             0U
+         ) != Cnr3Status::ok
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     if (
+         expect_decision(
+             two_mebibytes,
+             564U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             512U,
+             563U,
+             true,
+             512U,
+-            52U
++            52U,
++            false,
++            0U,
++            0U
+         ) != Cnr3Status::ok
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     if (
+         expect_decision(
+             CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL,
+             165U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             150U,
+             165U,
+             false,
+             165U,
++            0U,
++            false,
++            0U,
+             0U
+         ) != Cnr3Status::ok
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     if (
+         expect_decision(
+             CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL,
+             166U,
++            0U,
++            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+             150U,
+             165U,
+             true,
+             150U,
+-            16U
++            16U,
++            false,
++            0U,
++            0U
+         ) != Cnr3Status::ok
+         ) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+     cnr3_cache_core_selftest_trace_line(
+         "G.10A prune-trigger decision hysteresis scenario"
+     );
+     cnr3_cache_core_selftest_trace_line(
+         "    1 MiB frame -> active_ceiling 1000, trigger 1100"
+@@ -15287,20 +15930,24 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+             cnr3_cache_core_selftest_d4_first_in_best_dressed_duplicate_primitive
+         },
+         {
+             "d5_recovery_pin_survives_bounded_prune_pass",
+             cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass
+         },
+         {
+             "p11c5_scene_cut_checkpoint_recovery_anchor",
+             cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor
+         },
++        {
++            "w1_checkpoint_retention_trigger",
++            cnr3_cache_core_selftest_w1_checkpoint_retention_trigger
++        },
+         {
+             "central_remove_helper_lifecycle",
+             cnr3_cache_core_selftest_central_remove_helper_lifecycle
+         },
+         {
+             "bounded_selected_detach_lifecycle",
+             cnr3_cache_core_selftest_bounded_selected_detach_lifecycle
+         },
+         {
+             "unpinned_noncheckpoint_selection_lifecycle",
+diff --git a/src/cnr3_cache_core_selftest.h b/src/cnr3_cache_core_selftest.h
+index e85fd10..ba15d68 100644
+--- a/src/cnr3_cache_core_selftest.h
++++ b/src/cnr3_cache_core_selftest.h
+@@ -138,20 +138,32 @@
+     This verifies the cache half of P.11C.5: a non-grid frame marked as a
+     checkpoint by the same checkpoint-store classification route remains cached
+     through a bounded prune pass while an ordinary unpinned non-checkpoint is
+     removed, then read-only bounded recovery anchors on that surviving
+     checkpoint. P.11C.4 remains the live proof that scene detection feeds the
+     checkpoint-store request; this selftest proves checkpoint-class retention
+     and provenance-blind anchor selection only.
+ */
+ [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor() noexcept;
+ 
++/*
++    Run the CMS07-W.1 checkpoint-retention trigger selftest.
++
++    This proves the independent CMS07.14 section 7.4 checkpoint-retention
++    trigger: it fires below capacity, uses the existing composite selector,
++    leaves non-checkpoints untouched when capacity is not over threshold,
++    respects frame 0 / pins / hot zones, preserves greatest-distance-first
++    ordering, and trims only while checkpoint_count remains above MAX_RETAIN.
++    It does not wire live getFrame cache pressure.
++*/
++[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_w1_checkpoint_retention_trigger() noexcept;
++
+ /*
+     Run the CMS07-F.1A central remove helper selftest.
+ 
+     This verifies that the central remove helper rejects pinned slots, detaches
+     unpinned slots from the frame index and checkpoint-position list, updates
+     compacted slot positions, and releases detached frames outside the cache
+     lock. It does not introduce prune policy, hot zones, recovery, AS2, or
+     getFrame behaviour.
+ */
+ [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept;

@@ -146,6 +146,18 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor() noexcept;
 
 /*
+    Run the CMS07-W.1 checkpoint-retention trigger selftest.
+
+    This proves the independent CMS07.14 section 7.4 checkpoint-retention
+    trigger: it fires below capacity, uses the existing composite selector,
+    leaves non-checkpoints untouched when capacity is not over threshold,
+    respects frame 0 / pins / hot zones, preserves greatest-distance-first
+    ordering, and trims only while checkpoint_count remains above MAX_RETAIN.
+    It does not wire live getFrame cache pressure.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_w1_checkpoint_retention_trigger() noexcept;
+
+/*
     Run the CMS07-F.1A central remove helper selftest.
 
     This verifies that the central remove helper rejects pinned slots, detaches

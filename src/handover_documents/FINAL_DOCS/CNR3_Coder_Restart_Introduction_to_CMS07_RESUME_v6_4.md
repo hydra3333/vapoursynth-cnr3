@@ -1,17 +1,31 @@
-# CNR3 — Development RESUME on the CMS07.13 cache + pixel architecture
-*(Coder restart introduction (v6.1) — paste this at the start of a new memoryless chat,
+# CNR3 — Development RESUME on the CMS07.13 cache + pixel + scene-change architecture
+*(Coder restart introduction (v6.4) — paste this at the start of a new memoryless chat,
 ahead of the attached handover pack files. This is a RESUME of an in-progress, proven build
 that is past its cache-core milestone, through its entire real-frame pixel path on
 caller-supplied frames, and through the cache↔pixel / getFrame KEYSTONE — whose live dispatch
 is now COMPLETE for all four branches (cache-hit, fresh-start, predecessor-present, recovery),
-and the **branch-(d) recovery arc is COMPLETE (D.1-D.5)**, committed through D.5. It is NOT a fresh
-start, it is NOT "early cache-core work," it is NOT pixel-path work, and neither the keystone dispatch
-nor the recovery arc is un-started or partial — read the state below carefully. The immediate live work
-is **P.11C scene-change uniform wiring across branch-a/c/d** (it gates the first real-footage test; it
-is NOT a recovery phase).
-v6.1 supersedes v6.0 (which was on the D.1 / CMS07.10 / D.2-next baseline). v6.1 carries the Design
-Alignment and Escalation Charter (section 0.0) and advances the state to recovery-arc-complete / CMS07.13
-/ P.11C-next.)*
+and the **branch-(d) recovery arc is COMPLETE (D.1-D.5)**, AND the **P.11C SCENE-CHANGE ARC is CLOSED
+(.1-.5)** — scene detection is wired+proven across branch-a/c/d, committed through CMS07-P.11C.5. It is
+NOT a fresh start, it is NOT "early cache-core work," it is NOT pixel-path work, and neither the keystone
+dispatch, the recovery arc, nor the scene-change arc is un-started or partial — read the state below
+carefully. The immediate live work is **STEP 0: a joint CMS SENSIBILITY / GAP REVIEW for hot-zone + prune
+live wiring, BEFORE any wiring patch.** The prune logic + hot-zone machinery are already built and
+selftest-proven but have ZERO live callers in the committed source — so the task is wiring, NOT a new
+algorithm. BUT do not begin wiring by coding directly from the current CMS: first review, jointly
+(designer + coder + coordinator), whether the CMS is still sensible and COMPLETE against the post-P.11C.5
+implementation state. The load-bearing part of that review is the live prune-TRIGGER contract — exactly WHEN
+the live store path invokes the bounded prune pass, and how that is safe against the active pin_list and the
+arInitial->arAllFramesReady gap (single-activation now; concurrent prune is the fmParallel arc). A CMS
+clarification or version bump may be a legitimate OUTPUT of Step 0. Only after Step 0 confirms the plan do
+you scope hot-zone observation wiring, then prune wiring.
+v6.4 supersedes v6.2 (handover-safety merge after the coder review; same P.11C-arc-CLOSED / CMS07.13 build
+state). v6.4 makes the next-action explicit as **STEP 0: a joint CMS sensibility/gap review for hot-zone +
+prune live wiring BEFORE any wiring patch** — the prune/hot-zone componentry is proven but has ZERO live
+callers, and the CMS is NOT assumed reliable-as-is for the wiring merely because the componentry exists.
+v6.4 also advances doc-set pointers to the merged pack (Spec v2.14 / Document A v3.8 / Document B v3.8 /
+DELTA v4.14 / Future Investigations v7.13.3 / Diagnostics Plan v1.3) and notes the CMS front-matter currency
+fix (Status paragraph + companion-example; no design rule change). The Design Alignment and Escalation
+Charter (section 0.0) is retained.)*
 
 This chat **resumes** CNR3 development on the CMS07.13 architecture. The build is far advanced
 and proven phase-by-phase: the cache core is complete and proven, the entire scalar pixel
@@ -56,7 +70,7 @@ Real-frame path:     COMPLETE and proven ON CALLER-SUPPLIED FRAMES — P.10A (Va
                      plane-view adapter) -> P.11A (caller-supplied frame-triplet validation)
                      -> P.11B (caller-supplied real-frame pixel composition) -> P.11C
                      (caller-supplied scene-change/reset).
-KEYSTONE+RECOVERY:   LIVE DISPATCH FEATURE-COMPLETE (all four branches); branch-(d) recovery arc COMPLETE, committed through D.5:
+KEYSTONE+RECOVERY+SCENE: LIVE DISPATCH FEATURE-COMPLETE (all four branches) WITH SCENE HANDLING; recovery arc COMPLETE + P.11C arc CLOSED, committed through P.11C.5:
                        K.1A request-plan structures + temporary KDT dev-trace   (count -> 46)
                        K.1B direct cached-output-return ownership (synthetic)    (count -> 47)
                        K.1C live getFrame passthrough scaffold                   (plugin-only)
@@ -71,10 +85,19 @@ KEYSTONE+RECOVERY:   LIVE DISPATCH FEATURE-COMPLETE (all four branches); branch-
                        D.3   floor-fresh-start recovery                            (plugin-only; materialized-floor invariant)
                        D.4   adopt-skip + first-in-best-dressed primitives         (selftest; count 49 -> 51)
                        D.5   recovery-pin-survives-real-prune-pass                 (selftest; count 51 -> 52)
-Latest committed:    CMS07-D.5-recovery-pin-survives-bounded-prune-proof  (branch-(d) recovery arc COMPLETE)
+                       P.11C.1 scene-change uniform-wiring layout                  (plugin-only)
+                       P.11C.2 scene-config + scdthr->threshold helper + store-req  (plugin-only)
+                       P.11C.3 branch-c (predecessor-present) scene detection       (plugin-only; .vpy-proven)
+                       P.11C.4 branch-d (recovery) per-hole+target scene detection  (plugin-only; .vpy-proven)
+                       P.11C.5 scene-cut-checkpoint found as recovery anchor        (selftest; count 52 -> 53)
+Latest committed:    CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof  (P.11C SCENE-CHANGE ARC CLOSED .1-.5)
 Controlling CMS:     CMS07.13 (§0A charter; §9.5 materialized-floor invariant — clarifications, no rule/behaviour change;
                      R-LIFECYCLE / pre-compute adopt-and-skip carried forward from CMS07.9/.10)
-Selftest count:      52/52 PASS (forced-fail 51/52 exit 1; verbose 52/52).
+Selftest count:      53/53 PASS (forced-fail 52/53 exit 1; verbose 53/53).
+Next phase:          live cache-pressure WIRING — hot-zone obs (CMS §5.7 @arInitial) then prune into live getFrame.
+                     Prune/hot-zone LOGIC built+proven but ZERO live callers; prune-trigger contract needs designer+coder
+                     review first (single-activation now; concurrent prune in fmParallel). THEN real-footage -> diagnostics
+                     (condensed 4-phase) -> fmParallel.
 Branch:              dev_cache_manager
 ```
 So: the cache core is done, the pixel maths is done, the scalar->native bridge is done, the
@@ -83,9 +106,15 @@ COMPLETE — all four getFrame branches (cache-hit, fresh-start, predecessor-pre
 are live and proven both Debug+Release. The plugin produces correct recursive output through live
 getFrame, and the entire branch-(d) recovery arc is proven: single-hole (D.1), multi-hole + bounded-
 window refusal (D.2), floor-fresh-start (D.3), adopt-skip / first-in-best-dressed primitives (D.4), and
-recovery-pin-survives-real-prune (D.5). What is NOT yet done, and is your immediate forward work, is
-**P.11C scene-change uniform wiring across branch-a/c/d** — see section 0.1. (The only deferred
-confidence in the recovery arc is real concurrent fmParallel scheduling, bounded to the fmParallel phase.)
+recovery-pin-survives-real-prune (D.5). The P.11C SCENE-CHANGE ARC is now also CLOSED (.1-.5): scene
+detection runs uniformly across branch-a/c/d (predecessor-present .3, recovery holes+target .4), a detected
+cut resets chroma + promotes the frame to a checkpoint, and such a scene-cut checkpoint survives prune and
+serves as a later recovery anchor (.5) — all proven both configs. What is NOT yet done, and is your
+immediate forward work, is **live cache-pressure WIRING** — the prune logic and hot-zone machinery are
+built and selftest-proven but are NOT called from the live getFrame path; wire hot-zone observation (CMS
+§5.7: at arInitial) then pruning, after a designer+coder review of the live prune-TRIGGER contract. (The
+only deferred confidence remains real concurrent fmParallel scheduling, bounded to the fmParallel phase;
+the concurrent prune case is explicitly part of that arc.)
 
 ## 0.0 THE DESIGN ALIGNMENT AND ESCALATION CHARTER (read before any work — it governs HOW you work)
 This is the standing three-way governance model (designer/reviewer, coder, coordinator). It governs

@@ -1,5 +1,5 @@
 ================================================================================
-CNR3 DIAGNOSTICS ARC -- CONDENSED PLAN (designer proposal)
+CNR3 DIAGNOSTICS ARC -- CONDENSED PLAN v1.3 (designer proposal; handover-safety version bump from v1.1/coder v1.2 -- content unchanged, renumbered for pack consistency)
 ================================================================================
 Goal: implement the 14-family D-SUM observe-only telemetry framework
 (cnr3_diagnostics_specification_v1_5.md + cnr3_memory_diagnostics_spec_v2.md) in

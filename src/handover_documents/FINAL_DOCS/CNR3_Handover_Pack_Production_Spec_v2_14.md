@@ -1,7 +1,35 @@
 # CNR3 Handover Pack Production Specification
 **Date:** 2026-06-27
-**Version:** v2.11
+**Version:** v2.14
 **Supersedes:** Production Spec v2.10 (and v2.9/v2.8/v2.7 and earlier).
+**v2.14 change (currency + handover-safety refresh; no rule added, changed, or removed):** merges the coder
+handover-review catches onto the v2.12 base. Advances pointers to the merged pack (Document A v3.8 / Document B
+v3.8 / Role Handover v1.12 / Reviewer Intro v3.5 / Coder Restart Intro v6.4 / DELTA v4.14 / Future
+Investigations v7.13.3 / Diagnostics Plan v1.3; CMS07.13 unchanged, with a front-matter currency fix only).
+Records the banked **STEP 0** next-action: the live cache-pressure wiring must begin with a JOINT CMS
+SENSIBILITY / GAP REVIEW for hot-zone + prune wiring BEFORE any wiring patch — the CMS is not assumed reliable
+as-is merely because the componentry is proven; the live prune-TRIGGER contract is the load-bearing part of
+that review. No rule, AS-scope, or section text is changed. [Prior note retained as history:]
+
+**v2.12 change (currency refresh only; no rule added, changed, or removed):** advances the build
+state from "branch-(d) recovery arc COMPLETE / P.11C next" to **P.11C SCENE-CHANGE ARC CLOSED**. The
+current controlling CMS is **UNCHANGED at CMS07.13** (`cnr3_cache_manager_design_v7_13.md`) — P.11C
+IMPLEMENTED the scene-change DESIGN the CMS already specified (§6.3 promote every detected cut, §6.4
+scene frames as checkpoints, §6.5 cut-near-grid, detection-during-compute), so closing the arc is a
+STATE advance, NOT a CMS rule/constant/AS-scope change. Build state advanced to: **P.11C.1-.5 all
+committed and proven both configs (latest committed CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof);
+scene detection wired uniformly across branch-a/c/d (predecessor-present .3, recovery holes+target .4,
+scene-cut-checkpoint-as-recovery-anchor .5); the live getFrame dispatch is feature-complete across all
+four branches WITH scene handling**; selftest count **53/53** (forced-fail 52/53 exit 1). **Next phase:
+live cache-pressure WIRING — wire hot-zone observation (CMS §5.7: at arInitial) then pruning into the
+live getFrame path (the prune logic + hot-zone machinery are built and selftest-proven, but have ZERO
+live callers in the committed source; the live prune-TRIGGER contract needs a focused designer+coder
+review before coding — single-activation wiring now, concurrent prune revisited in the fmParallel arc).
+THEN first real-footage validation; THEN the diagnostics arc (condensed 4-phase plan); THEN fmParallel.**
+Only concrete current-version pointers and build-state lines are touched; the generic "CMS07.0 or later
+approved successor" references and ALL rules text are unchanged. The detailed current state lives in
+CNR3_THIS_CHAT_DELTA_current_state_SLIMMED_v4_12.md.
+
 **v2.11 change (currency refresh only; no rule added, changed, or removed):** advances the concrete
 current-CMS pointer from CMS07.10 to **CMS07.13** (`cnr3_cache_manager_design_v7_13.md`) — CMS07.11/.12/.13
 were clarifications (charter §0A mirror; bounded-search report semantics; materialized-floor-is-the-

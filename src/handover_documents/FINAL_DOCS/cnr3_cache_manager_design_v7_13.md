@@ -1,16 +1,18 @@
 # CNR3 Cache Manager Design Specification
-**Date:** 2026-06-27 (CMS07.11; supersedes CMS07.10 dated 2026-06-25, which superseded CMS07.9 dated 2026-06-24, which superseded CMS07.8 dated 2026-06-23, which superseded
+**Date:** 2026-06-27 (CMS07.13; supersedes CMS07.12 dated 2026-06-27, which superseded CMS07.11 dated 2026-06-27, which superseded CMS07.10 dated 2026-06-25, which superseded CMS07.9 dated 2026-06-24, which superseded CMS07.8 dated 2026-06-23, which superseded
 CMS07.7 dated 2026-06-21, which superseded CMS07.3 dated 2026-06-19, which superseded
 CMS07.2 dated 2026-06-17, which superseded CMS07.1 dated 2026-06-17, which superseded
 CMS07.0 dated 2026-06-12)
-**Version:** CMS07.11
+**Version:** CMS07.13
 **Status:** Design specification — architectural supersession. COMPLETE: all verify
 items V1–V8 resolved (several against authoritative sources: the CNR2 reference code,
 the local R76 VapourSynth4.h header); section-level bring-across audit of the
 CMS06.11 body done (§9A); final self-review pass done. Controlling design authority
-for the CNR3 restart; ready for coder study and the isolated cache-core milestone.
-CMS07.11 is a GOVERNANCE addition over CMS07.10: it adds §0A (the Design Alignment and Escalation
-Charter) and changes NO design rule, decision, constant, AS scope, or section number. CMS07.10 was a
+for the CNR3 restart. (Currency note 2026-06-28: the build is far past the isolated cache-core milestone — the cache core, the live four-branch getFrame dispatch, the branch-(d) recovery arc, and the P.11C scene-change arc are all implemented and proven through CMS07-P.11C.5; see the additive implementation-state note below. This Status paragraph is retained for design-authority context; it is not a current build-state pointer — the live state lives in Document B and the DELTA.)
+**Implementation-state note (additive; not a CMS version change — no rule, constant, AS-scope, or section is added/changed/removed; CMS remains CMS07.13).** The scene-change design specified in this CMS — §6.3 (promote every detected cut to the checkpoint pool), §6.4 (scene-change frames as checkpoints; a cut-checkpoint is just a present output the §9.5 Phase-1 search finds), §6.5 (cut-near-grid), and detection-during-compute — is now IMPLEMENTED AND PROVEN in the live build via the P.11C arc (CMS07-P.11C.1 through .5, committed; selftests 53/53 both configs). Scene detection runs uniformly across the predecessor-present (.3) and recovery hole+target (.4) live branches, and a scene-cut-created checkpoint is proven to survive prune by checkpoint class and serve as a later recovery anchor (.5), exactly as §6.3/§6.4 specify. This note records implementation status only; the design text is unchanged. NEXT (not a CMS change): wiring the §5 hot-zone observation and §6.3 prune into the live getFrame path — the logic is built and selftest-proven but not yet live-wired; the live prune-trigger contract is pending a designer+coder review (single-activation wiring first; concurrent prune is part of the fmParallel arc).
+
+CMS07.13 is a CLARIFICATION over CMS07.12: it makes the materialized-floor-is-the-foundation invariant explicit in §9.5 (floor fallback) — proven live by D.3 — and records that floor-fresh-start supersedes the D.2-era no-in-window-anchor refusal for reachable N. It adds no rule/AS-scope and changes no behaviour (D.3 already ships this). CMS07.12 is a CLARIFICATION over CMS07.11: it makes the bounded-search REPORT semantics explicit in §9.5 Phase 1 (the search reports only within [max(0,N-B), N-1]; no-in-window-anchor does not distinguish out-of-window-anchor from no-prior-output) and corrects the bounded-anchor-search interval upper bound to N-1; it adds no new rule/AS-scope and changes no behaviour (D.2 already ships this). CMS07.11 was a GOVERNANCE addition over CMS07.10: it added §0A (the Design Alignment and Escalation
+Charter) and changed NO design rule, decision, constant, AS scope, or section number. CMS07.10 was a
 CORRECTION over CMS07.9: it corrected §9A.1.1 for the K.1F-proven
 R-LIFECYCLE triggering-request rule. A dependency-filter cache-hit activation must not
 rely on zero-request arInitial->NULL (not guaranteed an arAllFramesReady callback under
@@ -55,8 +57,8 @@ and the hot-zone model both change fundamentally. Earlier documents are referenc
 material only.
 **Companion document (non-normative).** This CMS has a companion working document,
 `CNR3_CMS_Future_Investigations_and_Open_Questions_vXX.Y.md`, which always carries the
-**same version number as this CMS** (XX.Y = this CMS version; for this version,
-`_v7.10.md`). It records deferred design questions and open tuning investigations. It is
+**same version number as this CMS** (XX.Y = this CMS version; for this version, the
+v7.13-series companion, e.g. `_v7.13.md` / `_v7.13.N.md`). It records deferred design questions and open tuning investigations. It is
 **NOT part of this specification, NOT controlling, and NOT part of the coder handover
 pack**; nothing in it is implemented without formal prior approval and a corresponding
 CMS revision. It exists only so that open questions are not lost between sessions. Refer
@@ -635,7 +637,16 @@ scan K = N-1, N-2, ... down to the lower-bound floor max(0, N-B):
          when a closer ordinary output exists.)
     none present before the floor       -> floor fallback (below)
 ```
-The search is bounded to `[max(0,N-B), N]` (do not scan the whole clip).
+The search is bounded to `[max(0,N-B), N-1]` (do not scan the whole clip; the requested frame N
+is the target, never an anchor candidate).
+**Bounded-report semantics (clarification; normative for recovery refusal):** the Phase-1 search
+reports presence ONLY within its window `[max(0,N-B), N-1]`. When it finds no present output in that
+window, the result is a single state — "no in-window anchor" — and it does NOT distinguish "an older
+present output exists BEYOND the window" from "no prior output exists at all." Distinguishing those
+would require an unbounded out-of-window scan, which the bound exists to avoid. A recovery refusal
+therefore reports `no-in-window-anchor` and MUST NOT claim a bounded-window-exceeded vs no-prior-output
+distinction the bounded search cannot make; any caller needing that distinction proves it by
+construction/context, not from the search result. (Proven live by D.2's bounded-window refusal.)
 **Phase 2 — fill (ASCENDING from start_point to N), fill-holes-only (CMS06.11 §2.1).**
 ```text
 for K ascending from start_point+1 .. N:
@@ -652,6 +663,15 @@ FRESH START (no predecessor, reset/start semantics — as if frame 0), then fill
 ascending to N. Justification: the recursive chroma blend smears toward its
 predecessor, so the influence of the approximate start frame DECAYS over the B-frame
 walk and the visible result at N-1/N converges to near-continuous-from-0 blending.
+**Materialized-floor-is-the-foundation (clarification; proven live by D.3).** Once the floor frame
+has been fresh-started, stored, and pinned, it IS the validated consumer foundation for the ascending
+walk — equivalent to a search-discovered anchor. The fill machinery validates only the structural walk
+contract (a present, pinned foundation frame with the holes as the contiguous run above it); it does
+NOT depend on HOW that foundation came to exist (found by the Phase-1 bounded search, or created by
+this floor fallback). So treating the materialized floor as the walk's anchor is a now-true structural
+fact, not a bypass. This supersedes the D.2-era no-in-window-anchor REFUSAL for reachable in-range N:
+after the floor fallback is wired, recovery floor-fresh-starts rather than refusing; genuine refusal
+narrows to structural/impossible cases (corrupt/non-contiguous plan, n<=0, source/alloc failure).
 **Coherence constraint:** B (BACK_RADIUS) MUST exceed the effective settling length of
 the recursive blend, so the approximation is invisible at N (relates CR2/CR3).
 **Scene cuts bound the approximation further.** A cut between the start point (or
@@ -1411,6 +1431,14 @@ eliminate. Importing it would defeat the architecture.
   648). No `[VERIFY]` remains for the cache.
 ---
 ## 14. Changelog
+**CMS07.13 (2026-06-27) — CLARIFICATION (materialized-floor-is-the-foundation); no behaviour change (D.3 already ships this); no new rule/AS-scope.**
+- §9.5 floor fallback: made explicit that once the floor frame is fresh-started, stored, and pinned it IS the validated consumer foundation for the ascending walk, equivalent to a search-discovered anchor — the fill machinery validates only the structural walk contract (present pinned foundation + contiguous holes above it) and does not depend on how the foundation came to exist. Treating the materialized floor as the walk's anchor is a now-true structural fact, not a bypass. Also recorded that this floor-fresh-start SUPERSEDES the D.2-era no-in-window-anchor refusal for reachable in-range N; genuine refusal narrows to structural/impossible cases. Proven live by D.3 (floor-fresh-start output[3]=144/113, recover_branch=floor-fresh-start floor=0 floor_outcome=computed; floor byte 56/176 proving fresh-start chroma-unchanged). This documents in the design authority the same reasoning the D.3 patch carries in-code at the anchor relabel.
+- **Clarification only.** No design rule, decision, constant, AS scope, or section number changed or removed; recovery behaviour is exactly as built and committed in D.1/D.2/D.3.
+
+**CMS07.12 (2026-06-27) — CLARIFICATION (bounded-search report semantics); no behaviour change (D.2 already ships this); no new rule/AS-scope.**
+- §9.5 Phase 1: made the bounded-search REPORT semantics explicit (normative for recovery refusal): the descending search reports presence only within its window [max(0,N-B), N-1]; "no in-window anchor" is a single state that does NOT distinguish "an older present output beyond the window" from "no prior output at all" (distinguishing them needs an unbounded scan the bound exists to avoid). A recovery refusal reports no-in-window-anchor and must not claim the bounded-window-exceeded-vs-no-prior distinction; a caller needing it proves it by construction/context. Also corrected the bounded anchor-search interval upper bound from [max(0,N-B), N] to [max(0,N-B), N-1] (the requested frame N is the target, never an anchor candidate). Raised as a charter CMS-GAP candidate during D.2 review and confirmed; proven live by D.2's bounded-window refusal (RUN C, no-in-window-anchor). Relevant to D.3 (floor-fresh-start is the same no-in-window-anchor boundary).
+- **Clarification only.** No design rule, decision, constant, AS scope, or section number changed or removed; the recovery behaviour is exactly as built and committed in D.1/D.2.
+
 **CMS07.11 (2026-06-27) — GOVERNANCE addition; adds §0A (Design Alignment and Escalation Charter); no design rule/decision/constant/AS-scope/section-number changed or removed.**
 - Added **§0A** — the three-way (designer/reviewer, coder, coordinator) Design Alignment and Escalation Charter: CMS is the controlling guide and strict alignment is the default; two issue types are surfaced rather than routed around silently — RULE-DEVIATION (a named CMS rule, if followed, would be wrong/inconsistent/unsafe — HIGH bar, CMS07.10-correction-level evidence) and CMS-GAP (a bigger-picture/fmParallel/reliability/safety concern with little or no correspondence to a specific rule — encouraged, low bar, may call for a new/revised rule); on either, work on the affected change pauses, resolved by designer+coder agreement with coordinator approval, recorded durably before/as part of the implementing commit; cross-checking is bidirectional (designer read-firsts diffs + recomputes goldens; coder checks scope against code reality); weight scales to risk; concurrency reasoning for the fmParallel goal is recorded at design time. Reproduced identically in Production Spec §3A.5.0 and Role Handover §D0.
 - **Governance only.** No change to §1–§13, §9A, the constants/CR1–CR5, the AS register, or any V-resolution. The charter governs how the CMS is *used*; it asserts nothing about cache/recovery behaviour.

@@ -1,6 +1,6 @@
 # CNR3 CMS — Future Investigations and Open Questions
 
-**Date:** 2026-06-25 (last CONTENT change; filename re-versioned to v7.13 in lockstep with CMS07.13 on 2026-06-27 — no content change: the D.1-D.5 recovery arc resolved no open FI item; the fmParallel/concurrency items FI-01/02/03/05/06/07/08 remain open and are the subject of the upcoming fmParallel phase)
+**Date:** 2026-06-25 (last CONTENT change; filename re-versioned to v7.13 in lockstep with CMS07.13 on 2026-06-27 — no content change: the D.1-D.5 recovery arc resolved no open FI item; the fmParallel/concurrency items FI-01/02/03/05/06/07/08 remain open and are the subject of the upcoming fmParallel phase. 2026-06-28 currency note (no content change to existing FI items): the P.11C scene-change arc is CLOSED (.1-.5, committed CMS07-P.11C.5, 53/53); the next phase is live cache-pressure WIRING (hot-zone observation @arInitial then pruning into the live getFrame path). NEW item FI-09 added below for the SINGLE-ACTIVATION live prune-trigger contract that the wiring needs reviewed first; FI-06/07/08 continue to own the CONCURRENT (fmParallel) case. (v7.13.3 handover-safety update: FI-09 is reframed as part of STEP 0 -- a joint CMS sensibility/gap review for hot-zone + prune live wiring BEFORE any wiring patch; the CMS is not assumed reliable-as-is merely because the componentry is proven.) The condensed 4-phase diagnostics forward plan is in CNR3_Diagnostics_Arc_Condensed_Plan_v1_1.txt.)
 **Pairs with:** the CNR3 Cache Manager Design Specification (CMS) at the **identical
 version number**, which is carried in this document's filename
 (`CNR3_CMS_Future_Investigations_and_Open_Questions_v7.13.md` pairs with CMS07.13).
@@ -96,6 +96,19 @@ FI-08  First-in-best-dressed prune under concurrent stores - check-if-prune AND 
        size prune-target hysteresis headroom to the concurrent-store burst (ties to
        FI-01). Count-based guard CONSIDERED and DEFERRED. To weigh when implementing
        pruning. OPEN (option to table).
+FI-09  Live prune-TRIGGER contract for SINGLE-ACTIVATION wiring (NEW, 2026-06-28) - the prune PASS
+       + hot-zone machinery are built and selftest-proven but have ZERO live callers; store appends
+       without consulting the trigger. Before wiring prune into the live getFrame store path, a
+       designer+coder review must pin down: exactly WHEN the store path invokes the bounded prune
+       pass (after each over-ceiling store? batched?), and how that is SAFE against the active
+       pin_list and the arInitial->arAllFramesReady gap (store-and-pin already one atomic per the
+       CMS store note; the trigger call-site is the unspecified part). CMS policy is reliable
+       (5.7 hot-zone-at-arInitial, 5.3-5.6 lifecycle, 6.3 retention, 5.5 safety); only the live
+       trigger TIMING is unpinned. Scope SINGLE-ACTIVATION now; the CONCURRENT prune case is
+       FI-06/07/08 (fmParallel). 'Proven componentry != proven wiring.' OPEN - resolve at the start
+       of the live cache-pressure wiring phase. STEP 0 (banked): the wiring phase OPENS with a joint CMS
+       sensibility/gap review (designer+coder+coordinator); FI-09's trigger-contract resolution is the
+       load-bearing part of that review. A CMS clarification or version bump may be a legitimate output.
 ```
 
 ---

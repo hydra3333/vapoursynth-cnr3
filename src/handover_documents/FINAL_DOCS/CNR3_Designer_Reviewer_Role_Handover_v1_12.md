@@ -1,15 +1,26 @@
 # CNR3 — Designer / Reviewer Role Handover
-**Version:** v1.10
+**Version:** v1.12 (handover-safety merge after the coder review; advances pointers to the merged pack — Spec v2.14 / Document A v3.8 / Document B v3.8 / Coder Restart Intro v6.4 / DELTA v4.14 / Future Investigations v7.13.3; CMS07.13 unchanged with a front-matter currency fix; next-action made explicit as STEP 0 CMS sensibility/gap review). Supersedes v1.11.
 **Date:** 2026-06-27
-**Status:** Handover with the **live getFrame dispatch FEATURE-COMPLETE (all four branches)** and the
-**branch-(d) recovery arc COMPLETE (D.1-D.5)**. v1.10 advances the v1.9 pointers: committed through
+**Status:** Handover with the **live getFrame dispatch FEATURE-COMPLETE (all four branches) WITH SCENE
+HANDLING** and the **P.11C SCENE-CHANGE ARC CLOSED (.1-.5)**. v1.11 advances the v1.10 pointers: committed
+through **CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof** (P.11C arc closed: .1 layout, .2
+skeleton+threshold helper, .3 branch-c, .4 branch-d, .5 scene-cut-checkpoint-as-recovery-anchor), scene
+detection wired uniformly across branch-a/c/d and proven both configs, selftest count **53/53** (forced-fail
+52/53 exit 1), controlling CMS **UNCHANGED at CMS07.13** (P.11C implemented the design the CMS already
+specified). **Next phase: STEP 0 — a joint CMS sensibility/gap review for hot-zone + prune live wiring** (before any
+wiring patch), then hot-zone observation (CMS §5.7: at arInitial) then pruning into the live getFrame path. The prune logic + hot-zone machinery are built and selftest-proven
+but have ZERO live callers in the committed source; the live prune-TRIGGER contract needs a focused
+designer+coder review before coding (single-activation wiring now; concurrent prune revisited in fmParallel).
+THEN first real-footage validation; THEN diagnostics (condensed 4-phase); THEN fmParallel. The only deferred
+confidence remains real concurrent (fmParallel) scheduling.
+[Historical pointer, retained: v1.10 advanced the v1.9 pointers: committed through
 **CMS07-D.5** (recovery-pin-survives-real-prune), the live getFrame dispatch handles **all four branches**
 (cache-hit, fresh-start, predecessor-present, recovery — all live and proven both configs), the full
 recovery arc D.1-D.5 is proven (single-hole, multi-hole+refusal, floor-fresh-start, adopt-skip/
 first-in-best-dressed primitives, recovery-pin-survives-prune), selftest count **52/52**, controlling CMS
 **CMS07.13**, and the next phase is **P.11C scene-change uniform wiring across branch-a/c/d** (gates first
 real-footage; NOT a recovery phase). The only deferred confidence is real concurrent (fmParallel)
-scheduling. v1.10 retains the **CNR3 Design
+scheduling.] v1.11 retains the **CNR3 Design
 Alignment and Escalation Charter** as the lead operating discipline in Part 3 (the three-way
 governance model agreed designer+coder+coordinator 2026-06-27). v1.8 is a state-pointer + version-table refresh only: the role
 disciplines (D1–D16), worked examples (A–F), triggers, and accuracy rule are UNCHANGED, and all
@@ -158,16 +169,22 @@ proven on CALLER-SUPPLIED frames** (through P.11C), and the **cache↔pixel / ge
 NEARLY COMPLETE** (committed through K.1F; only recovery (d) remains). As of this document:
 ```text
 Cache core proven through:  CMS07-C.14A-aggregate-cache-core-proof + Recovery-Step-0 (AS4 batch discharge)
-Pixel path proven through:  CMS07-P.11C (caller-supplied scene-change/reset) — entire path on caller-supplied frames
-Latest committed phase:     CMS07-D.5-recovery-pin-survives-bounded-prune-proof (branch-(d) recovery arc COMPLETE)
-Live dispatch branches:     cache-hit (b, K.1F), fresh-start (a, K.1D), predecessor-present (c, K.1E.2/E.3),
-                            recovery (d, D.1-D.5) — ALL live+proven both configs. Dispatch FEATURE-COMPLETE.
-Selftest count:             52/52 PASS (forced-fail 51/52, exit 1; verbose 52/52, all priors)
+Pixel path proven through:  CMS07-P.11C (caller-supplied) + P.11C.1-.5 LIVE scene detection across branch-a/c/d
+Latest committed phase:     CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof (P.11C SCENE-CHANGE ARC CLOSED .1-.5)
+Live dispatch branches:     cache-hit (b), fresh-start (a), predecessor-present (c), recovery (d) — ALL
+                            live+proven both configs WITH SCENE DETECTION (P.11C.3 branch-c, .4 branch-d,
+                            .5 scene-cut-checkpoint-as-anchor). Dispatch FEATURE-COMPLETE w/ scene handling.
+Selftest count:             53/53 PASS (forced-fail 52/53, exit 1; verbose 53/53, all priors)
 Branch:                     dev_cache_manager
 Build:                      Visual Studio 2026, x64, Debug + Release
 Local repo root:            E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github
 Build/run dir:              vs\cnr3  (x64\Debug\ and x64\Release\ cnr3_cache_core_selftest.exe; plus the cnr3.dll plugin)
 Repo:                       https://github.com/hydra3333/vapoursynth-cnr3 (confirm from the repo, not memory)
+NEXT phase:                 STEP 0 — joint CMS sensibility/gap review for hot-zone + prune live wiring (BEFORE
+                            any wiring patch; CMS not assumed reliable-as-is merely because componentry is
+                            proven; prune-TRIGGER contract is the load-bearing part). Then, if confirmed:
+                            hot-zone obs wiring (@arInitial) -> prune wiring -> real-footage -> diagnostics
+                            (condensed 4-phase) -> fmParallel. Prune/hot-zone LOGIC proven but ZERO live callers.
 ```
 All cache-core mechanisms are proven to compose under one combined workload (C.14A), and the
 sole live diagnostics compute gate (`CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE`) is proven observe-only

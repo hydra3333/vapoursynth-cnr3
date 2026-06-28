@@ -1,15 +1,17 @@
 # CNR3 — Handover Introduction & Role Description for the Reviewer
 
-**Version:** v3.3
+**Version:** v3.5
 **Date:** 2026-06-25
 **Supersedes:** v2.0 (whose Part 2/3 baseline was the **obsolete CMS06.11 / H15.6B cache era** —
 far older than the pixel arc; that state is gone). v3.0 re-points the project context to the
-**keystone era**. v3.3 advances the pointers to the current baseline: **committed through D.5 (branch-(d)
-recovery arc COMPLETE), selftest count 52/52, CMS07.13**; the live getFrame dispatch is FEATURE-COMPLETE
+**keystone era**. v3.4 advances the pointers to the current baseline: **committed through P.11C.5 (P.11C
+SCENE-CHANGE ARC CLOSED .1-.5), selftest count 53/53, CMS07.13 (unchanged — P.11C implemented the design the
+CMS already specified)**; the live getFrame dispatch is FEATURE-COMPLETE
 across **ALL FOUR branches** (cache-hit, fresh-start, predecessor-present, recovery), the full recovery
 arc D.1-D.5 is proven (D.1 single-hole, D.2 multi-hole+refusal, D.3 floor-fresh-start, D.4 adopt-skip/
-first-in-best-dressed primitives, D.5 recovery-pin-survives-prune), and **P.11C scene-change uniform
-wiring across branch-a/c/d is the next phase** (gates first real-footage; NOT a recovery phase). The only
+first-in-best-dressed primitives, D.5 recovery-pin-survives-prune), scene detection is now wired+proven across
+branch-a/c/d (P.11C.3/.4/.5), and the **next phase is STEP 0 — a joint CMS sensibility/gap review for hot-zone + prune live wiring** (before any
+wiring patch), then hot-zone obs (@arInitial) + prune wiring, then first real-footage validation. The only
 deferred confidence is real concurrent (fmParallel) scheduling. v3.3 also points to the **CNR3 Design
 Alignment and Escalation Charter** (full text in the Role Handover Part 3 / Production Spec §3A.5.0). v3.0 originally re-pointed off the
 obsolete CMS06.11/H15.6B era and **reconciles the role
@@ -132,12 +134,16 @@ repository wins.**
 
 ### 2.2 Current status (snapshot — confirm from the repo and the DELTA)
 ```text
-Committed/pushed through:  CMS07-D.5  (recovery-pin-survives-real-prune; branch-(d) recovery arc COMPLETE)
-Selftests:                 52/52 PASS  (forced-fail 51/52, exit 1; verbose 52/52 with all priors)
+Committed/pushed through:  CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof  (P.11C SCENE-CHANGE ARC CLOSED .1-.5)
+Selftests:                 53/53 PASS  (forced-fail 52/53, exit 1; verbose 53/53 with all priors)
 Branch:                    dev_cache_manager
 Controlling CMS:           CMS07.13 (§0A charter; §9.5 materialized-floor invariant — clarifications, no rule/behaviour change)
-Next phase:                P.11C scene-change uniform wiring across branch-a/c/d (gates first real-footage; NOT a recovery phase).
-                           Only deferred confidence: real concurrent (fmParallel) scheduling — see the slimmed DELTA §4/§5.
+Next phase:                STEP 0 — joint CMS sensibility/gap review for hot-zone + prune live wiring, BEFORE any wiring
+                           patch (the CMS is not assumed reliable-as-is merely because the componentry is proven; the live
+                           prune-TRIGGER contract is the load-bearing part — single-activation now; concurrent prune in
+                           fmParallel). Prune/hot-zone LOGIC built+selftest-proven but ZERO live callers. Then, if confirmed:
+                           hot-zone obs wiring -> prune wiring -> real-footage validation -> diagnostics (condensed 4-phase)
+                           -> fmParallel. See the slimmed DELTA owed-items (FI-09) + the §5 OWED-ITEMS ledger.
 ```
 The full delta of everything since the K.1D era — K.1E.2/E.3 (branch-c, R-ARCH-06 closed),
 CMS07.9 (pre-compute adopt-and-skip normative; fmParallel assumption caught), Recovery-Step-0

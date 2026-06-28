@@ -1,23 +1,50 @@
 # Document A — CNR3 Project Context and Standing Rules (CMS07.0 restart)
 
-**Version:** This Document A v3.4 is only a version number bump.    
-The Production Spec is now v2.8, which added register rule R-PROCESS-23 (
-patch validation must match the target environment — canonical LF base, compile-before-green,
-proof-level honesty, diagnose-failure-class) on top of R-PROCESS-20/21/22. 
-This Document A reproduces the complete current process-rule set R-PROCESS-01 
-through R-PROCESS-23. (CMS07.0 restart line; generated from Production
-Spec v2.8 populated §3A)  
-**Date:** 2026-06-24  
+**Version:** Document A v3.8 — RESUME-state regeneration generated from Production Spec **v2.14**
+populated §3.2 (canonical context, reproduced verbatim) and §3A (Prevailing Rules Register, reproduced
+in full). **v3.8 change over v3.6 (currency touch only; NO register-owned rule text changed):** (a) corrects the
+**Generation source** pointer field to Spec **v2.14** (a v3.6 miss caught in the coder handover review — the
+header had advanced but this concrete field had not); (b) advances all version pointers to the merged pack
+(Spec v2.14 / Document B v3.8 / Role Handover v1.12 / Reviewer Intro v3.5 / Coder Restart Intro v6.4 /
+DELTA v4.14 / CMS07.13 unchanged); (c) records the banked **Step 0** next-action: a JOINT CMS SENSIBILITY/GAP
+REVIEW for hot-zone + prune live wiring BEFORE any wiring patch (do not assume the CMS is reliable as-is
+merely because the componentry is proven). The complete process-rule set R-PROCESS-01..23 and canonical
+context (§3.2) remain UNCHANGED. [Prior note retained as history:]
+
+**v3.6 change over v3.5 (currency touch only; NO register-owned rule text changed):** (a) advances the
+generation-source pointer to Spec **v2.12** and confirms the controlling-design pointer **UNCHANGED at
+CMS07.13** (P.11C implemented the scene-change design the CMS already specified — a state advance, not a
+rule change; the CMS carries only an additive implementation-state note); (b) advances the build-state
+note to **P.11C SCENE-CHANGE ARC CLOSED (.1-.5)** at **53/53 selftests**, scene detection wired+proven
+across branch-a/c/d, the live getFrame dispatch feature-complete with scene handling; (c) advances the
+next-phase note to **live cache-pressure WIRING** (hot-zone observation @arInitial then pruning into the
+live getFrame path — logic built+proven but not yet live-wired; the live prune-trigger contract needs a
+designer+coder review first; single-activation now, concurrent prune in fmParallel) → real-footage →
+diagnostics (condensed 4-phase) → fmParallel. The complete process-rule set R-PROCESS-01 through
+R-PROCESS-23 and the canonical context (§3.2) are reproduced UNCHANGED (P.11C introduced no new rule).
+
+**v3.5 change over v3.4:** (a) adds the **CNR3 Design Alignment and Escalation Charter** as
+§3A.5.0 (the three-way governance discipline — designer/coder/coordinator; RULE-DEVIATION / CMS-GAP
+escalation; bidirectional cross-checking; durable recording — which entered the Spec at v2.10 and CMS at
+§0A, and which v3.4 predated); (b) advances the generation-source pointer to Spec v2.11 and the
+controlling-design pointer to **CMS07.13** (`cnr3_cache_manager_design_v7_13.md`); (c) advances the
+build-state note to **branch-(d) recovery arc COMPLETE (D.1-D.5)**. No register-owned rule text is
+otherwise changed; the canonical context (§3.2) is reproduced unchanged (it is enduring and did not move).
+This Document A reproduces the complete current process-rule set R-PROCESS-01 through R-PROCESS-23 plus
+the charter §3A.5.0.  
+**Date:** 2026-06-27  
 **Role:** Human-facing front door to the CNR3 project. It preserves the canonical
 project context and reproduces the register-owned standing rules for a new chat or human
 maintainer.
-**Generation source:** `CNR3_Handover_Pack_Production_Spec_v2_8.md`  
-**Controlling design authority:** the latest prevailing CMS, currently **CMS07.8**
-(`cnr3_cache_manager_design_v7_8.md`). CMS07.8+ is the controlling design authority; it
-supersedes CMS07.7, CMS07.3, CMS07.2, CMS07.1, and CMS07.0. References to "CMS07.0" in
-reproduced rule text below mean the latest prevailing CMS (currently CMS07.8), per the
-CMS's own version-neutrality rule; specific section pointers are re-checked against the
-prevailing version.  
+**Generation source:** `CNR3_Handover_Pack_Production_Spec_v2_14.md`  
+**Controlling design authority:** the latest prevailing CMS, currently **CMS07.13**
+(`cnr3_cache_manager_design_v7_13.md`). CMS07.13 is the controlling design authority; it supersedes
+CMS07.12/.11/.10/.9/.8 and all earlier. CMS07.11 added §0A (the Design Alignment and Escalation Charter,
+mirrored here as §3A.5.0); CMS07.12 clarified the bounded-search report semantics in §9.5; CMS07.13 made
+the materialized-floor-is-the-foundation invariant explicit in §9.5 — none added a design rule, AS scope,
+or section-number change. References to "CMS07.0" in reproduced rule text below mean the latest prevailing
+CMS (currently CMS07.13), per the CMS's own version-neutrality rule; specific section pointers are
+re-checked against the prevailing version.  
 **Precedence:** if this document conflicts with the latest prevailing CMS on a design
 point, the CMS wins. If this document conflicts with Production Spec §3.2 or §3A on
 canonical context or register-owned rules, the Production Spec wins and this document is
@@ -25,31 +52,32 @@ corrected.
 **Version-line note (what changed from the documents this supersedes):** This is a
 RESUME-state regeneration of the handover set. The CNR3 build is well advanced: the scalar
 pixel pipeline, the scalar→native bridge, and the caller-supplied pixel path are proven,
-the isolated cache core is proven, and the project is now in the **cache↔pixel / getFrame
-keystone** — committed through phase **CMS07-K.1D** (first real output frame via copyFrame,
-plugin-only) at **47/47 selftests**, with **K.1E branch-(c)** (live predecessor-present
-frame-1 compute) in flight. See Document B (current state, e.g. v3.2.9) for the live build
-state and the next phase. The controlling design is now **CMS07.8**: CMS07.1 added §6.6
-(monotonic checkpoint flag); CMS07.2 added the non-normative companion-document reference;
-CMS07.3 added §9.6 (current minimal recovery path); CMS07.7 added §9.7 (the keystone
-predecessor-sourcing consolidation); **CMS07.8 added §9.7.7 (the source-input dependency
-declaration `rpGeneral`, resolving companion investigation FI-04) and §9A.1.1 (the
-arInitial/arAllFramesReady frame-return contract, a hard-API sibling to VS-LIFECYCLE-01)**.
-The Production Spec is now v2.8, which added register rule R-PROCESS-23 (patch validation
-must match the target environment — canonical LF base, compile-before-green, proof-level
-honesty, diagnose-failure-class) on top of R-PROCESS-20/21/22. This Document A reproduces
-the complete current process-rule set R-PROCESS-01 through R-PROCESS-23.
-The Production Spec was previously **v2.7**, which added register rules **R-PROCESS-20** (the Patch
-Delivery and Apply Protocol, PDAP), **R-PROCESS-21** (proven code stays proven), and
-**R-PROCESS-22** (lifecycle / API contracts are settled from documentation, not from
-observed test behaviour), plus a live-getFrame plugin-only clarification to R-PROCESS-20 —
-all reproduced in §2 (§3A.5) below. The canonical context (§3.2) is unchanged. **Fix in
-this regeneration:** the prior Document A v3.2 was generated from Production Spec v2.4 and
-therefore OMITTED R-PROCESS-20 entirely (its rules ran §...-19 then jumped to §3A.6); this
-v3.3 restores R-PROCESS-20 and adds R-PROCESS-21/22, so §3A.5 here reproduces the complete
-current process-rule set R-PROCESS-01 through R-PROCESS-22.
+the isolated cache core is proven, the cache↔pixel / getFrame keystone is complete, and the
+**branch-(d) recovery arc is COMPLETE (D.1-D.5)** AND the **P.11C SCENE-CHANGE ARC is now CLOSED
+(.1-.5)** — committed through phase **CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof** at
+**53/53 selftests** (forced-fail 52/53 exit 1). The live getFrame dispatch is feature-complete
+across all four branches (cache-hit, fresh-start, predecessor-present, recovery), and the full
+recovery arc is proven: D.1 single-hole, D.2 multi-hole + bounded-window refusal, D.3
+floor-fresh-start, D.4 adopt-skip / first-in-best-dressed primitives, D.5 recovery-pin-survives-
+prune. The only deferred confidence is real concurrent (fmParallel) scheduling, bounded to the
+fmParallel validation phase. **Next phase: STEP 0 — joint CMS sensibility/gap review for hot-zone + prune live wiring (before any wiring patch); then, if confirmed, hot-zone observation wiring → prune wiring → real-footage → diagnostics → fmParallel**
+(gates the first real-footage test) — NOT a recovery phase. See Document B (current state) for the
+live build state and the next phase. The controlling design is now **CMS07.13**: earlier revisions
+(CMS07.1 §6.6 monotonic checkpoint flag; CMS07.3 §9.6 minimal recovery path; CMS07.7 §9.7 keystone
+predecessor-sourcing; CMS07.8 §9.7.7 rpGeneral + §9A.1.1 frame-return contract; CMS07.9 pre-compute
+adopt-and-skip normative; CMS07.10 R-LIFECYCLE correction to §9A.1.1) are carried forward, and
+**CMS07.11 added §0A (the Design Alignment and Escalation Charter, mirrored here as §3A.5.0);
+CMS07.12 clarified the bounded-search report semantics in §9.5; CMS07.13 made the
+materialized-floor-is-the-foundation invariant explicit in §9.5** — none of CMS07.11/.12/.13 added a
+design rule, AS scope, or section-number change. The Production Spec is now **v2.11**, which advanced
+the currency pointers to CMS07.13 and the recovery-complete build state; the register-owned rule set
+(R-PROCESS-01 through R-PROCESS-23) and the canonical context (§3.2) are unchanged from v2.10.
+**v3.5 regeneration:** this Document A adds the charter §3A.5.0 (which v3.4 predated — it entered the
+Spec at v2.10), advances all version pointers to Spec v2.11 / CMS07.13, and advances the build-state
+note to recovery-arc-complete. It reproduces the complete current process-rule set R-PROCESS-01 through
+R-PROCESS-23 plus the charter §3A.5.0. The canonical context (§3.2) is reproduced unchanged.
 **Reading order for a coder restart chat:** read the coder restart introduction first,
-then CMS07.8, then this Document A and the current Document B (e.g. v3.2.9). "Front door"
+then CMS07.13, then this Document A and the current Document B. "Front door"
 means this is the human-facing orientation document within the pack; it does not override
 the restart introduction's start-here sequencing. NOTE: this is a RESUME, not a fresh
 start — the current Document B carries the live build state and the next phase (the
@@ -523,6 +551,57 @@ latest version of the Handover Pack Creation Specification, producing a new mani
 checksums with an incremented pack version.
 ```
 ## 3A.5 Coding / process rules
+
+### 3A.5.0 CNR3 Design Alignment and Escalation Charter (governance preface)
+**Status:** confirmed (designer+coder+coordinator, 2026-06-27)
+**Statement:**
+```text
+(Three-way working charter: designer/reviewer, coder, coordinator. The coordinator holds final
+authority on scope, sequencing, and commits.)
+
+1. CMS is the controlling guide; strict alignment is the default. Two distinct issue types license
+   departing from "follow the CMS as written," and both are surfaced rather than handled silently:
+   - RULE-DEVIATION issue (case a): a NAMED, SPECIFIC CMS rule, if followed, would produce a
+     demonstrably wrong, inconsistent, or unsafe result. This bar is HIGH: comparable to the
+     evidence that produced the CMS07.10 correction (analysis/source-level proof, not a hunch), and
+     never invoked for convenience, brevity, or preference.
+   - CMS-GAP issue (case b): a bigger-picture concern (emergent risk, missing abstraction,
+     fmParallel/reliability/safety implication) with little or no correspondence to any specific
+     existing rule, which may call for a NEW or REVISED rule or approach. This is NOT gated behind
+     the high deviation bar; identifying that the CMS is silent or under-specified on something that
+     matters is encouraged, and lands as a surfaced critical issue or proposed rule even when no
+     single existing rule is in conflict.
+   - Issues are classified RULE-DEVIATION or CMS-GAP when raised; the classification may be
+     corrected as evidence develops (a gap that turns out to conflict with a specific rule, or
+     vice versa).
+
+2. On either issue type: stop and raise -- never route around silently. Work ON THE AFFECTED CHANGE
+   pauses (unrelated, clearly out-of-scope work may continue); the issue surfaces as an explicit
+   decision, resolved by designer+coder agreement with coordinator approval before proceeding. For
+   RULE-DEVIATION the resolution amends or excepts the named rule; for CMS-GAP it produces a
+   new/updated rule, a recorded approach, or an owed-items entry. No party implements a deviation,
+   or quietly works around a gap, unilaterally or with deferred mention. Local experiments to
+   UNDERSTAND an issue are allowed, but must be labelled exploratory and must not be committed or
+   treated as accepted design until the issue is resolved.
+
+3. Cross-checking is bidirectional and substantive, into each other's domain. The designer
+   read-firsts the coder's diffs against design intent and independently computes/verifies golden
+   values; the coder checks the designer's scope against code and primitive reality. Each verifies
+   the other's home turf rather than deferring to it. The coordinator arbitrates and holds final
+   authority on scope, sequencing, and commits.
+
+4. Weight scales to risk. Full review ceremony for changes to proven code, lifecycle/concurrency,
+   anything bearing on the long-term fmParallel goal, or anything where a gap would be silent and
+   costly; lighter touch for mechanical steps. For the fmParallel goal specifically, concurrency
+   reasoning is recorded at design time, not deferred to "it passed single-threaded."
+
+5. Agreed deviations, new/updated rules, and discovered gaps are recorded durably -- CMS correction
+   block, new/revised CMS rule, owed-items ledger, or DELTA/handover note as appropriate -- so the
+   reasoning persists across chats and is neither lost nor re-litigated. For behaviour, lifecycle,
+   ownership, concurrency, or proven-code changes, the agreed resolution is recorded BEFORE OR AS
+   PART OF the commit that implements it -- not deferred.
+```
+
 ### R-PROCESS-01 — Code comments: concise but never safety-incomplete
 **Status:** confirmed  
 **Source:** CNR3 Register-Owned Rules Review — Reconciled v3.3; user-approved suggested wording  

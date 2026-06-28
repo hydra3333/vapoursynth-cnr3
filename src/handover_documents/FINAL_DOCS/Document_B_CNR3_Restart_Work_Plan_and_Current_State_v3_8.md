@@ -1,6 +1,165 @@
-# Document B — CNR3 Work Plan and Current Build State (CMS07.7, RESUME)
+# Document B — CNR3 Work Plan and Current Build State (CMS07.13, RESUME)
 
-**Version:** This Document B v3.4 is only a version number bump.  
+*** v3.8 UPDATE — 2026-06-28 — HANDOVER-SAFETY MERGE; NEXT = STEP 0 CMS sensibility/gap review
+    (supersedes the v3.6 block below; same build state, advanced pointers + Step 0 next-action) ***
+This is the newest current-state record. The repository is the authority — confirm CNR3_EDIT_VERSION and
+the selftest count from committed source before acting.
+
+Build state is UNCHANGED from the v3.6 block below (P.11C arc CLOSED .1-.5, committed CMS07-P.11C.5, 53/53;
+live getFrame feature-complete with scene handling). This v3.8 update is a HANDOVER-SAFETY pass that (a)
+advances all doc-set version pointers to the merged pack (Spec v2.14 / Document A v3.8 / Role Handover v1.12
+/ Reviewer Intro v3.5 / Coder Restart Intro v6.4 / DELTA v4.14 / Future Investigations v7.13.3 / Diagnostics
+Plan v1.3 / CMS07.13 with a front-matter currency fix), correcting stale concrete pointer lines flagged in
+the coder handover review; and (b) records the banked **STEP 0** next-action:
+
+```text
+NEXT (Step 0): joint CMS SENSIBILITY / GAP REVIEW for hot-zone + prune live wiring, BEFORE any wiring patch.
+               Do NOT assume the CMS is reliable as-is merely because the prune/hot-zone componentry is
+               proven (built + selftest-proven but ZERO live callers). Review whether the CMS is still
+               sensible and complete against the post-P.11C.5 implementation state; the live prune-TRIGGER
+               contract (when the store path fires prune; safety vs the active pin_list and the
+               arInitial->arAllFramesReady gap) is the load-bearing PART of that review. A CMS clarification
+               or version bump MAY be a legitimate output of Step 0.
+               Provisional sequence (subject to review): Step 0 -> hot-zone observation/retirement wiring ->
+               live prune-trigger wiring -> real-clip validation (+ diagnostics/telemetry placement in the
+               approved order) -> fmParallel. The prune PASS is proven; the live TRIGGER + its lifecycle
+               safety are the wiring work ("proven componentry != proven wiring").
+```
+The full ground-truth audit of the live-wiring gap and the CMS-area-by-area reliability assessment are in
+the v3.6 block below (retained) and in the DELTA owed-items (FI-09). The deferred Document B deep tidy
+remains owed at the real-footage seam.
+*** end v3.8 UPDATE ***
+
+
+*** v3.6 UPDATE — 2026-06-28 — P.11C SCENE-CHANGE ARC CLOSED (.1-.5); NEXT = live cache-pressure WIRING
+    (supersedes the D.5-era v3.5.1 block and all earlier update blocks below) ***
+This is the newest current-state record. The repository is the authority — confirm
+CNR3_EDIT_VERSION and the selftest count from committed source before acting.
+
+Since the D.5 update, the P.11C scene-change arc was scoped, built, proven, and committed in full
+(all committed/pushed, both configs). P.11C IMPLEMENTED the scene-change design the CMS already
+specified (§6.3/§6.4/§6.5/detection-during-compute) — a STATE advance, NOT a CMS rule change; the
+controlling CMS is UNCHANGED at CMS07.13:
+
+- **P.11C.1** scene-change uniform-wiring layout (plugin-only): the branch-a/c/d wiring skeleton/scope.
+- **P.11C.2** live scene-change config + scdthr->threshold helper + central store-request/checkpoint
+  routing (plugin-only). Threshold uses the verified vsCnr2 full-frame shape with proportional
+  round-to-nearest depth scaling; default scdthr=10.0.
+- **P.11C.3** branch-c (predecessor-present) scene detection ENABLED (plugin-only; .vpy-proven): live
+  _with_scene_change call + reset-on-cut chroma + checkpoint promotion; KDT scene fields.
+- **P.11C.4** branch-d (RECOVERY) scene detection ENABLED (plugin-only; .vpy-proven): per-hole + target
+  _with_scene_change; KDT honesty (computed holes report actual scene fields; early-skip adopted holes
+  report scene_change_not_run; target reports status-only). Atomicity inherited (store+flag+promote+pin
+  under one cache_mutex_ lock).
+- **P.11C.5** scene-cut checkpoint found as recovery anchor (selftest; count 52 -> 53): proves the CACHE
+  HALF — an unpinned non-grid frame stored as the sole checkpoint survives a real bounded prune by
+  CHECKPOINT CLASS while an ordinary non-checkpoint is evicted (total_pin_count=0 throughout -> survival
+  by class, not pin), then read-only bounded recovery anchors exactly on that checkpoint with
+  anchor_is_checkpoint=true and holes={the absent successor}. Composes with P.11C.4 (live detection feeds
+  the checkpoint store route). KDT-only addition: anchor_is_checkpoint printed in the live exact-anchor
+  recovery trace. >>> P.11C SCENE-CHANGE ARC CLOSED.
+
+No CMS revision since D.5: the CMS carries only an additive implementation-state note (P.11C now
+implemented+proven); it remains CMS07.13 with no rule/constant/AS-scope/section change.
+
+```text
+Code state:     Committed through CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof; 53/53 selftests
+                (forced-fail 52/53 exit 1; verbose 53/53). The live getFrame dispatch is FEATURE-COMPLETE
+                across all four branches WITH SCENE HANDLING: cache-hit (b), fresh-start (a),
+                predecessor-present (c), recovery (d). Both the branch-(d) recovery arc (D.1-D.5) and the
+                P.11C scene-change arc (.1-.5) are COMPLETE. Only deferred confidence is real concurrent
+                (fmParallel) scheduling.
+Controlling:    CMS07.13 (UNCHANGED; additive P.11C implementation note only) / companion v7.13.3 /
+                Production Spec v2.14 / Document A v3.8 / diagnostics v1.5.
+Next phase:     LIVE CACHE-PRESSURE WIRING — the last missing FUNCTIONALITY. Audit against the committed
+                P.11C.5 source (this session, ground truth) found the prune + hot-zone LOGIC fully built
+                and selftest-proven but with ZERO live callers: execute_bounded_prune_pass=0,
+                record_hot_zone_observation=0, retire/merge/trigger-decision=0. store_owned_frame_locked
+                APPENDS without consulting the prune trigger (grows unbounded; only returns
+                capacity_exceeded at the vector hard max). So the live cache currently NEVER prunes and
+                NEVER records hot-zone observations. Everything else is wired or test/diag-only by design
+                (lookup/store/recovery/pin-discharge WIRED; observers like total_pin_count diag-only;
+                non-pinning plan_bounded_recovery_search is the selftest variant). NOTHING ELSE functional
+                is missing. PLAN (coordinator option B): wire hot-zone observation (CMS §5.7: at arInitial)
+                THEN pruning, THEN real-clip runs. SPEC RELIABILITY: policy is reliable as-is (CMS §5.7
+                hot-zone-at-arInitial, §5.3-5.6 lifecycle, §6.3 retention, §5.5 safety) — but the live
+                prune-TRIGGER contract (exactly WHEN the live store path invokes the prune pass, and how
+                that is safe against the active pin_list and the arInitial->arAllFramesReady gap) is NOT
+                pinned down at wiring level and needs a focused designer+coder review BEFORE coding.
+                Scope it single-activation-now; concurrent prune is part of the fmParallel arc. AFTER the
+                wiring: first real-footage validation -> diagnostics (condensed 4-phase) -> fmParallel.
+                ("Proven componentry != proven wiring": the prune PASS is proven; the live TRIGGER and its
+                lifecycle safety are the actual wiring work — same component-vs-wiring distinction as the
+                K-phases.)
+First actions:  (1) confirm CNR3_EDIT_VERSION = CMS07-P.11C.5... and 53/53 from the repo; (2) designer+coder
+                review of the live prune-trigger contract (CMS-clarification + approach analysis, like the
+                P.11C.5 read-first); (3) THEN scope hot-zone observation wiring (lower risk; §5.7 specifies
+                the point), then prune wiring.
+Doc set:        Production Spec v2.14, Document A v3.8, this Document B v3.8, CMS v7.13 (additive note +
+                front-matter currency fix), Role Handover v1.12, Reviewer Intro v3.5, Coder Restart Intro
+                v6.4, Future Investigations v7.13.3, Diagnostics Condensed Plan v1.3. The live per-phase ledger is the current DELTA
+                (CNR3_THIS_CHAT_DELTA_current_state_SLIMMED_v4_12.md) — read it for full per-phase detail
+                and the owed-items (incl. the deferred Document B deep tidy at the real-footage seam).
+```
+*** end v3.6 UPDATE ***
+
+
+*** v3.5.1 UPDATE — 2026-06-27 — COMMITTED THROUGH D.5; branch-(d) RECOVERY ARC COMPLETE
+    (supersedes the K.1F-era v3.5 block and all earlier update blocks below) ***
+This is the newest current-state record. The repository is the authority — confirm
+CNR3_EDIT_VERSION and the selftest count from committed source before acting.
+
+Since the K.1F update, the branch-(d) recovery arc was scoped, built, proven, and committed in full
+(all committed/pushed, both configs):
+
+- **D.1** exact-anchor SINGLE-hole recovery (plugin-only). Live: recovered output computed from the
+  pinned in-window anchor; pin balance 0.
+- **D.2** exact-anchor MULTI-hole (k>=2) recovery + bounded-window refusal (plugin-only). NOTE: D.2's
+  RUN C bounded-window refusal is now TRANSITIONAL — superseded by D.3 floor-fresh-start for reachable
+  in-range N (genuine refusal narrows to structural/impossible cases).
+- **D.3** floor-fresh-start recovery (plugin-only): when the bounded descending search finds no
+  in-window anchor, recovery fresh-starts the floor max(0,N-B) (copyFrame(source[floor]), chroma
+  unchanged, no predecessor) then walks holes ascending to N. CONVERTED the D.2-era no-in-window-anchor
+  refusal into floor-fresh-start. Established the materialized-floor-is-the-foundation invariant
+  (recorded in CMS §9.5 / CMS07.13, the D.3 patch comment, and the DELTA).
+- **D.4** pre-compute adopt-skip + first-in-best-dressed PRIMITIVES (selftest-only): two cache-core
+  cases proving the context-free adopt-skip primitive (present frame -> lookup_frame_and_record_pin
+  adopts/pins/skips-compute, AS4 balances) and the post-compute duplicate loser (winner kept by
+  identity, loser released once). Selftest 49 -> 51. Real-race firing deferred to fmParallel.
+- **D.5** recovery-pin-survives-real-prune-pass (selftest-only): one paired-control case proving a
+  recovery foundation pinned via the real recovery helper survives a real bounded AS5 prune pass that
+  would otherwise have detached it (control detaches 165; protected pins 165 -> 164 detached instead;
+  survivor usable by identity; AS4 balances). Selftest 51 -> 52. Real prune-during-recovery scheduling
+  deferred to fmParallel.
+
+CMS revisions since K.1F: **CMS07.11** added §0A (the Design Alignment and Escalation Charter, mirrored
+in Production Spec §3A.5.0 and Role Handover §D0); **CMS07.12** clarified the bounded-search report
+semantics in §9.5; **CMS07.13** made the materialized-floor-is-the-foundation invariant explicit in §9.5.
+None of CMS07.11/.12/.13 added a design rule, AS scope, or section-number change (all clarification/
+governance). The corrected CMS07.10 noted in the K.1F block was committed.
+
+```text
+Code state:     Committed through CMS07-D.5; 52/52 selftests (forced-fail 51/52 exit 1; verbose 52/52).
+                The live getFrame dispatch is FEATURE-COMPLETE across all four branches: cache-hit (b),
+                fresh-start (a), predecessor-present (c), recovery (d). The branch-(d) recovery arc is
+                COMPLETE (D.1-D.5). Only deferred confidence is real concurrent (fmParallel) scheduling.
+Controlling:    CMS07.13 / companion v7.13 / Production Spec v2.11 / Document A v3.5 / diagnostics v1.5.
+Next phase:     P.11C scene-change uniform wiring across branch-a/c/d (NOT a recovery phase). Scene-change
+                is currently deferred uniformly (scene_change_deferred=1) on synthetic cut-free test
+                footage; P.11C wires it in across all branches before the first REAL-footage test
+                (detected cuts promote to checkpoints = recovery anchors, so P.11C interlocks with the
+                recovery machinery). After P.11C: first real-footage validation.
+First actions:  (1) confirm CNR3_EDIT_VERSION = CMS07-D.5... and 52/52 from the repo; (2) scope P.11C
+                (designer-owed) — it touches the pixel pipeline AND the checkpoint/recovery interaction.
+Doc set:        Production Spec v2.11, Document A v3.5, this Document B v3.5.1, CMS v7.13. The live
+                per-phase ledger is the current DELTA (being slimmed to a phase-index + active-phase
+                detail). Recovery-arc per-phase detail lives in the DELTA history and Document A's
+                build-state note.
+```
+*** end v3.5.1 UPDATE ***
+
+
+**Version:** Document B v3.8 (handover-safety merge after the coder review; build state unchanged from v3.6 = P.11C.5 closed; controlling CMS07.13 UNCHANGED / Spec v2.14 / Document A v3.8; next = STEP 0 CMS sensibility/gap review before live cache-pressure wiring). The v3.8 UPDATE banner and the v3.6 UPDATE block at the top are the prevailing current-state record; all blocks below are retained history. The v3.6 UPDATE block at the very top is the prevailing current-state record; all update blocks below it (v3.5.1 D.5-era and earlier) are retained as history of record (superseded). Per Production Spec §4, Document B is the volatile current-state document, re-issued each session against the prevailing phase; the durable scaffolding (working method, invariant disciplines, do-not-implement list, salvage inventory) is carried forward unchanged. v3.5 advanced K.1E.3 -> K.1F; v3.4 was a version bump over the v3.2.9.x generation.  
 v3.2.9.2 (RESUME-state work plan; focused status update. The version label is kept at
 the "3.2" generation to stay aligned with Document A v3.2; the `.9` patch level marks this update.
 Records the **keystone now under way and committed through K.1D** — K.1A (request-plan structures +
@@ -116,6 +275,47 @@ RECOVERY-ONWARD DESIGN-DRIVERS (decided this session; shape the recovery phase �
       prune/eviction/recovery paths on small clips — alongside production-like-threshold runs confirming
       those paths stay correctly DORMANT. (Prune hysteresis G.10A exists; the knobs are owed.)
 *** end v3.2.9.2 UPDATE ***
+
+*** v3.5 UPDATE — 2026-06-25 — COMMITTED THROUGH K.1F (supersedes the K.1E.3-era state above) ***
+Since the K.1E.3 update, the following landed (all committed/pushed unless noted); the repository
+is the authority — confirm CNR3_EDIT_VERSION and selftest count from committed source.
+
+- **CMS07.9** (additive over 07.8): pre-compute adopt-and-skip made NORMATIVE in §9.2 recovery
+  per-hole fill (§9.6.5); caught a real fmParallel assumption (AS3-"unreachable" was a plan-time
+  claim presented as act-time; under fmParallel a hole already present at act-time IS reachable).
+  Companion -> v7.9 (FI-04 resolved into §9.7.7; FI-05 two-instance resource model flagged as a
+  likely genuine gap, NOT blocking branch-d; FI-06/07/08).
+- **Recovery-Step-0** (AS4 single-lock batch discharge): public Cnr3CachePinList::discharge_all
+  delegates to Cnr3OutputCacheCore::discharge_pin_list taking cache_mutex_ ONCE. Cache-core only;
+  selftest count 48 -> 49 (case 7 = single-lock structural proof).
+- **K.1F** (live direct cached-output return, branch-b): present-N cache hit pins output[N] at
+  arInitial (gap protection), requests source[N] as an Option-C lifecycle TRIGGER, returns the
+  cached frame at arAllFramesReady via lookup_frame_and_add_ref + the Step-0 batch discharge; the
+  trigger source is retrieved and immediately freed (not consumed). Plugin-only; four-way unchanged
+  49/49; live harness Debug+Release green (cache-hit 128/163/93 with branch=CACHE-HIT, core cache
+  defeated via SetVideoCache(mode=0); repeated-frame-0 proves present-N dispatch precedes the n==0
+  gate). frameData field renamed predecessor_pin_list -> pin_list (now shared).
+- **CMS07.10** (CORRECTION to §9A.1.1 — R-LIFECYCLE, proven by K.1F): every CNR3 getFrame branch
+  requests >=1 real source frame at arInitial and returns only at arAllFramesReady; zero-request
+  arInitial->NULL is NOT guaranteed an arAllFramesReady callback under R76. Options A (arInitial
+  return) and B (zero-request) rejected as unverified for a non-source filter under fmParallel.
+  Companion -> v7.10. (A corrected CMS07.10 — four editorial/consistency fixes incl. §9.7.1
+  branch-(b) wording aligned to R-LIFECYCLE — was staged at end of the producing chat; COMMIT IT
+  FIRST next session before D.1.)
+
+```text
+Code state:     Committed through CMS07-K.1F; 49/49 selftests (forced-fail 48/49 exit 1;
+                verbose 49/49). Live getFrame dispatch now handles ALL FOUR branches except
+                recovery: present-N cache-hit (b), fresh-start (a), predecessor-present (c).
+Controlling:    CMS07.10 / companion v7.10 / Production Spec v2.9 / diagnostics v1.5.
+Next phase:     branch-(d) D.1 (exact-anchor single-hole recovery). The detailed current state,
+                the settled Option-C/R-LIFECYCLE lifecycle finding, the K.1F harness lesson, and
+                the full D.1 brief + branch-(d) arc D.1-D.5 are in
+                CNR3_THIS_CHAT_DELTA_keystone_through_K1F_v4.md (the newest current-state record).
+First actions:  (1) commit the corrected CMS07.10; (2) compute the D.1 golden chain + draft the
+                D.1 coder scope (designer-owed, DELTA v4 §5).
+```
+*** end v3.5 UPDATE ***
 
 
 **THE K.1D REORIENTATION (durable lesson — see DELTA §2).** The FIRST K.1D patch was **DROPPED** because
@@ -591,6 +791,7 @@ Current selftest count: **28**. Edit marker: `CMS07-H.1A-as1-bounded-recovery-se
 ---
 
 ## 5. Immediate next phase — CMS07-H.2A (to be regenerated)
+*** SUPERSEDED (v3.5.1): this section records a restart-era instance of "the immediate next phase." H.2A is long complete and the entire keystone + branch-(d) recovery arc (D.1-D.5) is committed. The PREVAILING next phase is P.11C scene-change uniform wiring — see the v3.5.1 UPDATE block at the top of this document. The text below is retained as history of record only. ***
 The next phase is **CMS07-H.2A — AS1 recovery anchor pin-record proof.** It extends H.1A
 just far enough to hold the selected recovery anchor safe.
 ```text
@@ -1085,6 +1286,7 @@ vs discharge_all wording decision. ***
 ---
 
 ## 11. Current status summary
+*** SUPERSEDED (v3.5.1): the status block below is the CMS07.2 / 28-selftest restart-era snapshot, retained as history of record. The PREVAILING current status is in the v3.5.1 UPDATE block at the top: committed through CMS07-D.5, 52/52 selftests, CMS07.13 / Spec v2.11 / Document A v3.5, next phase P.11C. ***
 ```text
 Design authority:   CMS07.2 (cnr3_cache_manager_design_v7_2.md).
 Production Spec:    v2.4 (§3A populated; includes R-PROCESS-19).

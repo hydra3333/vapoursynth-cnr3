@@ -1,4 +1,4 @@
-# CNR3 — THIS-CHAT DELTA: current-state companion (SLIMMED, through D.5)
+# CNR3 — THIS-CHAT DELTA: current-state companion (SLIMMED, through P.11C.5) — v4.14
 
 **Version:** v4.12 (SLIMMED). Supersedes v4.11 (full per-phase ledger through D.5). This is the live
 per-phase ledger: a one-line committed-phase INDEX, the one don't-re-derive technical finding kept in
@@ -14,11 +14,16 @@ it is committed to main at project end. Nothing durable is lost — it is migrat
 
 ```text
 Committed/pushed through:  CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof (P.11C ARC CLOSED; .1-.5 all PROVEN)
-Selftest count:            52/52 PASS  (forced-fail 51/52 exit 1; verbose 52/52)
+Selftest count:            53/53 PASS  (forced-fail 52/53 exit 1; verbose 53/53)
 Controlling CMS:           CMS07.13  (cnr3_cache_manager_design_v7_13.md)
-Production Spec:           v2.11
-Document A:                v3.5   (project context + standing rules; reproduces Spec §3.2/§3A + charter §3A.5.0)
-Document B:                v3.5.1 (current-state work plan; top UPDATE block is authoritative)
+Production Spec:           v2.14
+Document A:                v3.8   (project context + standing rules; reproduces Spec §3.2/§3A + charter §3A.5.0)
+Document B:                v3.8   (current-state work plan; top UPDATE block is authoritative)
+Role Handover:             v1.12
+Reviewer Intro:            v3.5
+Coder Restart Intro:       v6.4
+Future Investigations:     v7.13.3   (companion; FI-09 single-activation prune-trigger contract)
+Diagnostics Plan:          v1.3      (condensed 4-phase forward plan)
 Branch:                    dev_cache_manager
 ```
 The repository is the authority — confirm CNR3_EDIT_VERSION and the selftest count from committed source.
@@ -202,6 +207,56 @@ it is its own phase, not part of any D-phase. NEXT ACTION: designer-owed P.11C s
   diagnostics + fmParallel eras begin from a clean current-state doc set. Do it as its own focused pass,
   NOT mid-arc. NOTE: diagnostics could optionally run PARTLY before real footage (D-SUM-01/03/14 aid
   first-footage debug; observe-only so it blocks nothing) -- placement is a coordinator decision at the seam.
+
+- **LIVE CACHE-PRESSURE WIRING — the last missing FUNCTIONALITY (verified against the P.11C.5 src.zip,
+  this session).** AUDIT FINDING (ground truth, not reconstruction): in the committed P.11C.5 live getFrame
+  path (arInitial.cpp + arAllFramesReady.cpp), the cache-pressure capabilities have ZERO live callers:
+  execute_bounded_prune_pass=0, record_hot_zone_observation=0, retire_decay_eligible_hot_zones=0,
+  merge_closest_active_hot_zones=0, remove_unpinned_noncheckpoint_frames_bounded=0,
+  calculate_cache_prune_trigger_decision=0. store_owned_frame_locked APPENDS without consulting the prune
+  trigger (grows unbounded; only returns capacity_exceeded at the vector hard max). So the live cache
+  currently NEVER prunes and NEVER records hot-zone observations. The LOGIC is fully built + proven
+  (selftests: prune hysteresis/victim/composite, D.5, P.11C.5; hot-zone lifecycle tests) -- but the WIRING
+  into the live path is the last functional gap. Everything else audited is wired or test/diag-only by
+  design (lookup/store/recovery/pin-discharge all WIRED; total_pin_count/hot_zone_count/slot_count are
+  diagnostic observers; non-pinning plan_bounded_recovery_search is the selftest variant). NOTHING ELSE
+  functional appears missing. Coordinator lean (this session): wire hot zones THEN pruning, THEN real-clip
+  runs (option B), on the basis the prune componentry is already proven.
+
+- **SPEC RELIABILITY FOR THE WIRING — policy reliable, LIVE-TRIGGER CONTRACT needs a designer+coder review
+  pass BEFORE coding (this session).** Assessment of cnr3_cache_manager_design_v7.x (CMS) for the wiring task:
+  RELIABLE AS-IS: hot-zone OBSERVATION wiring point is specified -- CMS §5.7 "Hot-zone update at arInitial,
+  not arAllFramesReady"; hot-zone lifecycle §5.3-5.6 (slide/spawn/merge, decay sequence, exact-cheap
+  retirement test); prune RETENTION policy §6.3 (candidate iff frame!=0 AND pin_count==0 AND outside every
+  hot zone; evict greatest-hot-zone-distance first; soft MIN/MAX_RETAIN; frame 0 never pruned) -- which is
+  exactly what execute_bounded_prune_pass already implements; prune SAFETY (§5.5 decay-makes-prune-safe;
+  store-and-pin one atomic so a gap cannot let prune evict the just-stored frame). NOT YET PINNED DOWN AT
+  WIRING LEVEL: the live PRUNE-TRIGGER TIMING -- exactly WHEN the live store path invokes
+  execute_bounded_prune_pass (after each over-ceiling store? batched? at request classification?) and how
+  that composes safely with the active pin_list and the arInitial->arAllFramesReady gap. The CMS describes
+  prune firing "by capacity pressure / count-based soft trigger" but does not nail the live call-site at
+  implementation level. Much of the policy is written FOR fmParallel ("once multiple requests are in flight",
+  "under fmParallel scatter") -- so the SINGLE-ACTIVATION regime now is SIMPLER than the eventual concurrent
+  case. RECOMMENDED FIRST STEP (when resumed): a focused designer+coder review (CMS-clarification + approach
+  analysis, like the P.11C.5 read-first) on the live prune-trigger contract -- confirm trigger point, confirm
+  single-activation safety, and EXPLICITLY scope it as "single-activation wiring now; concurrent prune
+  revisited in the fmParallel arc." Hot-zone observation wiring needs less review (§5.7 already specifies it).
+  Sequence under coordinator's option B: (review prune-trigger contract) -> hot-zone observation wiring ->
+  prune wiring -> real-clip runs -> diagnostics -> fmParallel. "Proven componentry" != "proven wiring": the
+  prune PASS is proven; the live TRIGGER and its lifecycle safety are the actual wiring work (same
+  component-vs-wiring distinction as the K-phases).
+
+  >>> STEP 0 (banked decision; absorbs the coder handover-review enhancement, this session): the immediate
+  next action is broadened from "review the prune-trigger contract" to a **joint CMS SENSIBILITY / GAP
+  REVIEW for hot-zone + prune live wiring, BEFORE any wiring patch**. Do NOT assume the CMS is reliable
+  as-is merely because the componentry is proven: first review whether the CMS is still sensible and
+  complete against the post-P.11C.5 implementation state. The prune-trigger contract (above) is the
+  load-bearing PART of that review, not the whole of it. Provisional sequence, subject to the review
+  outcome: **Step 0 CMS sensibility/gap review -> (if confirmed) hot-zone observation/retirement wiring ->
+  live prune-trigger wiring -> real-clip validation (+ diagnostics/telemetry placement in the approved
+  order) -> fmParallel.** A CMS clarification or version bump MAY come out of Step 0; if so it is a
+  legitimate output of the review, not a precondition skipped. This is the consistent next-action recorded
+  across the refreshed pack (Production Spec, Document B, Coder Restart Intro, Role Handover, Reviewer Intro).
 
 - **TEST ARTIFACTS / GOLDEN PROVENANCE (housekeeping; add to repo alongside the existing harnesses).**
   The recovery harnesses and their golden-derivation scripts should live in the repo test area as

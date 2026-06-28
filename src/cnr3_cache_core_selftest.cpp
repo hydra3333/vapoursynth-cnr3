@@ -2138,6 +2138,344 @@ Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass(
     return Cnr3Status::ok;
 }
 
+
+Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    constexpr int scene_checkpoint_frame_number = 165;
+    constexpr int recovery_hole_frame_number = 166;
+    constexpr int requested_frame = 167;
+    constexpr int overflow_driver_frame_number = 200;
+    constexpr int expected_prune_victim_frame_number = 1;
+    constexpr int recovery_back_radius = CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS;
+    constexpr std::uint64_t prune_frame_byte_count =
+        CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL;
+    constexpr std::size_t retain_checkpoint_count = 1U;
+    constexpr std::size_t max_remove_count = 1U;
+    constexpr std::size_t expected_slot_count_before_prune = 166U;
+    constexpr std::size_t expected_slot_count_after_prune = 165U;
+
+    static_assert(CNR3_CACHE_CHECKPOINT_INTERVAL == 10);
+    static_assert(CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS == 50);
+    static_assert(scene_checkpoint_frame_number % CNR3_CACHE_CHECKPOINT_INTERVAL != 0);
+    static_assert(requested_frame - scene_checkpoint_frame_number <= recovery_back_radius);
+    static_assert(recovery_hole_frame_number == scene_checkpoint_frame_number + 1);
+    static_assert(requested_frame == recovery_hole_frame_number + 1);
+
+    auto fail = []() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    auto store_frame = [](Cnr3OutputCacheCore& cache,
+        int frame_number,
+        bool is_checkpoint,
+        const VSFrame* frame,
+        const VSAPI* vsapi
+    ) noexcept -> Cnr3Status {
+        Cnr3OwnedFrameRef owned_frame{};
+
+        const Cnr3Status adopt_status =
+            owned_frame.reset_to_owned_frame(frame, vsapi);
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        const Cnr3Status store_status =
+            is_checkpoint
+            ? cache.store_checkpoint_owned_frame(
+                frame_number,
+                std::move(owned_frame)
+            )
+            : cache.store_noncheckpoint_owned_frame(
+                frame_number,
+                std::move(owned_frame)
+            );
+
+        if (!cnr3_status_is_ok(store_status)) {
+            return store_status;
+        }
+
+        if (owned_frame.has_frame()) {
+            return Cnr3Status::ownership_violation;
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    auto build_prune_state = [store_frame](Cnr3OutputCacheCore& cache,
+        const std::vector<int>& frame_storage,
+        const VSAPI* vsapi
+    ) noexcept -> Cnr3Status {
+        if (
+            frame_storage.size() <= static_cast<std::size_t>(overflow_driver_frame_number)
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        for (int frame_number = expected_prune_victim_frame_number;
+            frame_number <= scene_checkpoint_frame_number;
+            ++frame_number) {
+            const VSFrame* frame =
+                reinterpret_cast<const VSFrame*>(&frame_storage[frame_number]);
+            const bool is_checkpoint = (frame_number == scene_checkpoint_frame_number);
+
+            const Cnr3Status store_status =
+                store_frame(cache, frame_number, is_checkpoint, frame, vsapi);
+
+            if (!cnr3_status_is_ok(store_status)) {
+                return store_status;
+            }
+        }
+
+        const VSFrame* overflow_driver_frame =
+            reinterpret_cast<const VSFrame*>(
+                &frame_storage[overflow_driver_frame_number]
+            );
+
+        const Cnr3Status overflow_store_status =
+            store_frame(
+                cache,
+                overflow_driver_frame_number,
+                false,
+                overflow_driver_frame,
+                vsapi
+            );
+
+        if (!cnr3_status_is_ok(overflow_store_status)) {
+            return overflow_store_status;
+        }
+
+        if (
+            cache.slot_count() != expected_slot_count_before_prune ||
+            cache.checkpoint_count() != 1U ||
+            cache.total_pin_count() != 0
+            ) {
+            return Cnr3Status::invariant_violation;
+        }
+
+        return Cnr3Status::ok;
+    };
+
+    std::vector<int> frame_storage(
+        static_cast<std::size_t>(overflow_driver_frame_number + 1)
+    );
+
+    for (std::size_t i = 0; i < frame_storage.size(); ++i) {
+        frame_storage[i] = static_cast<int>(3000U + i);
+    }
+
+    const VSFrame* expected_prune_victim_frame =
+        reinterpret_cast<const VSFrame*>(
+            &frame_storage[expected_prune_victim_frame_number]
+        );
+    const VSFrame* scene_checkpoint_frame =
+        reinterpret_cast<const VSFrame*>(
+            &frame_storage[scene_checkpoint_frame_number]
+        );
+    const VSFrame* recovery_hole_frame =
+        reinterpret_cast<const VSFrame*>(
+            &frame_storage[recovery_hole_frame_number]
+        );
+    const VSFrame* overflow_driver_frame =
+        reinterpret_cast<const VSFrame*>(
+            &frame_storage[overflow_driver_frame_number]
+        );
+
+    vsapi_state.tracked_release_frames[0] = expected_prune_victim_frame;
+    vsapi_state.tracked_release_frames[1] = scene_checkpoint_frame;
+    vsapi_state.tracked_release_frames[2] = recovery_hole_frame;
+    vsapi_state.tracked_release_frames[3] = overflow_driver_frame;
+
+    {
+        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+        Cnr3OutputCacheCore cache{};
+
+        if (
+            build_prune_state(cache, frame_storage, &vsapi) !=
+            Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef pre_prune_hole_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                recovery_hole_frame_number,
+                &vsapi,
+                pre_prune_hole_lookup
+            ) != Cnr3Status::not_found ||
+            pre_prune_hole_lookup.has_frame()
+            ) {
+            pre_prune_hole_lookup.reset();
+            return fail();
+        }
+
+        Cnr3CachePruneExecutionSummary prune_summary{};
+        const int free_count_before_prune = vsapi_state.free_frame_count;
+
+        if (
+            cache.execute_bounded_prune_pass(
+                prune_frame_byte_count,
+                retain_checkpoint_count,
+                max_remove_count,
+                prune_summary
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !prune_summary.trigger_decision.prune_is_required ||
+            prune_summary.trigger_decision.current_slot_count !=
+                expected_slot_count_before_prune ||
+            prune_summary.bounded_remove_limit != max_remove_count ||
+            prune_summary.selected_candidate_count != 1U ||
+            prune_summary.detached_count != 1U ||
+            cache.slot_count() != expected_slot_count_after_prune ||
+            cache.checkpoint_count() != 1U ||
+            cache.total_pin_count() != 0 ||
+            vsapi_state.free_frame_count != free_count_before_prune + 1 ||
+            vsapi_state.tracked_release_counts[0] != 1 ||
+            vsapi_state.tracked_release_counts[1] != 0 ||
+            vsapi_state.tracked_release_counts[2] != 0 ||
+            vsapi_state.tracked_release_counts[3] != 0
+            ) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef checkpoint_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                scene_checkpoint_frame_number,
+                &vsapi,
+                checkpoint_lookup
+            ) != Cnr3Status::ok ||
+            !checkpoint_lookup.has_frame() ||
+            checkpoint_lookup.get() != scene_checkpoint_frame
+            ) {
+            checkpoint_lookup.reset();
+            return fail();
+        }
+
+        checkpoint_lookup.reset();
+
+        if (
+            vsapi_state.add_frame_ref_count != 1 ||
+            vsapi_state.tracked_release_counts[1] != 1
+            ) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef victim_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                expected_prune_victim_frame_number,
+                &vsapi,
+                victim_lookup
+            ) != Cnr3Status::not_found ||
+            victim_lookup.has_frame()
+            ) {
+            victim_lookup.reset();
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef hole_lookup{};
+
+        if (
+            cache.lookup_frame_and_add_ref(
+                recovery_hole_frame_number,
+                &vsapi,
+                hole_lookup
+            ) != Cnr3Status::not_found ||
+            hole_lookup.has_frame()
+            ) {
+            hole_lookup.reset();
+            return fail();
+        }
+
+        if (
+            vsapi_state.tracked_release_counts[0] != 1 ||
+            vsapi_state.tracked_release_counts[2] != 0 ||
+            cache.total_pin_count() != 0
+            ) {
+            return fail();
+        }
+
+        Cnr3CacheRecoverySearchPlan plan{};
+
+        if (
+            cache.plan_bounded_recovery_search(
+                requested_frame,
+                recovery_back_radius,
+                plan
+            ) != Cnr3Status::ok
+            ) {
+            return fail();
+        }
+
+        if (
+            !plan.anchor_found ||
+            plan.anchor_frame_number != scene_checkpoint_frame_number ||
+            !plan.anchor_is_checkpoint ||
+            plan.anchor_pin_recorded ||
+            !plan.requested_frame_is_repair_target ||
+            plan.requested_frame_is_in_hole_catalogue ||
+            plan.hole_frame_numbers.size() != 1U ||
+            plan.hole_frame_numbers[0] != recovery_hole_frame_number ||
+            cache.total_pin_count() != 0
+            ) {
+            return fail();
+        }
+
+        if (cache.clear() != Cnr3Status::ok) {
+            return fail();
+        }
+
+        if (!cache.empty() || cache.total_pin_count() != 0) {
+            return fail();
+        }
+
+        if (
+            vsapi_state.tracked_release_counts[0] != 1 ||
+            vsapi_state.tracked_release_counts[1] != 2 ||
+            vsapi_state.tracked_release_counts[2] != 0 ||
+            vsapi_state.tracked_release_counts[3] != 1
+            ) {
+            return fail();
+        }
+    }
+
+    if (vsapi_state.add_frame_ref_count != 1) {
+        return fail();
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "P.11C.5 scene-cut checkpoint recovery-anchor composition scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    frame 165 is non-grid, unpinned, and stored as the sole checkpoint"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    bounded prune removes ordinary non-checkpoint frame 1 while checkpoint 165 survives"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    frame 166 is absent by construction and becomes the exact recovery hole"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    read-only bounded recovery for frame 167 anchors on checkpoint 165"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+
+    return Cnr3Status::ok;
+}
+
 Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept {
     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
@@ -14951,6 +15289,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "d5_recovery_pin_survives_bounded_prune_pass",
             cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass
+        },
+        {
+            "p11c5_scene_cut_checkpoint_recovery_anchor",
+            cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor
         },
         {
             "central_remove_helper_lifecycle",

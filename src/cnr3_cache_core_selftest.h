@@ -133,6 +133,19 @@
 [[nodiscard]] Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass() noexcept;
 
 /*
+    Run the CMS07-P.11C.5 scene-cut checkpoint recovery-anchor composition selftest.
+
+    This verifies the cache half of P.11C.5: a non-grid frame marked as a
+    checkpoint by the same checkpoint-store classification route remains cached
+    through a bounded prune pass while an ordinary unpinned non-checkpoint is
+    removed, then read-only bounded recovery anchors on that surviving
+    checkpoint. P.11C.4 remains the live proof that scene detection feeds the
+    checkpoint-store request; this selftest proves checkpoint-class retention
+    and provenance-blind anchor selection only.
+*/
+[[nodiscard]] Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor() noexcept;
+
+/*
     Run the CMS07-F.1A central remove helper selftest.
 
     This verifies that the central remove helper rejects pinned slots, detaches

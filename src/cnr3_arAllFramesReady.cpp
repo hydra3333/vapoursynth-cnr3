@@ -369,7 +369,7 @@ void cnr3_trace_live_recovery(
     std::fprintf(
         stderr,
         "[KDT] instance=%d N=%d branch=RECOVER recover_branch=%s "
-        "anchor=%d hole_count=%zu holes=%s source_requests=%s %s "
+        "anchor=%d anchor_is_checkpoint=%d hole_count=%zu holes=%s source_requests=%s %s "
         "pixel_compute=%d p11b_called=%d p11c_called=1 scene_change_deferred=0 "
         "target_scene_change_detection_used=%d target_scene_chroma_used=%d "
         "target_scene_change_threshold=%lld target_scene_change_diff_total=%lld "
@@ -386,6 +386,7 @@ void cnr3_trace_live_recovery(
         requested_frame,
         cnr3_live_recovery_branch_name(recovery_branch),
         recovery_plan.anchor_frame_number,
+        recovery_plan.anchor_is_checkpoint ? 1 : 0,
         recovery_plan.hole_frame_numbers.size(),
         holes_text.c_str(),
         source_requests_text.c_str(),

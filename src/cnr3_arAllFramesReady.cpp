@@ -62,9 +62,14 @@ void cnr3_trace_live_predecessor_present_compute(
     int requested_frame,
     int predecessor_frame,
     Cnr3Status store_status,
-    const Cnr3CallerSuppliedFrameProcessSummary& process_summary
+    const Cnr3CallerSuppliedFrameProcessSummary& process_summary,
+    bool store_as_checkpoint
 ) noexcept {
 #if defined(CNR3_KEYSTONE_DEV_TRACE)
+    const bool resulting_slot_is_checkpoint_expected =
+        store_as_checkpoint &&
+        (store_status == Cnr3Status::ok || store_status == Cnr3Status::duplicate);
+
     std::fprintf(
         stderr,
         "[KDT] instance=%d N=%d branch=PREDECESSOR-PRESENT-COMPUTE "
@@ -73,7 +78,12 @@ void cnr3_trace_live_predecessor_present_compute(
         "pred_pin_taken=1 pred_pin_discharged=1 pred_pin_balance=0 "
         "pred_ref_carried_across_gap=0 "
         "pred_compute_ref_acquired=1 pred_compute_ref_released=1 pred_compute_ref_balance=0 "
-        "p11b_called=1 p11c_called=0 scene_change_deferred=1 "
+        "p11b_called=1 p11c_called=1 scene_change_deferred=0 "
+        "scene_change_detection_used=%d scene_chroma_used=%d "
+        "scene_change_threshold=%lld scene_change_diff_total=%lld "
+        "scene_change_samples_examined=%d scene_change_detected=%d "
+        "scene_change_reset_output_used=%d recursive_chroma_blend_used=%d "
+        "store_as_checkpoint=%d resulting_slot_is_checkpoint_expected=%d "
         "output_store=%s output_return_transferred=1 "
         "frame_processed=%d luma_samples_copied=%d "
         "chroma_u_samples_processed=%d chroma_v_samples_processed=%d "
@@ -84,6 +94,16 @@ void cnr3_trace_live_predecessor_present_compute(
         requested_frame,
         requested_frame,
         predecessor_frame,
+        process_summary.scene_change_detection_used ? 1 : 0,
+        process_summary.scene_chroma_used ? 1 : 0,
+        static_cast<long long>(process_summary.scene_change_threshold),
+        static_cast<long long>(process_summary.scene_change_diff_total),
+        process_summary.scene_change_samples_examined,
+        process_summary.scene_change_detected ? 1 : 0,
+        process_summary.scene_change_reset_output_used ? 1 : 0,
+        process_summary.recursive_chroma_blend_used ? 1 : 0,
+        store_as_checkpoint ? 1 : 0,
+        resulting_slot_is_checkpoint_expected ? 1 : 0,
         cnr3_status_name(store_status),
         process_summary.frame_processed ? 1 : 0,
         process_summary.luma_samples_copied,
@@ -102,6 +122,7 @@ void cnr3_trace_live_predecessor_present_compute(
     (void)predecessor_frame;
     (void)store_status;
     (void)process_summary;
+    (void)store_as_checkpoint;
 #endif
 }
 
@@ -657,7 +678,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     Cnr3CallerSuppliedFrameProcessSummary process_summary{};
     const Cnr3Status process_status =
-        cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+        cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
             source_frame,
             predecessor_compute_ref.get(),
             output_frame,
@@ -666,6 +687,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
             data.sub_sampling_w,
             data.sub_sampling_h,
             data.response_tables,
+            data.scene_change_config,
             process_summary
         );
 
@@ -679,10 +701,17 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1E.3 sequential proof: P.11B predecessor-present processing failed."
+            "CNR3 P.11C.3 branch-c proof: predecessor-present scene processing failed."
         );
         return nullptr;
     }
+
+    const Cnr3LiveOutputStoreRequest store_request{
+        n,
+        process_summary.scene_change_detected
+    };
+    const bool store_as_checkpoint =
+        cnr3_live_output_frame_should_store_as_checkpoint(store_request);
 
     const VSFrame* return_frame = nullptr;
     Cnr3Status store_status = Cnr3Status::invariant_violation;
@@ -690,7 +719,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     const Cnr3Status return_status =
         cnr3_store_live_output_frame_for_authoritative_return(
             data,
-            Cnr3LiveOutputStoreRequest{ n, false },
+            store_request,
             output_frame,
             vsapi,
             return_frame,
@@ -732,7 +761,8 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         n,
         predecessor_frame_for_trace,
         store_status,
-        process_summary
+        process_summary,
+        store_as_checkpoint
     );
 
     return return_frame;

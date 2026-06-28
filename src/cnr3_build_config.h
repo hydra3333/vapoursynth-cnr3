@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-P.11C.3-branch-c-scene-detection-enable";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-P.11C.4-branch-d-recovery-scene-detection-enable";
 
 /*
     CMS07-P.11C.2 live scene-change default.

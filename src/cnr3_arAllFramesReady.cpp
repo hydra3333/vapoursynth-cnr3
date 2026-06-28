@@ -234,14 +234,24 @@ void cnr3_trace_live_recovery(
     const Cnr3CacheRecoverySearchPlan& recovery_plan,
     const std::vector<int>& source_request_frame_numbers,
     const std::vector<Cnr3LiveRecoveryHoleOutcome>& per_hole_outcomes,
+    const std::vector<bool>& per_hole_scene_summary_available,
+    const std::vector<Cnr3CallerSuppliedFrameProcessSummary>& per_hole_process_summaries,
+    const std::vector<Cnr3CacheAs2StoreRecordSummary>& per_hole_store_summaries,
+    const std::vector<bool>& per_hole_store_as_checkpoint,
     std::size_t pin_list_size_before_discharge,
-    const Cnr3CallerSuppliedFrameProcessSummary& target_process_summary
+    const Cnr3CallerSuppliedFrameProcessSummary& target_process_summary,
+    bool target_store_as_checkpoint,
+    Cnr3Status target_store_status
 ) noexcept {
 #if defined(CNR3_KEYSTONE_DEV_TRACE)
     const std::string holes_text =
         cnr3_join_frame_numbers_for_kdt(recovery_plan.hole_frame_numbers);
     const std::string source_requests_text =
         cnr3_join_frame_numbers_for_kdt(source_request_frame_numbers);
+    const bool target_resulting_slot_is_checkpoint_expected =
+        target_store_as_checkpoint &&
+        (target_store_status == Cnr3Status::ok ||
+            target_store_status == Cnr3Status::duplicate);
 
     std::string per_hole_text{};
 
@@ -259,6 +269,43 @@ void cnr3_trace_live_recovery(
         per_hole_text += std::to_string(recovery_plan.hole_frame_numbers[i]);
         per_hole_text += " outcome=";
         per_hole_text += cnr3_live_recovery_hole_outcome_name(outcome);
+
+        const bool scene_summary_available =
+            i < per_hole_scene_summary_available.size() &&
+            per_hole_scene_summary_available[i] &&
+            i < per_hole_process_summaries.size() &&
+            i < per_hole_store_summaries.size() &&
+            i < per_hole_store_as_checkpoint.size();
+
+        if (scene_summary_available) {
+            const Cnr3CallerSuppliedFrameProcessSummary& hole_process_summary =
+                per_hole_process_summaries[i];
+            const Cnr3CacheAs2StoreRecordSummary& hole_store_summary =
+                per_hole_store_summaries[i];
+
+            per_hole_text += " hole_scene_change_detection_used=";
+            per_hole_text += hole_process_summary.scene_change_detection_used ? "1" : "0";
+            per_hole_text += " hole_scene_change_detected=";
+            per_hole_text += hole_process_summary.scene_change_detected ? "1" : "0";
+            per_hole_text += " hole_scene_change_reset_output_used=";
+            per_hole_text += hole_process_summary.scene_change_reset_output_used ? "1" : "0";
+            per_hole_text += " hole_recursive_chroma_blend_used=";
+            per_hole_text += hole_process_summary.recursive_chroma_blend_used ? "1" : "0";
+            per_hole_text += " hole_scene_change_diff_total=";
+            per_hole_text += std::to_string(hole_process_summary.scene_change_diff_total);
+            per_hole_text += " hole_scene_change_samples_examined=";
+            per_hole_text += std::to_string(hole_process_summary.scene_change_samples_examined);
+            per_hole_text += " hole_store_as_checkpoint=";
+            per_hole_text += per_hole_store_as_checkpoint[i] ? "1" : "0";
+            per_hole_text += " hole_resulting_slot_is_checkpoint=";
+            per_hole_text += hole_store_summary.resulting_slot_is_checkpoint ? "1" : "0";
+            per_hole_text += " hole_checkpoint_promoted=";
+            per_hole_text += hole_store_summary.checkpoint_promoted ? "1" : "0";
+        }
+        else if (outcome == Cnr3LiveRecoveryHoleOutcome::adopted_skipped) {
+            per_hole_text += " hole_scene_change_detection_used=0";
+            per_hole_text += " hole_scene_change_not_run=1";
+        }
     }
 
     if (per_hole_text.empty()) {
@@ -273,7 +320,12 @@ void cnr3_trace_live_recovery(
             "floor_scene_change_detection_used=0 floor_scene_change_deferred=0 "
             "floor_scene_change_not_applicable=1 "
             "hole_count=%zu holes=%s source_requests=%s %s "
-            "pixel_compute=%d p11b_called=%d p11c_called=0 scene_change_deferred=1 "
+            "pixel_compute=%d p11b_called=%d p11c_called=1 scene_change_deferred=0 "
+            "target_scene_change_detection_used=%d target_scene_chroma_used=%d "
+            "target_scene_change_threshold=%lld target_scene_change_diff_total=%lld "
+            "target_scene_change_samples_examined=%d target_scene_change_detected=%d "
+            "target_scene_change_reset_output_used=%d target_recursive_chroma_blend_used=%d "
+            "target_store_as_checkpoint=%d target_resulting_slot_is_checkpoint_expected=%d "
             "pin_list_size=%zu pin_balance=0 "
             "returned_ref_added=1 return_transferred=1 "
             "frame_processed=%d luma_samples_copied=%d "
@@ -291,6 +343,16 @@ void cnr3_trace_live_recovery(
             per_hole_text.c_str(),
             target_process_summary.frame_processed ? 1 : 0,
             target_process_summary.frame_processed ? 1 : 0,
+            target_process_summary.scene_change_detection_used ? 1 : 0,
+            target_process_summary.scene_chroma_used ? 1 : 0,
+            static_cast<long long>(target_process_summary.scene_change_threshold),
+            static_cast<long long>(target_process_summary.scene_change_diff_total),
+            target_process_summary.scene_change_samples_examined,
+            target_process_summary.scene_change_detected ? 1 : 0,
+            target_process_summary.scene_change_reset_output_used ? 1 : 0,
+            target_process_summary.recursive_chroma_blend_used ? 1 : 0,
+            target_store_as_checkpoint ? 1 : 0,
+            target_resulting_slot_is_checkpoint_expected ? 1 : 0,
             pin_list_size_before_discharge,
             target_process_summary.frame_processed ? 1 : 0,
             target_process_summary.luma_samples_copied,
@@ -308,7 +370,12 @@ void cnr3_trace_live_recovery(
         stderr,
         "[KDT] instance=%d N=%d branch=RECOVER recover_branch=%s "
         "anchor=%d hole_count=%zu holes=%s source_requests=%s %s "
-        "pixel_compute=%d p11b_called=%d p11c_called=0 scene_change_deferred=1 "
+        "pixel_compute=%d p11b_called=%d p11c_called=1 scene_change_deferred=0 "
+        "target_scene_change_detection_used=%d target_scene_chroma_used=%d "
+        "target_scene_change_threshold=%lld target_scene_change_diff_total=%lld "
+        "target_scene_change_samples_examined=%d target_scene_change_detected=%d "
+        "target_scene_change_reset_output_used=%d target_recursive_chroma_blend_used=%d "
+        "target_store_as_checkpoint=%d target_resulting_slot_is_checkpoint_expected=%d "
         "anchor_pin_taken=%d pin_list_size=%zu pin_balance=0 "
         "returned_ref_added=1 return_transferred=1 "
         "frame_processed=%d luma_samples_copied=%d "
@@ -325,6 +392,16 @@ void cnr3_trace_live_recovery(
         per_hole_text.c_str(),
         target_process_summary.frame_processed ? 1 : 0,
         target_process_summary.frame_processed ? 1 : 0,
+        target_process_summary.scene_change_detection_used ? 1 : 0,
+        target_process_summary.scene_chroma_used ? 1 : 0,
+        static_cast<long long>(target_process_summary.scene_change_threshold),
+        static_cast<long long>(target_process_summary.scene_change_diff_total),
+        target_process_summary.scene_change_samples_examined,
+        target_process_summary.scene_change_detected ? 1 : 0,
+        target_process_summary.scene_change_reset_output_used ? 1 : 0,
+        target_process_summary.recursive_chroma_blend_used ? 1 : 0,
+        target_store_as_checkpoint ? 1 : 0,
+        target_resulting_slot_is_checkpoint_expected ? 1 : 0,
         recovery_plan.anchor_pin_recorded ? 1 : 0,
         pin_list_size_before_discharge,
         target_process_summary.frame_processed ? 1 : 0,
@@ -345,8 +422,14 @@ void cnr3_trace_live_recovery(
     (void)recovery_plan;
     (void)source_request_frame_numbers;
     (void)per_hole_outcomes;
+    (void)per_hole_scene_summary_available;
+    (void)per_hole_process_summaries;
+    (void)per_hole_store_summaries;
+    (void)per_hole_store_as_checkpoint;
     (void)pin_list_size_before_discharge;
     (void)target_process_summary;
+    (void)target_store_as_checkpoint;
+    (void)target_store_status;
 #endif
 }
 
@@ -820,6 +903,15 @@ const VSFrame* cnr3_complete_live_recovery(
     }
 
     Cnr3CacheRecoverySearchPlan& recovery_plan = request_data->recovery_plan;
+    const std::size_t recovery_hole_count = recovery_plan.hole_frame_numbers.size();
+    std::vector<bool> per_hole_scene_summary_available(recovery_hole_count, false);
+    std::vector<Cnr3CallerSuppliedFrameProcessSummary> per_hole_process_summaries(
+        recovery_hole_count
+    );
+    std::vector<Cnr3CacheAs2StoreRecordSummary> per_hole_store_summaries(
+        recovery_hole_count
+    );
+    std::vector<bool> per_hole_store_as_checkpoint(recovery_hole_count, false);
 
     if (floor_fresh_start_recovery) {
         const int floor_frame = request_data->recovery_floor_frame;
@@ -1068,7 +1160,7 @@ const VSFrame* cnr3_complete_live_recovery(
 
         Cnr3CallerSuppliedFrameProcessSummary hole_process_summary{};
         const Cnr3Status hole_process_status =
-            cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+            cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
                 source_frame,
                 predecessor_compute_ref.get(),
                 hole_output_frame,
@@ -1077,6 +1169,7 @@ const VSFrame* cnr3_complete_live_recovery(
                 data.sub_sampling_w,
                 data.sub_sampling_h,
                 data.response_tables,
+                data.scene_change_config,
                 hole_process_summary
             );
 
@@ -1091,7 +1184,7 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.3 floor-fresh-start proof: P.11B hole processing failed."
+                "CNR3 P.11C.4 recovery scene proof: P.11C hole processing failed."
             );
             return nullptr;
         }
@@ -1115,13 +1208,20 @@ const VSFrame* cnr3_complete_live_recovery(
 
         hole_output_frame = nullptr;
 
+        const Cnr3LiveOutputStoreRequest hole_store_request{
+            hole_frame,
+            hole_process_summary.scene_change_detected
+        };
+        const bool hole_store_as_checkpoint =
+            cnr3_live_output_frame_should_store_as_checkpoint(hole_store_request);
+
         Cnr3CacheAs2StoreRecordSummary hole_store_summary{};
         const Cnr3Status hole_store_status =
             data.output_cache.store_recovery_plan_hole_owned_frame_and_record_pin(
                 recovery_plan,
                 hole_frame,
                 std::move(hole_owned_frame),
-                cnr3_live_output_frame_is_checkpoint(hole_frame),
+                hole_store_as_checkpoint,
                 request_data->pin_list,
                 hole_store_summary
             );
@@ -1141,6 +1241,10 @@ const VSFrame* cnr3_complete_live_recovery(
             hole_store_summary.duplicate_existing_slot
             ? Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser
             : Cnr3LiveRecoveryHoleOutcome::computed;
+        per_hole_scene_summary_available[hole_index] = true;
+        per_hole_process_summaries[hole_index] = hole_process_summary;
+        per_hole_store_summaries[hole_index] = hole_store_summary;
+        per_hole_store_as_checkpoint[hole_index] = hole_store_as_checkpoint;
     }
 
     if (!cnr3_live_recovery_source_was_requested(*request_data, n)) {
@@ -1213,7 +1317,7 @@ const VSFrame* cnr3_complete_live_recovery(
 
     Cnr3CallerSuppliedFrameProcessSummary target_process_summary{};
     const Cnr3Status target_process_status =
-        cnr3_process_caller_supplied_vapoursynth_frame_triplet(
+        cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
             target_source_frame,
             target_predecessor_compute_ref.get(),
             target_output_frame,
@@ -1222,6 +1326,7 @@ const VSFrame* cnr3_complete_live_recovery(
             data.sub_sampling_w,
             data.sub_sampling_h,
             data.response_tables,
+            data.scene_change_config,
             target_process_summary
         );
 
@@ -1236,10 +1341,17 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 D.3 floor-fresh-start proof: P.11B target processing failed."
+            "CNR3 P.11C.4 recovery scene proof: P.11C target processing failed."
         );
         return nullptr;
     }
+
+    const Cnr3LiveOutputStoreRequest target_store_request{
+        n,
+        target_process_summary.scene_change_detected
+    };
+    const bool target_store_as_checkpoint =
+        cnr3_live_output_frame_should_store_as_checkpoint(target_store_request);
 
     const VSFrame* return_frame = nullptr;
     Cnr3Status target_store_status = Cnr3Status::invariant_violation;
@@ -1247,7 +1359,7 @@ const VSFrame* cnr3_complete_live_recovery(
     const Cnr3Status target_return_status =
         cnr3_store_live_output_frame_for_authoritative_return(
             data,
-            Cnr3LiveOutputStoreRequest{ n, false },
+            target_store_request,
             target_output_frame,
             vsapi,
             return_frame,
@@ -1266,7 +1378,6 @@ const VSFrame* cnr3_complete_live_recovery(
         return nullptr;
     }
 
-    (void)target_store_status;
     (void)returned_cached_winner;
 
     const Cnr3LiveRecoveryBranch recovery_branch_for_trace =
@@ -1281,6 +1392,16 @@ const VSFrame* cnr3_complete_live_recovery(
         request_data->source_request_frame_numbers;
     const std::vector<Cnr3LiveRecoveryHoleOutcome> hole_outcomes_for_trace =
         request_data->per_hole_outcomes;
+    const std::vector<bool> per_hole_scene_summary_available_for_trace =
+        per_hole_scene_summary_available;
+    const std::vector<Cnr3CallerSuppliedFrameProcessSummary> per_hole_process_summaries_for_trace =
+        per_hole_process_summaries;
+    const std::vector<Cnr3CacheAs2StoreRecordSummary> per_hole_store_summaries_for_trace =
+        per_hole_store_summaries;
+    const std::vector<bool> per_hole_store_as_checkpoint_for_trace =
+        per_hole_store_as_checkpoint;
+    const bool target_store_as_checkpoint_for_trace = target_store_as_checkpoint;
+    const Cnr3Status target_store_status_for_trace = target_store_status;
     const std::size_t pin_list_size_before_discharge =
         request_data->pin_list.pin_count();
 
@@ -1308,8 +1429,14 @@ const VSFrame* cnr3_complete_live_recovery(
         recovery_plan_for_trace,
         source_requests_for_trace,
         hole_outcomes_for_trace,
+        per_hole_scene_summary_available_for_trace,
+        per_hole_process_summaries_for_trace,
+        per_hole_store_summaries_for_trace,
+        per_hole_store_as_checkpoint_for_trace,
         pin_list_size_before_discharge,
-        target_process_summary
+        target_process_summary,
+        target_store_as_checkpoint_for_trace,
+        target_store_status_for_trace
     );
 
     return return_frame;

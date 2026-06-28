@@ -1,15 +1,26 @@
 # CNR3 Cache Manager Design Specification
-**Date:** 2026-06-27 (CMS07.13; supersedes CMS07.12 dated 2026-06-27, which superseded CMS07.11 dated 2026-06-27, which superseded CMS07.10 dated 2026-06-25, which superseded CMS07.9 dated 2026-06-24, which superseded CMS07.8 dated 2026-06-23, which superseded
+**Date:** 2026-06-29 (CMS07.14; supersedes CMS07.13 dated 2026-06-27, which superseded CMS07.12 dated 2026-06-27, which superseded CMS07.11 dated 2026-06-27, which superseded CMS07.10 dated 2026-06-25, which superseded CMS07.9 dated 2026-06-24, which superseded CMS07.8 dated 2026-06-23, which superseded
 CMS07.7 dated 2026-06-21, which superseded CMS07.3 dated 2026-06-19, which superseded
 CMS07.2 dated 2026-06-17, which superseded CMS07.1 dated 2026-06-17, which superseded
 CMS07.0 dated 2026-06-12)
-**Version:** CMS07.13
+**Version:** CMS07.14
 **Status:** Design specification — architectural supersession. COMPLETE: all verify
 items V1–V8 resolved (several against authoritative sources: the CNR2 reference code,
 the local R76 VapourSynth4.h header); section-level bring-across audit of the
 CMS06.11 body done (§9A); final self-review pass done. Controlling design authority
 for the CNR3 restart. (Currency note 2026-06-28: the build is far past the isolated cache-core milestone — the cache core, the live four-branch getFrame dispatch, the branch-(d) recovery arc, and the P.11C scene-change arc are all implemented and proven through CMS07-P.11C.5; see the additive implementation-state note below. This Status paragraph is retained for design-authority context; it is not a current build-state pointer — the live state lives in Document B and the DELTA.)
-**Implementation-state note (additive; not a CMS version change — no rule, constant, AS-scope, or section is added/changed/removed; CMS remains CMS07.13).** The scene-change design specified in this CMS — §6.3 (promote every detected cut to the checkpoint pool), §6.4 (scene-change frames as checkpoints; a cut-checkpoint is just a present output the §9.5 Phase-1 search finds), §6.5 (cut-near-grid), and detection-during-compute — is now IMPLEMENTED AND PROVEN in the live build via the P.11C arc (CMS07-P.11C.1 through .5, committed; selftests 53/53 both configs). Scene detection runs uniformly across the predecessor-present (.3) and recovery hole+target (.4) live branches, and a scene-cut-created checkpoint is proven to survive prune by checkpoint class and serve as a later recovery anchor (.5), exactly as §6.3/§6.4 specify. This note records implementation status only; the design text is unchanged. NEXT (not a CMS change): wiring the §5 hot-zone observation and §6.3 prune into the live getFrame path — the logic is built and selftest-proven but not yet live-wired; the live prune-trigger contract is pending a designer+coder review (single-activation wiring first; concurrent prune is part of the fmParallel arc).
+**Implementation-state note (additive; introduced at CMS07.13 and carried into CMS07.14 — this note itself adds no rule, constant, AS-scope, or section; the §7.4-§7.6 subsections added at CMS07.14 are recorded separately below and in §14).** The scene-change design specified in this CMS — §6.3 (promote every detected cut to the checkpoint pool), §6.4 (scene-change frames as checkpoints; a cut-checkpoint is just a present output the §9.5 Phase-1 search finds), §6.5 (cut-near-grid), and detection-during-compute — is now IMPLEMENTED AND PROVEN in the live build via the P.11C arc (CMS07-P.11C.1 through .5, committed; selftests 53/53 both configs). Scene detection runs uniformly across the predecessor-present (.3) and recovery hole+target (.4) live branches, and a scene-cut-created checkpoint is proven to survive prune by checkpoint class and serve as a later recovery anchor (.5), exactly as §6.3/§6.4 specify. This note records implementation status only; the design text is unchanged. NEXT: wiring the §5 hot-zone observation and the §6.3/§7.4 prune into the live getFrame path — the logic is built and selftest-proven but not yet live-wired. The designer+coder review of the live prune-trigger contract is now COMPLETE (Step 0, closed): its decisions are recorded in the new §7.4 (independent checkpoint-retention trigger), §7.5 (combined-helper wiring contract), and §7.6 (arInitial observation prerequisite); provenance in CNR3_Step0_Findings_Register_r5_FINAL_CLOSED.md. The implementation is owed (single-activation wiring first — W.1 the §7.4 trigger primitive, then W.2 observation, then W.3 the combined helper; concurrent prune is part of the fmParallel arc).
+
+CMS07.14 is an ADDITIVE CLARIFICATION over CMS07.13: it adds three new subsections in §7 — §7.4 (the
+independent checkpoint-retention prune trigger that ENFORCES the §6.3 `CHECKPOINT_MAX_RETAIN` bound), §7.5
+(the live cache-pressure WIRING CONTRACT: the single combined locked store-and-prune helper and its exact
+ordered steps), and §7.6 (the hot-zone OBSERVATION-at-arInitial prerequisite that protects produced output
+that is never pinned). These record design DECISIONS settled by the Step 0 joint review (designer + coder +
+coordinator; provenance: `CNR3_Step0_Findings_Register_r5_FINAL_CLOSED.md`). CMS07.14 changes NO existing
+rule, constant, AS-scope, or section text — §6.3's `CHECKPOINT_MAX_RETAIN` stays a real bound; §7.4 records
+HOW it is enforced live (the existing capacity-pressure pass alone did not enforce it, which §7.4 corrects).
+It is purely additive (three new subsections + this note). The implementation of §7.4-§7.6 is OWED (the
+componentry is built and selftest-proven; the live wiring and the new independent trigger are the next work).
 
 CMS07.13 is a CLARIFICATION over CMS07.12: it makes the materialized-floor-is-the-foundation invariant explicit in §9.5 (floor fallback) — proven live by D.3 — and records that floor-fresh-start supersedes the D.2-era no-in-window-anchor refusal for reachable N. It adds no rule/AS-scope and changes no behaviour (D.3 already ships this). CMS07.12 is a CLARIFICATION over CMS07.11: it makes the bounded-search REPORT semantics explicit in §9.5 Phase 1 (the search reports only within [max(0,N-B), N-1]; no-in-window-anchor does not distinguish out-of-window-anchor from no-prior-output) and corrects the bounded-anchor-search interval upper bound to N-1; it adds no new rule/AS-scope and changes no behaviour (D.2 already ships this). CMS07.11 was a GOVERNANCE addition over CMS07.10: it added §0A (the Design Alignment and Escalation
 Charter) and changed NO design rule, decision, constant, AS scope, or section number. CMS07.10 was a
@@ -452,6 +463,99 @@ hard-ceiling rejection (D11).
 - **K** caps the lock-hold for BURST prunes (post-seek, cold-start); rarely binds in
   steady trickle. Instrumentation: count "prune stopped at K with pool still over
   threshold"; raise K if it fires regularly.
+
+**7.4 Independent checkpoint-retention trigger (enforces the §6.3 MAX_RETAIN bound).**
+*(Added CMS07.14. Settled by Step 0; see SR-C-04 / SR-D-05 in the Step 0 register.)*
+
+Plain statement of the problem this fixes: §6.3 says the checkpoint flag-set is retained between
+`CHECKPOINT_MIN_RETAIN` and `CHECKPOINT_MAX_RETAIN`. The §7.2 capacity trigger only fires on the TOTAL
+slot count exceeding `active_ceiling × OVERFLOW_FACTOR`. On cut-heavy content (CNR3's core workload —
+analogue/VHS restoration), §6.3/§6.4 promote EVERY detected cut to a checkpoint flag, so the number of
+flagged slots can climb past `CHECKPOINT_MAX_RETAIN` while the total slot count is still well below the
+capacity trigger. Worked example with the live constants: `CHECKPOINT_MAX_RETAIN = 48`, minimum
+`active_ceiling = 150`, `OVERFLOW_FACTOR = 1.1`, so the capacity trigger is 165. A 100-frame cut-heavy
+span can flag ~100 slots (flagged > 48) while total slots = 100 (< 165) — so capacity prune never fires
+and `CHECKPOINT_MAX_RETAIN` is, in practice, NOT enforced. The capacity pass alone is therefore
+insufficient to honour §6.3.
+
+Decision: the checkpoint-retention bound is enforced by an INDEPENDENT trigger, separate from the §7.2
+capacity trigger:
+
+- **Trigger condition:** a checkpoint-retention prune fires when the count of checkpoint-flagged slots
+  exceeds `CHECKPOINT_MAX_RETAIN`, REGARDLESS of whether the §7.2 capacity trigger has fired. It prunes
+  the flagged set back toward `CHECKPOINT_MIN_RETAIN` (a soft target — see below).
+- **What it selects:** ONLY checkpoint-flagged slots, by the SAME safety rules already governing prune
+  candidate selection (§6.3/§7.1): a flagged slot is a candidate iff `frame ≠ 0` AND `pin_count == 0`
+  AND it is outside every active hot zone; eviction is greatest-hot-zone-distance-first; frame 0 is
+  never pruned; pinned or hot-zone-covered checkpoints are RETAINED past the target (the limits are SOFT
+  triggers, exactly as §6.3 states). Non-checkpoint slots are NOT touched by this trigger.
+- **Why a NAMED new primitive, not the old helper:** this trigger must reuse/extend the distance-ordered,
+  hot-zone-aware composite-selection path. It must NOT reuse the older bounded
+  `remove_unpinned_checkpoints_above_retain_count` style helper as-is, because that path does not honour
+  hot-zone membership / distance ordering and would evict protected anchors. (Step 0 SR-C-04 #0037.)
+- **Atomicity:** identical to §7.3 — DECIDE + DETACH under one lock, FREE the detached refs in a post-lock
+  batch. The checkpoint trigger and the §7.2 capacity trigger are evaluated in the SAME locked prune step
+  of the combined helper (§7.5); when both would fire, both contribute candidates to the one bounded pass.
+- **Termination:** K-bounded like §7.3 (caps lock-hold for burst trims).
+
+This is the mechanism that makes §6.3's `CHECKPOINT_MAX_RETAIN` a REAL bound on the live cache, in line
+with the §6.3 note that anticipates raising MAX_RETAIN if cut-heavy material keeps the flagged set pinned
+at the cap (that note presumes an active trim toward the cap — this trigger IS that trim).
+
+**7.5 Live cache-pressure wiring contract — the single combined store-and-prune helper.**
+*(Added CMS07.14. Settled by Step 0; see SR-C-01, SR-D-01, SR-D-07 in the Step 0 register.)*
+
+The live getFrame path must NOT call a prune by inserting it into the low-level `store_owned_frame_locked`
+primitive. Reason (verified in the live source during Step 0): the combined store-and-pin path stores the
+slot FIRST and records its pin AFTERWARDS, so a prune placed inside the raw store would run while the
+just-stored slot is still unpinned and could select it for eviction. Instead, the live store-with-pressure
+path is ONE combined helper whose public entry pre-reserves the prune working vectors OUTSIDE the lock,
+then performs the following steps in ONE `cache_mutex_` critical section, in THIS order:
+
+1. **Store / adopt** the frame (the existing locked store, or the target / frame-0 store).
+2. **Set the `is_checkpoint` flag** on the unified slot if this frame is a grid checkpoint or a detected
+   cut (§6.3/§6.4). (NOTE: there is no separate checkpoint container — `is_checkpoint` is a flag on the
+   single unified slot store; "checkpoint retention" is a rule over flagged slots, not a pool. See §6.1.)
+3. **Pin / record** the slot in the activation's pin_list **only if the caller is an AS2 CONSUMER**
+   (cache-hit output, predecessor, recovery anchor, floor, computed/adopted holes). A produced final
+   output (the branch target, the frame-0 fresh start) is a PRODUCTION store and is NOT pinned (§4.1
+   production-never-pins); its prune protection comes from §7.6, not from a pin.
+4. **Retire decay-eligible hot zones** (§5.5/§5.6): evaluate the retirement predicate for the current
+   frame and retire any decay-eligible zone BEFORE candidate selection, so a stale zone cannot wrongly
+   shield a prune candidate. This is LAZY retirement — it rides this prune step rather than running
+   eagerly at arInitial.
+5. **Evaluate the prune trigger(s) and, if required, DECIDE + DETACH:** the §7.2 capacity trigger AND the
+   §7.4 checkpoint-retention trigger are both evaluated here; whichever fire contribute candidates to one
+   bounded, distance-ordered, hot-zone-aware selection, and victims are detached from the index — all
+   still under this same lock (§7.1/§7.3 acts (a)+(b)).
+6. **Unlock, then FREE** (§7.3 act (c)): release the lock and `freeFrame` the detached victims AND any
+   first-in-best-dressed duplicate loser in one post-lock batch.
+
+The whole sequence is one atomic critical section for steps 1-5; only the frees (step 6) happen after
+unlock. The caller passes the prune trigger a conservative, ONCE-computed estimate of the cached-output
+frame byte size (derived from the VapourSynth format/dimensions/subsampling, computed OUTSIDE the lock and
+reused), since that value feeds `active_ceiling` (§7.2); conservative-high is the safe direction
+(over-estimating frame bytes lowers the ceiling and prunes slightly earlier, never under-protecting
+memory). (Step 0 SR-C-03.) Whether the caller is an AS2 consumer or a production store (step 3) is
+determinable at each call site (Step 0 SR-D-07 / #0038).
+
+**7.6 Hot-zone observation at arInitial is a PREREQUISITE of the live store-prune.**
+*(Added CMS07.14. Settled by Step 0; see SR-C-02, SR-D-03 in the Step 0 register. Reinforces §5.7.)*
+
+Because a produced output (target, frame-0) is NOT pinned (§4.1, §7.5 step 3), its protection from a
+same-activation prune rests ENTIRELY on hot-zone membership. Therefore, for EVERY live getFrame branch,
+`record_hot_zone_observation(N)` MUST be performed at arInitial (per §5.7), BEFORE any arAllFramesReady
+store-and-prune for that activation. Observing N at arInitial centres a hot zone on N
+(`[N − BACK_RADIUS, N + FORWARD_RADIUS]`), so when the later production store and prune run, output[N] is
+INSIDE its own active hot zone and is therefore excluded from the prune candidate set (§7.1 "outside
+every active hot zone"). This keeps production-never-pins (§4.1) intact while still protecting the frame
+the activation just produced. Every live branch (cache-hit, fresh-start, predecessor-present, recovery)
+already passes through arInitial under the R-LIFECYCLE rule (§9A.1.1: every branch requests ≥1 real source
+frame at arInitial), so this observation point is reachable on all branches with no skip path. Observation
+records the frame number only; it does not need the request kind. (Single-activation scope per Step 0
+SR-D-04; the concurrent / fmParallel case for observation and prune is deferred to the fmParallel arc,
+FI-06/07/08.)
+
 ---
 ## 8. Locking — one cache-wide lock, held minimally
 **8.1 Decision.** A single mutex guards all cache state (slot index, both pools,
@@ -1431,6 +1535,12 @@ eliminate. Importing it would defeat the architecture.
   648). No `[VERIFY]` remains for the cache.
 ---
 ## 14. Changelog
+**CMS07.14 (2026-06-29) — ADDITIVE CLARIFICATION (live cache-pressure wiring contract + checkpoint-retention trigger); no existing rule/constant/AS-scope/section changed; three new subsections §7.4/§7.5/§7.6.**
+- **§7.4 (new)** records the INDEPENDENT checkpoint-retention prune trigger that ENFORCES the §6.3 `CHECKPOINT_MAX_RETAIN` bound. Problem it fixes (verified against the live source during the Step 0 review): the §7.2 capacity trigger fires only on TOTAL slot count > `active_ceiling × OVERFLOW_FACTOR`, so on cut-heavy content (every detected cut is promoted to a checkpoint flag, §6.3/§6.4) the flagged-slot count can exceed `CHECKPOINT_MAX_RETAIN` (48) while total slots stay under the capacity trigger (165) — leaving `CHECKPOINT_MAX_RETAIN` unenforced in CNR3's core workload. §7.4 records the decision to add an independent trigger on (flagged count > MAX_RETAIN), selecting ONLY flagged slots by the existing distance-ordered, hot-zone-aware, pin/frame-0-respecting rules; it must NOT reuse the old non-hot-zone-aware checkpoint-removal helper. §6.3 prose is UNCHANGED — MAX_RETAIN remains a real bound; §7.4 records HOW it is enforced live.
+- **§7.5 (new)** records the live cache-pressure WIRING CONTRACT: the single combined locked store-and-prune helper and its exact six ordered steps (store/adopt → set checkpoint flag → pin-if-AS2-consumer → retire stale zones → evaluate trigger(s) + decide/detach → unlock + free), with the prune trigger NOT inserted into the low-level `store_owned_frame_locked` (which stores before it pins). Includes the conservative once-computed frame-byte estimate fed to the trigger.
+- **§7.6 (new)** records that `record_hot_zone_observation(N)` at arInitial is a PREREQUISITE of the live store-prune, because produced output (target, frame-0) is never pinned (§4.1) and is protected from a same-activation prune only by hot-zone membership; reachable on all branches via R-LIFECYCLE (§9A.1.1).
+- **Additive only.** No design rule, decision, constant, AS scope, or section number is changed or removed; §1–§7.3, §8–§13, §9A, the constants/CR1–CR5, the AS register, and V1–V8 stand exactly as in CMS07.13. The three new subsections are decisions settled by the Step 0 joint review (designer + coder + coordinator); provenance and the full finding-by-finding audit trail are in `CNR3_Step0_Findings_Register_r5_FINAL_CLOSED.md`. The IMPLEMENTATION of §7.4–§7.6 is OWED (componentry built and selftest-proven; the new independent trigger and the live wiring are the next work, single-activation scope; the concurrent/fmParallel case is deferred to FI-06/07/08).
+
 **CMS07.13 (2026-06-27) — CLARIFICATION (materialized-floor-is-the-foundation); no behaviour change (D.3 already ships this); no new rule/AS-scope.**
 - §9.5 floor fallback: made explicit that once the floor frame is fresh-started, stored, and pinned it IS the validated consumer foundation for the ascending walk, equivalent to a search-discovered anchor — the fill machinery validates only the structural walk contract (present pinned foundation + contiguous holes above it) and does not depend on how the foundation came to exist. Treating the materialized floor as the walk's anchor is a now-true structural fact, not a bypass. Also recorded that this floor-fresh-start SUPERSEDES the D.2-era no-in-window-anchor refusal for reachable in-range N; genuine refusal narrows to structural/impossible cases. Proven live by D.3 (floor-fresh-start output[3]=144/113, recover_branch=floor-fresh-start floor=0 floor_outcome=computed; floor byte 56/176 proving fresh-start chroma-unchanged). This documents in the design authority the same reasoning the D.3 patch carries in-code at the anchor relabel.
 - **Clarification only.** No design rule, decision, constant, AS scope, or section number changed or removed; recovery behaviour is exactly as built and committed in D.1/D.2/D.3.

@@ -1,0 +1,112 @@
+diff --git a/src/cnr3_arInitial.cpp b/src/cnr3_arInitial.cpp
+index 2ea0ca1..0ccddf0 100644
+--- a/src/cnr3_arInitial.cpp
++++ b/src/cnr3_arInitial.cpp
+@@ -231,20 +231,40 @@ void cnr3_trace_live_recovery_refusal(
+         holes_text.c_str()
+     );
+ #else
+     (void)data;
+     (void)requested_frame;
+     (void)plan;
+     (void)refusal_reason;
+ #endif
+ }
+ 
++void cnr3_trace_live_hot_zone_observation(
++    const Cnr3FilterData& data,
++    int requested_frame,
++    Cnr3Status observation_status
++) noexcept {
++#if defined(CNR3_KEYSTONE_DEV_TRACE)
++    std::fprintf(
++        stderr,
++        "[KDT] instance=%d N=%d HOT-ZONE-OBSERVED status=%s\n",
++        data.config.instance_id.value,
++        requested_frame,
++        cnr3_status_name(observation_status)
++    );
++#else
++    (void)data;
++    (void)requested_frame;
++    (void)observation_status;
++#endif
++}
++
+ Cnr3Status cnr3_fill_recovery_source_request_numbers(
+     int n,
+     Cnr3LiveGetFrameFrameData& request_data
+ ) {
+     request_data.source_request_frame_numbers.clear();
+ 
+     try {
+         if (request_data.recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+             const int floor_frame = request_data.recovery_floor_frame;
+ 
+@@ -463,20 +483,39 @@ const VSFrame* cnr3_arInitial(
+ 
+     if (request_data == nullptr) {
+         cnr3_set_filter_error(
+             frame_ctx,
+             vsapi,
+             "CNR3 D.3 floor-fresh-start proof: failed to allocate frameData."
+         );
+         return nullptr;
+     }
+ 
++    const Cnr3Status hot_zone_observation_status =
++        data.output_cache.record_hot_zone_observation(n);
++
++    cnr3_trace_live_hot_zone_observation(
++        data,
++        n,
++        hot_zone_observation_status
++    );
++
++    if (!cnr3_status_is_ok(hot_zone_observation_status)) {
++        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
++        cnr3_set_filter_error(
++            frame_ctx,
++            vsapi,
++            "CNR3 W.2 hot-zone observation failed at arInitial."
++        );
++        return nullptr;
++    }
++
+     /*
+         A-safe-1 route step 1: a present output[N] is selected only by an
+         atomic find-and-pin that also records the pin for the activation gap.
+     */
+     const Cnr3Status cache_hit_pin_status =
+         data.output_cache.lookup_frame_and_record_pin(n, request_data->pin_list);
+ 
+     if (cnr3_status_is_ok(cache_hit_pin_status)) {
+         return cnr3_publish_live_cache_hit_return(
+             n,
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 4f12bb2..7df546f 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -15,21 +15,21 @@
+     A behaviour-changing scaffold is not a diagnostic. It must use the project's
+     behavioural-scaffold rules and must not use a CNR3_DIAG_* name.
+ */
+ 
+ /*
+     Edit/version marker.
+ 
+     This string is for human diagnostics and build identification only. It must
+     not be used for control flow.
+ */
+-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.1-checkpoint-retention-trigger";
++inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.2-hot-zone-observation-arInitial";
+ 
+ /*
+     CMS07-P.11C.2 live scene-change default.
+ 
+     This is the internal/defaulted CNR2 semantic sensitivity scalar. Plugin
+     parameter exposure is deliberately deferred to the later option-surface
+     phase. The per-instance live path stores the derived native int64
+     scene-change threshold in Cnr3SceneChangeConfig.
+ */
+ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;

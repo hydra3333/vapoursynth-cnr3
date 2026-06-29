@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.1-checkpoint-retention-trigger";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.2-hot-zone-observation-arInitial";
 
 /*
     CMS07-P.11C.2 live scene-change default.

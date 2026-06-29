@@ -238,6 +238,26 @@ void cnr3_trace_live_recovery_refusal(
 #endif
 }
 
+void cnr3_trace_live_hot_zone_observation(
+    const Cnr3FilterData& data,
+    int requested_frame,
+    Cnr3Status observation_status
+) noexcept {
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+    std::fprintf(
+        stderr,
+        "[KDT] instance=%d N=%d HOT-ZONE-OBSERVED status=%s\n",
+        data.config.instance_id.value,
+        requested_frame,
+        cnr3_status_name(observation_status)
+    );
+#else
+    (void)data;
+    (void)requested_frame;
+    (void)observation_status;
+#endif
+}
+
 Cnr3Status cnr3_fill_recovery_source_request_numbers(
     int n,
     Cnr3LiveGetFrameFrameData& request_data
@@ -466,6 +486,25 @@ const VSFrame* cnr3_arInitial(
             frame_ctx,
             vsapi,
             "CNR3 D.3 floor-fresh-start proof: failed to allocate frameData."
+        );
+        return nullptr;
+    }
+
+    const Cnr3Status hot_zone_observation_status =
+        data.output_cache.record_hot_zone_observation(n);
+
+    cnr3_trace_live_hot_zone_observation(
+        data,
+        n,
+        hot_zone_observation_status
+    );
+
+    if (!cnr3_status_is_ok(hot_zone_observation_status)) {
+        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 W.2 hot-zone observation failed at arInitial."
         );
         return nullptr;
     }

@@ -1,0 +1,52 @@
+CNR3 W.3 — three-way design + scope review (please read this first)
+
+From: Dave (coordinator / final authority). In this review I am W3X.
+
+We're opening W.3, the last and highest-consequence step of the live cache-pressure wiring arc: the CMS §7.5
+COMBINED LIVE STORE-AND-PRUNE HELPER. This is the phase where the live output cache first EVICTS frames (today
+it never prunes — it only appends) and where the hot-zone observation we wired in W.2 finally gets a consumer.
+Because it's the first phase that can remove a frame the pipeline still needs, I want a proper pre-code review
+before any wiring patch — the same three-way process we ran for Step 0, which worked well.
+
+YOUR LABEL (please use it on every finding/comment so the register stays unambiguous):
+  - W3D  = the current designer (holds W.3 design intent; has seeded the review).
+  - W3C  = the coder  -> implementation feasibility / live-path / lifecycle / atomicity lens.
+  - W3OD = the old designer -> independent design-side cross-check; you hold the prior-design lineage and the
+           Step-0 memory, so you're a second reviewing voice on the design side for this high-stakes phase.
+  - W3X  = me (authority + relay; I keep the authoritative register copy and the next-free comment number).
+
+Two documents are attached:
+  1. CNR3_W3_Three_Way_Review_Process_v1_0.md  — HOW we run it (single append-only register, rounds, finding
+     IDs SR-D-*/SR-C-*/SR-OD-*, severities, the reasoning-required-even-for-"agree" and honest-agree rules,
+     how statuses move, that I rule ties). It's the Step-0 process adapted to W.3 — if you ran Step 0 it will
+     be familiar.
+  2. CNR3_W3_Review_Register_Round0_seed.md  — the actual review file. W3D has seeded Round 0 with: the task
+     framing (including a read-first finding that the §7.5 helper is largely a COMPOSITION of existing _locked
+     primitives, not new policy), seven opening SR-D findings to verdict, and a deliberately NON-EXHAUSTIVE
+     watch-list of risk areas to probe.
+
+SOURCE CODE:
+If you are no longer able to receive attachments (W3OD is in that category), note that 
+the current GITUB branch dev_cache_manager source is at:
+https://github.com/hydra3333/vapoursynth-cnr3/tree/dev_cache_manager/src
+
+WHAT IS NEEDED:
+  - Review against the COMMITTED SOURCE, not the description. The baseline is the W.2-committed tree
+    (CMS07-W.2-hot-zone-observation-arInitial, four-way 54/54): cnr3_arAllFramesReady.cpp, cnr3_cache_core.cpp
+    /.h, and CMS §7.4/§7.5/§7.6. Where you can check a claim in the source, check it there and cite it.
+  - Append your own findings (W3C -> SR-C-*, W3OD -> SR-OD-*) and give a verdict + REASONING on each SR-D-*
+    (a bare "agree" isn't enough; if you only agree with a narrower version, say so and mark it partial).
+  - Don't write production code this round — this is CMS + design + scope review only. The wiring patch comes after
+    the register closes.
+  - Lead your return to me with a short hand-off summary: what you changed, which findings moved, what W3D
+    most needs to look at next.
+
+Return the annotated register to me and I'll relay between you and W3D until every BLOCKER/MAJOR finding is
+agreed, resolved, or deferred to a named later arc (concurrent prune is explicitly a fmParallel concern - 
+HOWEVER all pruning functionality must be validly enabled now - by design, introducing concurrency
+should not introduce a need for new or changed code ... if it does then something is wrong with the 
+current design and that needs to be flagged as an issue now). 
+Then W3D writes the W.3 coder scope and the eviction-proof harness from the closed register.
+
+Thanks — same discipline that got W.1 and W.2 in clean.
+— Dave (W3X)

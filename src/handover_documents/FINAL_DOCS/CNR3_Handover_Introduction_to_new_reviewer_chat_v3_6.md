@@ -28,6 +28,26 @@
 > source, never from memory or from the coder's description.** You have a working environment; unpack the
 > current `src.zip` and confirm the real symbols before agreeing, approving, or asserting anything.
 >
+> **TWO HARD GUARDS (a prior new chat failed on both — do not repeat):**
+>
+> 1. **READ THE DOCUMENTS IN THE GIVEN ORDER FIRST — do NOT self-orient from the source code before
+>    reading.** It is tempting to open the `src.zip` and start positioning yourself from the code
+>    immediately. Do not. The code is ground truth for VERIFICATION later, but the source alone will
+>    mislead you about WHERE the project is and WHAT the current task is — that lives in the docs (CMS,
+>    Document B, the DELTA). Read the ordered doc list, confirm understanding when prompted, THEN use the
+>    source to verify specifics. Orientation comes from the docs; verification comes from the source. In
+>    that order.
+>
+> 2. **IGNORE the `superseded_by_v7/` subfolder ENTIRELY, and never read any `*.txt` copy of a source
+>    file.** The `src.zip` contains a `src/superseded_by_v7/` folder holding PRE-CMS07 (CMS02/H16-era)
+>    archived copies of source files, kept only as history — e.g. `superseded_by_v7/cnr3_build_config.h.txt`
+>    still reads an ancient `CNR3_EDIT_VERSION` like `CMS02-H16.4-...`. These are NOT the project. The
+>    live source is the files directly under `src/` (e.g. `src/cnr3_build_config.h`, no `.txt`,
+>    no `superseded_by_v7/`). If you ever read a `CNR3_EDIT_VERSION` or symbol that does not match the
+>    docs (CMS07.x), you have almost certainly read a superseded archive — stop, re-read the LIVE file
+>    under `src/`, and if in doubt confirm against the repository HEAD (`git show HEAD:src/cnr3_build_config.h`).
+>    The current live marker at this writing is `CMS07-P.11C.5-...` (or the W.1 marker once committed).
+>
 > Suggested attachment set for this chat:
 > ```
 > CNR3_Handover_Introduction_to_new_reviewer_chat_v3_6.md   (this doc — read first)
@@ -47,7 +67,7 @@
 ---
 
 
-**Version:** v3.6 (advances state past STEP 0 (now CLOSED) into the live cache-pressure WIRING arc; controlling CMS now CMS07.14 §7.4-§7.6; W.1 done/green, W.2 next. Doc-set pointers advanced. Points to Role Handover v1.13 PART 10 for the operating playbook. Supersedes v3.5.)
+**Version:** v3.6 (advances state past STEP 0 (now CLOSED) into the live cache-pressure WIRING arc; controlling CMS now CMS07.14 §7.4-§7.6; W.1 done/green, W.2 next. Doc-set pointers advanced. Points to Role Handover v1.13 PART 10 for the operating playbook. Supersedes v3.5. v3.6 also adds STARTUP GUARDS: read-docs-in-order-first and ignore superseded_by_v7/.)
 **Date:** 2026-06-25
 **Supersedes:** v2.0 (whose Part 2/3 baseline was the **obsolete CMS06.11 / H15.6B cache era** —
 far older than the pixel arc; that state is gone). v3.0 re-points the project context to the

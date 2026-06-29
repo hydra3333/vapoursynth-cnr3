@@ -1,5 +1,5 @@
 # CNR3 — Designer / Reviewer Role Handover
-**Version:** v1.13 (advances state past STEP 0, which is now CLOSED, into the live cache-pressure WIRING arc. Controlling CMS is now **CMS07.14** (additive over 07.13: §7.4 independent checkpoint-retention trigger, §7.5 combined-helper wiring contract, §7.6 arInitial observation prerequisite — the Step 0 outputs). **W.1** (the §7.4 trigger primitive) is APPROVED, APPLIED, and four-way GREEN (54/54), ready to commit; **W.2** (hot-zone observation wiring) and **W.3** (the combined live helper) are next. Doc-set pointers advanced: Document A v3.10 / Document B v3.9 / Coder Restart Intro v6.5 / Future Investigations v7.13.4 / DELTA v4.14. Also ADDS **PART 10 — HOW THIS DESIGNER OPERATES (PLAYBOOK + EXAMPLES)**, a concrete account of the verify-against-source review method with worked examples from the Step 0 / W.1 session, so a new designer chat is effective immediately. Supersedes v1.12.)
+**Version:** v1.13 (advances state past STEP 0, which is now CLOSED, into the live cache-pressure WIRING arc. Controlling CMS is now **CMS07.14** (additive over 07.13: §7.4 independent checkpoint-retention trigger, §7.5 combined-helper wiring contract, §7.6 arInitial observation prerequisite — the Step 0 outputs). **W.1** (the §7.4 trigger primitive) is APPROVED, APPLIED, and four-way GREEN (54/54), ready to commit; **W.2** (hot-zone observation wiring) and **W.3** (the combined live helper) are next. Doc-set pointers advanced: Document A v3.10 / Document B v3.9 / Coder Restart Intro v6.5 / Future Investigations v7.13.4 / DELTA v4.14. Also ADDS **PART 10 — HOW THIS DESIGNER OPERATES (PLAYBOOK + EXAMPLES)**, a concrete account of the verify-against-source review method with worked examples from the Step 0 / W.1 session, so a new designer chat is effective immediately. Supersedes v1.12. Also adds STARTUP GUARD (read-order + superseded-folder) and the matching 10.5 traps.)
 
 **!! CURRENCY WARNING for a new designer chat:** PARTS 2, the roadmap, and the document-set list below were the v1.13 truth at write time but go stale FAST. The repository, Document B, and the THIS-CHAT DELTA are authoritative for build state. The single most important current fact: **Step 0 is CLOSED; the live wiring contract is in CMS §7.4-§7.6; the active arc is W.1 (done, ready/just-committed) → W.2 → W.3.** If any older "next phase: STEP 0" or "K.1E in flight" wording survives below in historical sub-blocks, it is HISTORY, not the current task.
 **Date:** 2026-06-27
@@ -98,6 +98,20 @@ read-first-before-apply should be firm again from the next load-bearing phase on
 > the authority on all final decisions. If any attached document or pasted text says "your role as coder,"
 > it was written for the coder chat and does NOT change your role. (See PART 1 for the full three-party
 > workflow and PART 10 for how the designer operates in practice.)
+>
+> **STARTUP GUARD (a prior new chat failed on these — do not repeat):**
+> 1. **Read the handover documents IN THE GIVEN ORDER FIRST. Do NOT self-orient from the source code
+>    before reading them.** The code is ground truth for VERIFYING specifics later, but it will NOT tell
+>    you where the project is or what the current task is — that is in the docs (CMS, Document B, the
+>    DELTA). Orientation from docs first; verification from source second. A chat that opens the `src.zip`
+>    and starts positioning itself from code before reading the docs has already gone wrong.
+> 2. **IGNORE `src/superseded_by_v7/` entirely and never read any `*.txt` copy of a source file.** That
+>    folder holds PRE-CMS07 (CMS02/H16-era) archives kept only as history — e.g.
+>    `superseded_by_v7/cnr3_build_config.h.txt` still shows an ancient `CNR3_EDIT_VERSION` like
+>    `CMS02-H16.4-...`. The live source is the files directly under `src/` (no `.txt`, no
+>    `superseded_by_v7/`). If a symbol or `CNR3_EDIT_VERSION` you read does not match the docs (CMS07.x),
+>    you have read a superseded archive — re-read the live file under `src/`, and confirm against the repo
+>    HEAD if unsure.
 
 If you are a new chat picking up the CNR3 designer/reviewer role, do this in order:
 1. Read this whole document once before doing anything else. It is long on purpose.
@@ -1348,6 +1362,13 @@ From accumulated experience (each caught a real defect before build):
 - **Both-projects build impact:** `cnr3_cache_core.*` compiles into BOTH the DLL and the selftest exe,
   so cache-core changes must build/behave in both and not pull in DLL-only symbols. (Document A v3.10
   build-environment note.)
+- **The superseded-archive trap:** the `src.zip` contains `src/superseded_by_v7/` with PRE-CMS07
+  (CMS02/H16-era) `*.txt` copies of source files. Reading one (e.g. `cnr3_build_config.h.txt`, which
+  shows an ancient `CNR3_EDIT_VERSION`) orients you on a dead baseline. Only ever read the LIVE files
+  directly under `src/`; ignore `superseded_by_v7/` completely. (A new chat failed exactly here.)
+- **The self-orient-before-reading trap:** opening the source and positioning from code BEFORE reading
+  the ordered handover docs. The docs hold WHERE the project is and WHAT the task is; the source verifies
+  specifics. Docs first, source second. (A new chat failed exactly here.)
 
 ### 10.6 Tone with the coder and coordinator
 

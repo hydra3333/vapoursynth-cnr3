@@ -99,7 +99,9 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
     Cnr3FilterData& data,
     const Cnr3LiveOutputStoreRequest& request,
     VSFrame* output_frame,
-    const VSAPI* vsapi
+    const VSAPI* vsapi,
+    std::uint64_t frame_byte_count,
+    Cnr3CombinedStoreAndPruneSummary& out_summary
 ) noexcept;
 
 void cnr3_trace_live_frame0_fresh_start(

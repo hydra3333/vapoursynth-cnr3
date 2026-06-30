@@ -15888,8 +15888,190 @@ Cnr3Status cnr3_cache_core_selftest_k1e1_frame_data_pin_gap_synthetic_proof() no
 
 
 
+Cnr3Status cnr3_cache_core_selftest_w3_combined_store_prune_helper() noexcept {
+    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+
+    auto fail = []() noexcept -> Cnr3Status {
+        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+        return Cnr3Status::invariant_violation;
+    };
+
+    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
+
+    const auto make_owned_frame = [&vsapi](const VSFrame* frame,
+        Cnr3OwnedFrameRef& out_owned_frame
+    ) noexcept -> Cnr3Status {
+        return out_owned_frame.reset_to_owned_frame(frame, &vsapi);
+    };
+
+    const auto store_seed_frame = [&make_owned_frame](Cnr3OutputCacheCore& cache,
+        int frame_number,
+        const VSFrame* frame,
+        bool is_checkpoint
+    ) noexcept -> Cnr3Status {
+        Cnr3OwnedFrameRef owned_frame{};
+        const Cnr3Status adopt_status = make_owned_frame(frame, owned_frame);
+
+        if (!cnr3_status_is_ok(adopt_status)) {
+            return adopt_status;
+        }
+
+        const Cnr3Status store_status = is_checkpoint
+            ? cache.store_checkpoint_owned_frame(frame_number, std::move(owned_frame))
+            : cache.store_noncheckpoint_owned_frame(frame_number, std::move(owned_frame));
+
+        return cnr3_status_is_ok(store_status)
+            ? Cnr3Status::ok
+            : store_status;
+    };
+
+    {
+        Cnr3OutputCacheCore cache{};
+        std::vector<int> checkpoint_storage(64, 0);
+
+        for (std::size_t index = 0U; index < checkpoint_storage.size(); ++index) {
+            checkpoint_storage[index] = static_cast<int>(1000 + index);
+            const VSFrame* frame =
+                reinterpret_cast<const VSFrame*>(&checkpoint_storage[index]);
+
+            if (
+                !cnr3_status_is_ok(store_seed_frame(
+                    cache,
+                    static_cast<int>(index),
+                    frame,
+                    true
+                ))
+                ) {
+                return fail();
+            }
+        }
+
+        int target_storage = 8000;
+        const VSFrame* target_frame = reinterpret_cast<const VSFrame*>(&target_storage);
+        vsapi_state.tracked_release_frames[0] = target_frame;
+
+        if (cache.record_hot_zone_observation(500) != Cnr3Status::ok) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef target_owned_frame{};
+        if (!cnr3_status_is_ok(make_owned_frame(target_frame, target_owned_frame))) {
+            return fail();
+        }
+
+        Cnr3CombinedStoreAndPruneSummary summary{};
+        const Cnr3Status status = cache.store_production_output_and_prune(
+            500,
+            500,
+            std::move(target_owned_frame),
+            true,
+            1U,
+            summary
+        );
+
+        if (
+            !cnr3_status_is_ok(status) ||
+            summary.store_kind != Cnr3CacheStoreKind::ProductionCheckpoint ||
+            summary.store_status != Cnr3Status::ok ||
+            !cnr3_status_is_ok(summary.retire_status) ||
+            !cnr3_status_is_ok(summary.prune_status) ||
+            !summary.prune_summary.trigger_decision.checkpoint_prune_is_required ||
+            summary.prune_summary.detached_count == 0U
+            ) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef target_lookup{};
+        if (
+            cache.lookup_frame_and_add_ref(500, &vsapi, target_lookup) !=
+                Cnr3Status::ok ||
+            !target_lookup.has_frame() ||
+            target_lookup.get() != target_frame
+            ) {
+            target_lookup.reset();
+            return fail();
+        }
+        target_lookup.reset();
+    }
+
+    {
+        Cnr3OutputCacheCore cache{};
+        Cnr3CachePinList pin_list{};
+        int winner_storage = 8100;
+        int loser_storage = 8101;
+        const VSFrame* winner_frame = reinterpret_cast<const VSFrame*>(&winner_storage);
+        const VSFrame* loser_frame = reinterpret_cast<const VSFrame*>(&loser_storage);
+        vsapi_state.tracked_release_frames[1] = winner_frame;
+        vsapi_state.tracked_release_frames[2] = loser_frame;
+
+        if (
+            !cnr3_status_is_ok(store_seed_frame(cache, 700, winner_frame, false))
+            ) {
+            return fail();
+        }
+
+        Cnr3OwnedFrameRef loser_owned_frame{};
+        if (!cnr3_status_is_ok(make_owned_frame(loser_frame, loser_owned_frame))) {
+            return fail();
+        }
+
+        const int free_count_before_duplicate = vsapi_state.free_frame_count;
+        Cnr3CombinedStoreAndPruneSummary summary{};
+        const Cnr3Status duplicate_status = cache.store_as2_floor_and_prune(
+            700,
+            700,
+            std::move(loser_owned_frame),
+            false,
+            1U,
+            pin_list,
+            summary
+        );
+
+        if (
+            !cnr3_status_is_ok(duplicate_status) ||
+            summary.store_kind != Cnr3CacheStoreKind::As2ConsumerNonCheckpoint ||
+            summary.store_status != Cnr3Status::duplicate ||
+            !summary.as2_summary.duplicate_existing_slot ||
+            !summary.as2_summary.pin_recorded ||
+            !cnr3_status_is_ok(summary.retire_status) ||
+            !cnr3_status_is_ok(summary.prune_status) ||
+            vsapi_state.tracked_release_counts[2] != 1 ||
+            vsapi_state.free_frame_count != free_count_before_duplicate + 1
+            ) {
+            (void)pin_list.discharge_all(cache);
+            return fail();
+        }
+
+        if (!cnr3_status_is_ok(pin_list.discharge_all(cache))) {
+            return fail();
+        }
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "W.3 combined store-and-prune helper scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    production wrapper stores, retires, and prunes under one public call"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    target output remains lookup-addref usable after its own prune"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    AS2 duplicate normalizes store_status while preserving pin proof"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    duplicate loser releases after the wrapper lock scope"
+    );
+
+    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+    return Cnr3Status::ok;
+}
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
+
 
     struct Cnr3CacheCoreSelftestEntry {
         const char* name = nullptr;
@@ -15936,6 +16118,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
         {
             "p11c5_scene_cut_checkpoint_recovery_anchor",
             cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor
+        },
+        {
+            "w3_combined_store_prune_helper",
+            cnr3_cache_core_selftest_w3_combined_store_prune_helper
         },
         {
             "w1_checkpoint_retention_trigger",

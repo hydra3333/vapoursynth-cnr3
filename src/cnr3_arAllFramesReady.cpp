@@ -12,7 +12,9 @@
 #include "cnr3_plugin_internal.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -484,23 +486,127 @@ bool cnr3_live_output_frame_should_store_as_checkpoint(
         cnr3_live_output_frame_is_checkpoint(request.frame_number);
 }
 
+Cnr3Status cnr3_live_calculate_output_frame_byte_count(
+    const Cnr3FilterData& data,
+    std::uint64_t& out_frame_byte_count
+) noexcept {
+    out_frame_byte_count = 0U;
+
+    if (
+        data.video_info.width <= 0 ||
+        data.video_info.height <= 0 ||
+        data.bits_per_sample <= 0 ||
+        data.sub_sampling_w < 0 ||
+        data.sub_sampling_h < 0 ||
+        data.sub_sampling_w >= 31 ||
+        data.sub_sampling_h >= 31
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    const std::uint64_t width = static_cast<std::uint64_t>(data.video_info.width);
+    const std::uint64_t height = static_cast<std::uint64_t>(data.video_info.height);
+    const std::uint64_t bytes_per_sample =
+        data.bits_per_sample > 8 ? 2ULL : 1ULL;
+    const std::uint64_t chroma_w_den = 1ULL << data.sub_sampling_w;
+    const std::uint64_t chroma_h_den = 1ULL << data.sub_sampling_h;
+    const std::uint64_t chroma_width =
+        (width + chroma_w_den - 1ULL) >> data.sub_sampling_w;
+    const std::uint64_t chroma_height =
+        (height + chroma_h_den - 1ULL) >> data.sub_sampling_h;
+
+    const auto checked_mul = [](std::uint64_t left,
+        std::uint64_t right,
+        std::uint64_t& out_value
+    ) noexcept -> bool {
+        if (left != 0U && right > (std::numeric_limits<std::uint64_t>::max() / left)) {
+            return false;
+        }
+
+        out_value = left * right;
+        return true;
+    };
+
+    std::uint64_t luma_samples = 0U;
+    std::uint64_t chroma_samples = 0U;
+    std::uint64_t two_chroma_samples = 0U;
+    std::uint64_t total_samples = 0U;
+    std::uint64_t total_bytes = 0U;
+
+    if (
+        !checked_mul(width, height, luma_samples) ||
+        !checked_mul(chroma_width, chroma_height, chroma_samples) ||
+        !checked_mul(chroma_samples, 2ULL, two_chroma_samples)
+        ) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    if (luma_samples > std::numeric_limits<std::uint64_t>::max() - two_chroma_samples) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    total_samples = luma_samples + two_chroma_samples;
+
+    if (!checked_mul(total_samples, bytes_per_sample, total_bytes) || total_bytes == 0U) {
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    out_frame_byte_count = total_bytes;
+    return Cnr3Status::ok;
+}
+
+void cnr3_trace_live_combined_store_and_prune(
+    const Cnr3FilterData& data,
+    const Cnr3CombinedStoreAndPruneSummary& summary
+) noexcept {
+#if defined(CNR3_KEYSTONE_DEV_TRACE)
+    std::fprintf(
+        stderr,
+        "[KDT] instance=%d target_N=%d stored_frame=%d kind=%s "
+        "store=%s retire=%s prune=%s "
+        "cap_trigger=%d ckpt_trigger=%d selected=%zu detached=%zu\n",
+        data.config.instance_id.value,
+        summary.activation_target_frame,
+        summary.stored_frame_number,
+        cnr3_cache_store_kind_name(summary.store_kind),
+        cnr3_status_name(summary.store_status),
+        cnr3_status_name(summary.retire_status),
+        cnr3_status_name(summary.prune_status),
+        summary.prune_summary.trigger_decision.prune_is_required ? 1 : 0,
+        summary.prune_summary.trigger_decision.checkpoint_prune_is_required ? 1 : 0,
+        summary.prune_summary.selected_candidate_count,
+        summary.prune_summary.detached_count
+    );
+#else
+    (void)data;
+    (void)summary;
+#endif
+}
+
 Cnr3Status cnr3_store_live_output_frame_for_return(
     Cnr3FilterData& data,
     const Cnr3LiveOutputStoreRequest& request,
     VSFrame* output_frame,
-    const VSAPI* vsapi
+    const VSAPI* vsapi,
+    std::uint64_t frame_byte_count,
+    Cnr3CombinedStoreAndPruneSummary& out_summary
 ) noexcept {
+    out_summary = Cnr3CombinedStoreAndPruneSummary{};
+
     if (
         request.frame_number < 0 ||
         output_frame == nullptr ||
-        vsapi == nullptr
+        vsapi == nullptr ||
+        frame_byte_count == 0U
         ) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
         return Cnr3Status::invalid_argument;
     }
 
     const VSFrame* cache_frame_ref = vsapi->addFrameRef(output_frame);
 
     if (cache_frame_ref == nullptr) {
+        out_summary.store_status = Cnr3Status::vapoursynth_error;
         return Cnr3Status::vapoursynth_error;
     }
 
@@ -512,19 +618,20 @@ Cnr3Status cnr3_store_live_output_frame_for_return(
 
     if (!cnr3_status_is_ok(adopt_status)) {
         vsapi->freeFrame(cache_frame_ref);
+        out_summary.store_status = adopt_status;
         return adopt_status;
     }
 
-    if (cnr3_live_output_frame_should_store_as_checkpoint(request)) {
-        return data.output_cache.store_checkpoint_owned_frame(
-            request.frame_number,
-            std::move(cache_owned_frame)
-        );
-    }
+    const bool store_as_checkpoint =
+        cnr3_live_output_frame_should_store_as_checkpoint(request);
 
-    return data.output_cache.store_noncheckpoint_owned_frame(
+    return data.output_cache.store_production_output_and_prune(
         request.frame_number,
-        std::move(cache_owned_frame)
+        request.frame_number,
+        std::move(cache_owned_frame),
+        store_as_checkpoint,
+        frame_byte_count,
+        out_summary
     );
 }
 
@@ -534,6 +641,7 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
     const Cnr3LiveOutputStoreRequest& request,
     VSFrame* output_frame,
     const VSAPI* vsapi,
+    std::uint64_t frame_byte_count,
     const VSFrame*& out_return_frame,
     Cnr3Status& out_store_status,
     bool& out_returned_cached_winner
@@ -551,12 +659,22 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
         return out_store_status;
     }
 
-    out_store_status = cnr3_store_live_output_frame_for_return(
+    Cnr3CombinedStoreAndPruneSummary store_summary{};
+    const Cnr3Status hard_store_status = cnr3_store_live_output_frame_for_return(
         data,
         request,
         output_frame,
-        vsapi
+        vsapi,
+        frame_byte_count,
+        store_summary
     );
+    cnr3_trace_live_combined_store_and_prune(data, store_summary);
+    out_store_status = store_summary.store_status;
+
+    if (!cnr3_status_is_ok(hard_store_status)) {
+        vsapi->freeFrame(output_frame);
+        return hard_store_status;
+    }
 
     if (out_store_status == Cnr3Status::ok) {
         out_return_frame = output_frame;
@@ -797,6 +915,21 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     const bool store_as_checkpoint =
         cnr3_live_output_frame_should_store_as_checkpoint(store_request);
 
+    std::uint64_t frame_byte_count = 0U;
+    const Cnr3Status frame_byte_count_status =
+        cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
+
+    if (!cnr3_status_is_ok(frame_byte_count_status)) {
+        vsapi->freeFrame(output_frame);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 W.3: failed to compute live output frame byte estimate."
+        );
+        return nullptr;
+    }
+
     const VSFrame* return_frame = nullptr;
     Cnr3Status store_status = Cnr3Status::invariant_violation;
     bool returned_cached_winner = false;
@@ -806,6 +939,7 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
             store_request,
             output_frame,
             vsapi,
+            frame_byte_count,
             return_frame,
             store_status,
             returned_cached_winner
@@ -899,6 +1033,20 @@ const VSFrame* cnr3_complete_live_recovery(
             frame_ctx,
             vsapi,
             "CNR3 D.3 floor-fresh-start proof: invalid recovery branch foundation."
+        );
+        return nullptr;
+    }
+
+    std::uint64_t frame_byte_count = 0U;
+    const Cnr3Status frame_byte_count_status =
+        cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
+
+    if (!cnr3_status_is_ok(frame_byte_count_status)) {
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 W.3: failed to compute recovery output frame byte estimate."
         );
         return nullptr;
     }
@@ -1008,29 +1156,32 @@ const VSFrame* cnr3_complete_live_recovery(
 
             floor_output_frame = nullptr;
 
-            Cnr3CacheAs2StoreRecordSummary floor_store_summary{};
+            Cnr3CombinedStoreAndPruneSummary floor_store_summary{};
             const Cnr3Status floor_store_status =
-                data.output_cache.store_owned_frame_and_record_pin(
+                data.output_cache.store_as2_floor_and_prune(
                     floor_frame,
+                    n,
                     std::move(floor_owned_frame),
                     cnr3_live_output_frame_is_checkpoint(floor_frame),
+                    frame_byte_count,
                     request_data->pin_list,
                     floor_store_summary
                 );
+            cnr3_trace_live_combined_store_and_prune(data, floor_store_summary);
 
             if (!cnr3_status_is_ok(floor_store_status) ||
-                !floor_store_summary.pin_recorded) {
+                !floor_store_summary.as2_summary.pin_recorded) {
                 (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
                 cnr3_set_filter_error(
                     frame_ctx,
                     vsapi,
-                    "CNR3 D.3 floor-fresh-start proof: failed to store/pin floor fresh-start output."
+                    "CNR3 D.3 floor-fresh-start proof: failed to store/pin/prune floor fresh-start output."
                 );
                 return nullptr;
             }
 
             request_data->recovery_floor_outcome =
-                floor_store_summary.duplicate_existing_slot
+                floor_store_summary.as2_summary.duplicate_existing_slot
                 ? Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser
                 : Cnr3LiveRecoveryHoleOutcome::computed;
         }
@@ -1216,35 +1367,38 @@ const VSFrame* cnr3_complete_live_recovery(
         const bool hole_store_as_checkpoint =
             cnr3_live_output_frame_should_store_as_checkpoint(hole_store_request);
 
-        Cnr3CacheAs2StoreRecordSummary hole_store_summary{};
+        Cnr3CombinedStoreAndPruneSummary hole_store_summary{};
         const Cnr3Status hole_store_status =
-            data.output_cache.store_recovery_plan_hole_owned_frame_and_record_pin(
+            data.output_cache.store_recovery_hole_and_prune(
                 recovery_plan,
                 hole_frame,
+                n,
                 std::move(hole_owned_frame),
                 hole_store_as_checkpoint,
+                frame_byte_count,
                 request_data->pin_list,
                 hole_store_summary
             );
+        cnr3_trace_live_combined_store_and_prune(data, hole_store_summary);
 
         if (!cnr3_status_is_ok(hole_store_status) ||
-            !hole_store_summary.pin_recorded) {
+            !hole_store_summary.as2_summary.pin_recorded) {
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.3 floor-fresh-start proof: failed to store/pin computed recovery hole."
+                "CNR3 D.3 floor-fresh-start proof: failed to store/pin/prune computed recovery hole."
             );
             return nullptr;
         }
 
         request_data->per_hole_outcomes[hole_index] =
-            hole_store_summary.duplicate_existing_slot
+            hole_store_summary.as2_summary.duplicate_existing_slot
             ? Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser
             : Cnr3LiveRecoveryHoleOutcome::computed;
         per_hole_scene_summary_available[hole_index] = true;
         per_hole_process_summaries[hole_index] = hole_process_summary;
-        per_hole_store_summaries[hole_index] = hole_store_summary;
+        per_hole_store_summaries[hole_index] = hole_store_summary.as2_summary;
         per_hole_store_as_checkpoint[hole_index] = hole_store_as_checkpoint;
     }
 
@@ -1363,6 +1517,7 @@ const VSFrame* cnr3_complete_live_recovery(
             target_store_request,
             target_output_frame,
             vsapi,
+            frame_byte_count,
             return_frame,
             target_store_status,
             returned_cached_winner
@@ -1537,18 +1692,43 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         return nullptr;
     }
 
-    const Cnr3Status store_status = data.output_cache.store_checkpoint_owned_frame(
-        0,
-        std::move(cache_owned_frame)
-    );
+    std::uint64_t frame_byte_count = 0U;
+    const Cnr3Status frame_byte_count_status =
+        cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
 
-    if (!cnr3_live_store_status_allows_return(store_status)) {
+    if (!cnr3_status_is_ok(frame_byte_count_status)) {
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
-            "CNR3 K.1D frame-0 proof: failed to store output[0] checkpoint."
+            "CNR3 W.3: failed to compute frame-0 output frame byte estimate."
+        );
+        return nullptr;
+    }
+
+    Cnr3CombinedStoreAndPruneSummary store_summary{};
+    const Cnr3Status store_hard_status =
+        data.output_cache.store_production_output_and_prune(
+            0,
+            n,
+            std::move(cache_owned_frame),
+            true,
+            frame_byte_count,
+            store_summary
+        );
+    cnr3_trace_live_combined_store_and_prune(data, store_summary);
+
+    const Cnr3Status store_status = store_summary.store_status;
+
+    if (!cnr3_status_is_ok(store_hard_status) ||
+        !cnr3_live_store_status_allows_return(store_status)) {
+        vsapi->freeFrame(output_frame);
+        (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+        cnr3_set_filter_error(
+            frame_ctx,
+            vsapi,
+            "CNR3 K.1D frame-0 proof: failed to store/prune output[0] checkpoint."
         );
         return nullptr;
     }

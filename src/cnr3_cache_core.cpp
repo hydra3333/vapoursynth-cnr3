@@ -791,6 +791,293 @@ Cnr3Status Cnr3OutputCacheCore::store_recovery_plan_hole_owned_frame_and_record_
     );
 }
 
+
+Cnr3Status Cnr3OutputCacheCore::store_production_output_and_prune(
+    int stored_frame_number,
+    int activation_target_frame,
+    Cnr3OwnedFrameRef frame,
+    bool is_checkpoint,
+    std::uint64_t frame_byte_count,
+    Cnr3CombinedStoreAndPruneSummary& out_summary
+) {
+    out_summary = Cnr3CombinedStoreAndPruneSummary{};
+    out_summary.store_kind = is_checkpoint
+        ? Cnr3CacheStoreKind::ProductionCheckpoint
+        : Cnr3CacheStoreKind::ProductionNonCheckpoint;
+    out_summary.stored_frame_number = stored_frame_number;
+    out_summary.activation_target_frame = activation_target_frame;
+
+    if (
+        !cnr3_frame_number_is_valid(stored_frame_number) ||
+        !cnr3_frame_number_is_valid(activation_target_frame) ||
+        !frame.has_frame() ||
+        frame_byte_count == 0U
+        ) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
+        return Cnr3Status::invalid_argument;
+    }
+
+    return store_owned_frame_and_prune_impl(
+        stored_frame_number,
+        activation_target_frame,
+        frame,
+        is_checkpoint,
+        out_summary.store_kind,
+        frame_byte_count,
+        nullptr,
+        out_summary
+    );
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_as2_floor_and_prune(
+    int stored_frame_number,
+    int activation_target_frame,
+    Cnr3OwnedFrameRef frame,
+    bool is_checkpoint,
+    std::uint64_t frame_byte_count,
+    Cnr3CachePinList& pin_list,
+    Cnr3CombinedStoreAndPruneSummary& out_summary
+) {
+    out_summary = Cnr3CombinedStoreAndPruneSummary{};
+    out_summary.store_kind = is_checkpoint
+        ? Cnr3CacheStoreKind::As2ConsumerCheckpoint
+        : Cnr3CacheStoreKind::As2ConsumerNonCheckpoint;
+    out_summary.stored_frame_number = stored_frame_number;
+    out_summary.activation_target_frame = activation_target_frame;
+
+    if (
+        !cnr3_frame_number_is_valid(stored_frame_number) ||
+        !cnr3_frame_number_is_valid(activation_target_frame) ||
+        !frame.has_frame() ||
+        frame_byte_count == 0U
+        ) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
+        return Cnr3Status::invalid_argument;
+    }
+
+    return store_owned_frame_and_prune_impl(
+        stored_frame_number,
+        activation_target_frame,
+        frame,
+        is_checkpoint,
+        out_summary.store_kind,
+        frame_byte_count,
+        &pin_list,
+        out_summary
+    );
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_recovery_hole_and_prune(
+    const Cnr3CacheRecoverySearchPlan& recovery_plan,
+    int hole_frame_number,
+    int activation_target_frame,
+    Cnr3OwnedFrameRef frame,
+    bool is_checkpoint,
+    std::uint64_t frame_byte_count,
+    Cnr3CachePinList& pin_list,
+    Cnr3CombinedStoreAndPruneSummary& out_summary
+) {
+    out_summary = Cnr3CombinedStoreAndPruneSummary{};
+    out_summary.store_kind = is_checkpoint
+        ? Cnr3CacheStoreKind::As2ConsumerCheckpoint
+        : Cnr3CacheStoreKind::As2ConsumerNonCheckpoint;
+    out_summary.stored_frame_number = hole_frame_number;
+    out_summary.activation_target_frame = activation_target_frame;
+
+    if (
+        !cnr3_frame_number_is_valid(hole_frame_number) ||
+        !cnr3_frame_number_is_valid(activation_target_frame) ||
+        !frame.has_frame() ||
+        frame_byte_count == 0U
+        ) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
+        return Cnr3Status::invalid_argument;
+    }
+
+    const Cnr3Status plan_status =
+        cnr3_current_minimal_recovery_plan_status(recovery_plan);
+
+    if (!cnr3_status_is_ok(plan_status)) {
+        out_summary.store_status = plan_status;
+        return plan_status;
+    }
+
+    if (hole_frame_number == recovery_plan.requested_frame) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
+        return Cnr3Status::invalid_argument;
+    }
+
+    const auto hole_it = std::find(
+        recovery_plan.hole_frame_numbers.begin(),
+        recovery_plan.hole_frame_numbers.end(),
+        hole_frame_number
+    );
+
+    if (hole_it == recovery_plan.hole_frame_numbers.end()) {
+        out_summary.store_status = Cnr3Status::not_found;
+        return Cnr3Status::not_found;
+    }
+
+    return store_owned_frame_and_prune_impl(
+        hole_frame_number,
+        activation_target_frame,
+        frame,
+        is_checkpoint,
+        out_summary.store_kind,
+        frame_byte_count,
+        &pin_list,
+        out_summary
+    );
+}
+
+Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+    int stored_frame_number,
+    int activation_target_frame,
+    Cnr3OwnedFrameRef& frame,
+    bool is_checkpoint,
+    Cnr3CacheStoreKind store_kind,
+    std::uint64_t frame_byte_count,
+    Cnr3CachePinList* pin_list,
+    Cnr3CombinedStoreAndPruneSummary& out_summary
+) {
+    if (
+        !cnr3_frame_number_is_valid(stored_frame_number) ||
+        !cnr3_frame_number_is_valid(activation_target_frame) ||
+        !frame.has_frame() ||
+        frame_byte_count == 0U ||
+        store_kind == Cnr3CacheStoreKind::Invalid
+        ) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
+        return Cnr3Status::invalid_argument;
+    }
+
+    const bool is_as2_kind =
+        store_kind == Cnr3CacheStoreKind::As2ConsumerNonCheckpoint ||
+        store_kind == Cnr3CacheStoreKind::As2ConsumerCheckpoint;
+
+    if (is_as2_kind != (pin_list != nullptr)) {
+        out_summary.store_status = Cnr3Status::invalid_argument;
+        return Cnr3Status::invalid_argument;
+    }
+
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry> candidate_order{};
+    std::vector<Cnr3PruneCandidateDistanceOrderEntry> checkpoint_candidate_order{};
+    std::vector<int> selected_frame_numbers{};
+    std::vector<Cnr3CacheSlot> detached_slots{};
+
+    if (
+        CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS > candidate_order.max_size() ||
+        CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS > checkpoint_candidate_order.max_size() ||
+        CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS > selected_frame_numbers.max_size() ||
+        CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS > detached_slots.max_size()
+        ) {
+        out_summary.store_status = Cnr3Status::capacity_exceeded;
+        return Cnr3Status::capacity_exceeded;
+    }
+
+    if (is_as2_kind) {
+        const Cnr3Status reserve_pin_status =
+            pin_list->reserve_for_additional_pins(1U);
+
+        if (!cnr3_status_is_ok(reserve_pin_status)) {
+            out_summary.store_status = reserve_pin_status;
+            return reserve_pin_status;
+        }
+    }
+
+    try {
+        candidate_order.reserve(CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS);
+        checkpoint_candidate_order.reserve(CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS);
+        selected_frame_numbers.reserve(CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS);
+        detached_slots.reserve(CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS);
+    }
+    catch (const std::bad_alloc&) {
+        out_summary.store_status = Cnr3Status::allocation_failed;
+        return Cnr3Status::allocation_failed;
+    }
+
+    Cnr3Status status = Cnr3Status::invariant_violation;
+
+    {
+        const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+        if (is_as2_kind) {
+            Cnr3CacheAs2StoreRecordSummary as2_summary{};
+            const Cnr3Status as2_status =
+                store_owned_frame_and_record_pin_locked(
+                    stored_frame_number,
+                    frame,
+                    is_checkpoint,
+                    *pin_list,
+                    as2_summary
+                );
+
+            out_summary.as2_summary = as2_summary;
+
+            if (!cnr3_status_is_ok(as2_status)) {
+                out_summary.store_status = as2_status;
+                return as2_status;
+            }
+
+            if (!as2_summary.pin_recorded) {
+                out_summary.store_status = Cnr3Status::invariant_violation;
+                return Cnr3Status::invariant_violation;
+            }
+
+            if (as2_summary.duplicate_existing_slot) {
+                out_summary.store_status = Cnr3Status::duplicate;
+            }
+            else if (as2_summary.inserted_new_slot) {
+                out_summary.store_status = Cnr3Status::ok;
+            }
+            else {
+                out_summary.store_status = Cnr3Status::invariant_violation;
+                return Cnr3Status::invariant_violation;
+            }
+        }
+        else {
+            out_summary.store_status = store_owned_frame_locked(
+                stored_frame_number,
+                frame,
+                is_checkpoint
+            );
+
+            if (
+                out_summary.store_status != Cnr3Status::ok &&
+                out_summary.store_status != Cnr3Status::duplicate
+                ) {
+                return out_summary.store_status;
+            }
+        }
+
+        out_summary.retire_status =
+            retire_decay_eligible_hot_zones_locked(activation_target_frame);
+
+        if (!cnr3_status_is_ok(out_summary.retire_status)) {
+            return out_summary.retire_status;
+        }
+
+        out_summary.prune_status = execute_bounded_prune_pass_locked(
+            frame_byte_count,
+            CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+            CNR3_CACHE_BOUNDED_PRUNE_MAX_VICTIMS,
+            candidate_order,
+            checkpoint_candidate_order,
+            selected_frame_numbers,
+            detached_slots,
+            out_summary.prune_summary
+        );
+
+        if (!cnr3_status_is_ok(out_summary.prune_status)) {
+            return out_summary.prune_status;
+        }
+
+        status = Cnr3Status::ok;
+    }
+
+    return status;
+}
+
 Cnr3Status Cnr3OutputCacheCore::remove_unpinned_frame(
     int frame_number
 ) {

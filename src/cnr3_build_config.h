@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.2-hot-zone-observation-arInitial";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.3-combined-live-store-prune-helper";
 
 /*
     CMS07-P.11C.2 live scene-change default.

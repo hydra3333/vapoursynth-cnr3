@@ -438,6 +438,57 @@ struct Cnr3CacheAs2StoreRecordSummary {
 };
 
 /*
+    W.3 combined live store-and-prune store kind.
+
+    The valid kinds make production-vs-AS2 pin behaviour explicit. Invalid is a
+    sentinel so an early-return summary cannot look like a valid store outcome.
+*/
+enum class Cnr3CacheStoreKind : std::uint8_t {
+    Invalid = 0,
+    ProductionNonCheckpoint,
+    ProductionCheckpoint,
+    As2ConsumerNonCheckpoint,
+    As2ConsumerCheckpoint
+};
+
+[[nodiscard]] constexpr const char* cnr3_cache_store_kind_name(
+    Cnr3CacheStoreKind store_kind
+) noexcept {
+    switch (store_kind) {
+    case Cnr3CacheStoreKind::Invalid:
+        return "invalid";
+    case Cnr3CacheStoreKind::ProductionNonCheckpoint:
+        return "production_noncheckpoint";
+    case Cnr3CacheStoreKind::ProductionCheckpoint:
+        return "production_checkpoint";
+    case Cnr3CacheStoreKind::As2ConsumerNonCheckpoint:
+        return "as2_consumer_noncheckpoint";
+    case Cnr3CacheStoreKind::As2ConsumerCheckpoint:
+        return "as2_consumer_checkpoint";
+    }
+
+    return "unknown";
+}
+
+/*
+    W.3 combined store/prune summary.
+
+    The wrapper return value is the overall hard status. The original store
+    outcome remains visible here so production duplicate and AS2 duplicate
+    semantics are not flattened into a single ok/fail result.
+*/
+struct Cnr3CombinedStoreAndPruneSummary {
+    Cnr3CacheStoreKind store_kind = Cnr3CacheStoreKind::Invalid;
+    int stored_frame_number = CNR3_INVALID_FRAME_NUMBER;
+    int activation_target_frame = CNR3_INVALID_FRAME_NUMBER;
+    Cnr3Status store_status = Cnr3Status::invariant_violation;
+    Cnr3Status retire_status = Cnr3Status::invariant_violation;
+    Cnr3Status prune_status = Cnr3Status::invariant_violation;
+    Cnr3CacheAs2StoreRecordSummary as2_summary{};
+    Cnr3CachePruneExecutionSummary prune_summary{};
+};
+
+/*
     Bounded recovery search plan.
 
     CMS07-H.1A proves the read-only AS1 recovery search scaffold only. The
@@ -831,6 +882,45 @@ public:
     );
 
     /*
+        W.3 lock-owning combined live store-and-prune wrappers.
+
+        Production stores never pin. AS2 stores must pin and record exactly one
+        consumer pin before prune is allowed to run. The recovery-hole wrapper
+        preserves the H.3A plan/hole guard before any reservation, lock, or
+        mutation. All wrappers take ownership of frame by value so duplicate or
+        rejected losers release after cache_mutex_ is unlocked.
+    */
+    [[nodiscard]] Cnr3Status store_production_output_and_prune(
+        int stored_frame_number,
+        int activation_target_frame,
+        Cnr3OwnedFrameRef frame,
+        bool is_checkpoint,
+        std::uint64_t frame_byte_count,
+        Cnr3CombinedStoreAndPruneSummary& out_summary
+    );
+
+    [[nodiscard]] Cnr3Status store_as2_floor_and_prune(
+        int stored_frame_number,
+        int activation_target_frame,
+        Cnr3OwnedFrameRef frame,
+        bool is_checkpoint,
+        std::uint64_t frame_byte_count,
+        Cnr3CachePinList& pin_list,
+        Cnr3CombinedStoreAndPruneSummary& out_summary
+    );
+
+    [[nodiscard]] Cnr3Status store_recovery_hole_and_prune(
+        const Cnr3CacheRecoverySearchPlan& recovery_plan,
+        int hole_frame_number,
+        int activation_target_frame,
+        Cnr3OwnedFrameRef frame,
+        bool is_checkpoint,
+        std::uint64_t frame_byte_count,
+        Cnr3CachePinList& pin_list,
+        Cnr3CombinedStoreAndPruneSummary& out_summary
+    );
+
+    /*
         Lock-owning central single-slot remove operation.
 
         This is the CMS07-F.1A low-level detach primitive for future prune and
@@ -1198,6 +1288,17 @@ private:
         bool noncheckpoint_capacity_permits,
         std::size_t retain_checkpoint_count
     ) const noexcept;
+
+    [[nodiscard]] Cnr3Status store_owned_frame_and_prune_impl(
+        int stored_frame_number,
+        int activation_target_frame,
+        Cnr3OwnedFrameRef& frame,
+        bool is_checkpoint,
+        Cnr3CacheStoreKind store_kind,
+        std::uint64_t frame_byte_count,
+        Cnr3CachePinList* pin_list,
+        Cnr3CombinedStoreAndPruneSummary& out_summary
+    );
 
     /*
         Lock-protected store helpers.

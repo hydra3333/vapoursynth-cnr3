@@ -1,0 +1,627 @@
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 4735678..007594e 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -22,7 +22,7 @@
+     This string is for human diagnostics and build identification only. It must
+     not be used for control flow.
+ */
+-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.3-combined-live-store-prune-helper";
++inline constexpr const char* CNR3_EDIT_VERSION = "CNR3-DIAG.TINY-100-cache-profile-scaffold";
+ 
+ /*
+     CMS07-P.11C.2 live scene-change default.
+@@ -86,6 +86,23 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
+     must not be required for production correctness.
+ */
+ 
++/*
++    CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY -- behaviour-changing diagnostic
++    scaffold.
++
++    NOT a CNR3_DIAG_* gate: it changes cache eviction timing, so it must not
++    use a diagnostic-observation name. When defined, cnr3_cache_core.h selects
++    a precomputed small-but-safe TINY-100 cache profile so eviction fires on
++    short live diagnostic runs. The cache-core static_asserts re-prove the
++    safety invariants against the tiny profile at compile time.
++
++    OFF for production and for the committed production four-way selftest gate.
++    Uncomment only for an explicit diagnostic build. This scaffold is for the
++    diagnostics arc (D-SUM) enablement and is not required for production
++    correctness.
++*/
++// #define CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY 1
++
+ // ---------------------------------------------------------------------------------------------
+ // NOTE:    Comment out the relevant #define line(s) to
+ //          disable compute and/or print for this diagnostic.
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 9fae91e..04091a4 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -61,6 +61,21 @@
+     VapourSynth getFrame wiring.
+ */
+ 
++/*
++    Cache profile identity marker.
++
++    This is keyed off the same CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY macro
++    that gates the cache policy constants below, so the marker cannot drift
++    from the compiled constants. It is for human diagnostics, selftest
++    assertions, and future D-SUM summary headers only. Do not branch cache
++    behaviour on this string; the preprocessor macro is the only feature gate.
++*/
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "tiny-100";
++#else
++inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "normal";
++#endif
++
+ /*
+     The active cache ceiling is derived later from this nominal byte budget and
+     the actual output frame byte size, then clamped to the hard min/max below.
+@@ -76,8 +91,17 @@ inline constexpr std::uint64_t CNR3_CACHE_BYTE_BUDGET_BYTES =
+     5 x 60 + 48 = ~348; 1000 >> 348. If pruning can never reach target,
+     this rule is violated.
+ */
+-inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;
+-inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 40U;   // TINY-100 diagnostic profile.
++#else
++inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;  // NORMAL production profile.
++#endif
++
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 100U;   // TINY-100 diagnostic profile.
++#else
++inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;  // NORMAL production profile.
++#endif
+ 
+ /*
+     Non-checkpoint prune hysteresis factor, represented as an exact rational to
+@@ -98,9 +122,23 @@ inline constexpr std::size_t CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR = 10U;
+     material keeps the pool pinned at 48 with prune unable to reduce, raise it.
+     MIN_RETAIN unchanged at 10.
+ */
+-inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;
+-inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;
+-inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 3;  // TINY-100 diagnostic profile.
++#else
++inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10; // NORMAL production profile.
++#endif
++
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 4U;   // TINY-100 diagnostic profile.
++#else
++inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;  // NORMAL production profile.
++#endif
++
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 12U;  // TINY-100 diagnostic profile.
++#else
++inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // NORMAL production profile.
++#endif
+ 
+ /*
+     Hot-zone radii.
+@@ -115,8 +153,17 @@ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;
+     CR3 BACK_RADIUS ~= 5 x CHECKPOINT_INTERVAL; a zone covers about five grid
+     anchors. 50 = 5 x 10.
+ */
+-inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;
+-inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 3;   // TINY-100 diagnostic profile.
++#else
++inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;  // NORMAL production profile.
++#endif
++
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 15;  // TINY-100 diagnostic profile.
++#else
++inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production profile.
++#endif
+ inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
+     CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
+ 
+@@ -124,7 +171,11 @@ inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
+     Hot-zone count. MAX_HOT_ZONES scales with concurrent distinct access
+     regions, not thread count.
+ */
+-inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 2U;  // TINY-100 diagnostic profile.
++#else
++inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;  // NORMAL production profile.
++#endif
+ 
+ /*
+     CR1 JUMP_THRESHOLD is DERIVED = FORWARD_RADIUS + BACK_RADIUS + 1; never set
+@@ -139,7 +190,11 @@ inline constexpr int CNR3_CACHE_JUMP_THRESHOLD =
+     decay_margin bound: FORWARD_RADIUS <= decay_margin <= BACK_RADIUS
+     (10 <= 20 <= 50); far below active_ceiling.
+ */
+-inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 6;   // TINY-100 diagnostic profile.
++#else
++inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;  // NORMAL production profile.
++#endif
+ 
+ /*
+     Bounded-prune victim cap. This bounds one AS5 decide/detach pass; the later
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index d456315..c42eb31 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -301,6 +301,39 @@ namespace {
+         );
+     }
+ 
++    void cnr3_cache_core_selftest_skip_line(
++        const char* test_name
++    ) noexcept {
++        char message[256] = {};
++
++        const int written = std::snprintf(
++            message,
++            sizeof(message),
++            "SKIPPED under CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY: %s",
++            test_name != nullptr ? test_name : "(null)"
++        );
++
++        if (written < 0) {
++            cnr3_diag_write_line(
++                CNR3_SELFTEST_TRACE_INSTANCE_ID,
++                Cnr3DiagnosticLevel::warning,
++                CNR3_SELFTEST_TRACE_COMPONENT,
++                "SKIPPED under CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY: formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        message[sizeof(message) - 1U] = '\0';
++        cnr3_diag_write_line(
++            CNR3_SELFTEST_TRACE_INSTANCE_ID,
++            Cnr3DiagnosticLevel::info,
++            CNR3_SELFTEST_TRACE_COMPONENT,
++            message,
++            Cnr3StderrFlushPolicy::no_flush
++        );
++    }
++
+     void cnr3_cache_core_selftest_trace_candidate_order(
+         const std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order
+     ) noexcept {
+@@ -2140,6 +2173,10 @@ Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass(
+ 
+ 
+ Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("p11c5_scene_cut_checkpoint_recovery_anchor");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -2474,9 +2511,14 @@ Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor()
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_w1_checkpoint_retention_trigger() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("w1_checkpoint_retention_trigger");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -3041,6 +3083,7 @@ Cnr3Status cnr3_cache_core_selftest_w1_checkpoint_retention_trigger() noexcept {
+     );
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_central_remove_helper_lifecycle() noexcept {
+@@ -4036,15 +4079,49 @@ Cnr3Status cnr3_cache_core_selftest_unpinned_noncheckpoint_selection_lifecycle()
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    constexpr const char* expected_profile_name = "tiny-100";
++    constexpr std::size_t expected_active_ceiling_min = 40U;
++    constexpr std::size_t expected_active_ceiling_max = 100U;
++    constexpr int expected_checkpoint_interval = 3;
++    constexpr std::size_t expected_checkpoint_min_retain = 4U;
++    constexpr std::size_t expected_checkpoint_max_retain = 12U;
++    constexpr int expected_hot_zone_forward_radius = 3;
++    constexpr int expected_hot_zone_back_radius = 15;
++    constexpr std::size_t expected_max_hot_zones = 2U;
++    constexpr int expected_jump_threshold = 19;
++    constexpr int expected_hot_zone_decay_margin = 6;
++    constexpr std::size_t expected_max_protected_set = 48U;
++    constexpr std::size_t expected_checkpoint_grid_floor = 10U;
++#else
++    constexpr const char* expected_profile_name = "normal";
++    constexpr std::size_t expected_active_ceiling_min = 150U;
++    constexpr std::size_t expected_active_ceiling_max = 1000U;
++    constexpr int expected_checkpoint_interval = 10;
++    constexpr std::size_t expected_checkpoint_min_retain = 10U;
++    constexpr std::size_t expected_checkpoint_max_retain = 48U;
++    constexpr int expected_hot_zone_forward_radius = 10;
++    constexpr int expected_hot_zone_back_radius = 50;
++    constexpr std::size_t expected_max_hot_zones = 5U;
++    constexpr int expected_jump_threshold = 61;
++    constexpr int expected_hot_zone_decay_margin = 20;
++    constexpr std::size_t expected_max_protected_set = 348U;
++    constexpr std::size_t expected_checkpoint_grid_floor = 25U;
++#endif
++
++    if (std::strcmp(CNR3_CACHE_PROFILE_NAME, expected_profile_name) != 0) {
++        return Cnr3Status::invariant_violation;
++    }
++
+     if (CNR3_CACHE_BYTE_BUDGET_BYTES != 1073741824ULL) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES != 150U) {
++    if (CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES != expected_active_ceiling_min) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES != 1000U) {
++    if (CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES != expected_active_ceiling_max) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+@@ -4056,23 +4133,23 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_CHECKPOINT_INTERVAL != 10) {
++    if (CNR3_CACHE_CHECKPOINT_INTERVAL != expected_checkpoint_interval) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_CHECKPOINT_MIN_RETAIN != 10U) {
++    if (CNR3_CACHE_CHECKPOINT_MIN_RETAIN != expected_checkpoint_min_retain) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_CHECKPOINT_MAX_RETAIN != 48U) {
++    if (CNR3_CACHE_CHECKPOINT_MAX_RETAIN != expected_checkpoint_max_retain) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS != 10) {
++    if (CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS != expected_hot_zone_forward_radius) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_HOT_ZONE_BACK_RADIUS != 50) {
++    if (CNR3_CACHE_HOT_ZONE_BACK_RADIUS != expected_hot_zone_back_radius) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+@@ -4083,7 +4160,7 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_MAX_HOT_ZONES != 5U) {
++    if (CNR3_CACHE_MAX_HOT_ZONES != expected_max_hot_zones) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+@@ -4096,11 +4173,11 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_JUMP_THRESHOLD != 61) {
++    if (CNR3_CACHE_JUMP_THRESHOLD != expected_jump_threshold) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_HOT_ZONE_DECAY_MARGIN != 20) {
++    if (CNR3_CACHE_HOT_ZONE_DECAY_MARGIN != expected_hot_zone_decay_margin) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+@@ -4130,7 +4207,7 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE != 348U) {
++    if (CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE != expected_max_protected_set) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+@@ -4141,7 +4218,7 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    if (CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE != 25U) {
++    if (CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE != expected_checkpoint_grid_floor) {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+@@ -4161,7 +4238,6 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+ 
+     return Cnr3Status::ok;
+ }
+-
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_data_model() noexcept {
+     const Cnr3OutputCacheCore cache{};
+ 
+@@ -6442,6 +6518,10 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_retention_boundary_lifecycle() no
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("hot_zone_dsum11_counter_model");
++    return Cnr3Status::ok;
++#else
+ #if !defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+     return Cnr3Status::ok;
+ #else
+@@ -6599,6 +6679,7 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept {
+ 
+     return Cnr3Status::ok;
+ #endif
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_prune_protection_selection_lifecycle() noexcept {
+@@ -7855,19 +7936,48 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+         return Cnr3Status::ok;
+     };
+ 
++    const auto clamp_active_ceiling = [](std::uint64_t frame_byte_count) noexcept -> std::size_t {
++        const std::uint64_t unclamped_ceiling =
++            CNR3_CACHE_BYTE_BUDGET_BYTES / frame_byte_count;
++
++        if (unclamped_ceiling < CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES) {
++            return CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES;
++        }
++
++        if (unclamped_ceiling > CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES) {
++            return CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES;
++        }
++
++        return static_cast<std::size_t>(unclamped_ceiling);
++    };
++
++    const auto overflow_trigger_for_ceiling = [](std::size_t ceiling) noexcept -> std::size_t {
++        return
++            (ceiling * CNR3_CACHE_OVERFLOW_FACTOR_NUMERATOR) /
++            CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR;
++    };
++
+     const std::uint64_t one_mebibyte = 1024ULL * 1024ULL;
+     const std::uint64_t two_mebibytes = 2ULL * 1024ULL * 1024ULL;
+ 
++    const std::size_t one_mib_ceiling = clamp_active_ceiling(one_mebibyte);
++    const std::size_t one_mib_trigger = overflow_trigger_for_ceiling(one_mib_ceiling);
++    const std::size_t two_mib_ceiling = clamp_active_ceiling(two_mebibytes);
++    const std::size_t two_mib_trigger = overflow_trigger_for_ceiling(two_mib_ceiling);
++    const std::size_t oversize_ceiling =
++        clamp_active_ceiling(CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL);
++    const std::size_t oversize_trigger = overflow_trigger_for_ceiling(oversize_ceiling);
++
+     if (
+         expect_decision(
+             one_mebibyte,
+-            1100U,
++            one_mib_trigger,
+             0U,
+             CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+-            1000U,
+-            1100U,
++            one_mib_ceiling,
++            one_mib_trigger,
+             false,
+-            1100U,
++            one_mib_trigger,
+             0U,
+             false,
+             0U,
+@@ -7880,14 +7990,14 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+     if (
+         expect_decision(
+             one_mebibyte,
+-            1101U,
++            one_mib_trigger + 1U,
+             0U,
+             CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+-            1000U,
+-            1100U,
++            one_mib_ceiling,
++            one_mib_trigger,
+             true,
+-            1000U,
+-            101U,
++            one_mib_ceiling,
++            one_mib_trigger + 1U - one_mib_ceiling,
+             false,
+             0U,
+             0U
+@@ -7899,13 +8009,13 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+     if (
+         expect_decision(
+             two_mebibytes,
+-            563U,
++            two_mib_trigger,
+             0U,
+             CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+-            512U,
+-            563U,
++            two_mib_ceiling,
++            two_mib_trigger,
+             false,
+-            563U,
++            two_mib_trigger,
+             0U,
+             false,
+             0U,
+@@ -7918,14 +8028,14 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+     if (
+         expect_decision(
+             two_mebibytes,
+-            564U,
++            two_mib_trigger + 1U,
+             0U,
+             CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+-            512U,
+-            563U,
++            two_mib_ceiling,
++            two_mib_trigger,
+             true,
+-            512U,
+-            52U,
++            two_mib_ceiling,
++            two_mib_trigger + 1U - two_mib_ceiling,
+             false,
+             0U,
+             0U
+@@ -7937,13 +8047,13 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+     if (
+         expect_decision(
+             CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL,
+-            165U,
++            oversize_trigger,
+             0U,
+             CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+-            150U,
+-            165U,
++            oversize_ceiling,
++            oversize_trigger,
+             false,
+-            165U,
++            oversize_trigger,
+             0U,
+             false,
+             0U,
+@@ -7956,14 +8066,14 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+     if (
+         expect_decision(
+             CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL,
+-            166U,
++            oversize_trigger + 1U,
+             0U,
+             CNR3_CACHE_CHECKPOINT_MIN_RETAIN,
+-            150U,
+-            165U,
++            oversize_ceiling,
++            oversize_trigger,
+             true,
+-            150U,
+-            16U,
++            oversize_ceiling,
++            oversize_trigger + 1U - oversize_ceiling,
+             false,
+             0U,
+             0U
+@@ -7976,28 +8086,23 @@ Cnr3Status cnr3_cache_core_selftest_prune_trigger_decision_hysteresis() noexcept
+         "G.10A prune-trigger decision hysteresis scenario"
+     );
+     cnr3_cache_core_selftest_trace_line(
+-        "    1 MiB frame -> active_ceiling 1000, trigger 1100"
++        "    profile-aware active-ceiling and trigger vectors passed"
+     );
+     cnr3_cache_core_selftest_trace_line(
+-        "    slot_count 1100 -> no prune; slot_count 1101 -> prune target 1000, remove 101"
++        "    boundary slot_count == trigger proves no prune"
+     );
+     cnr3_cache_core_selftest_trace_line(
+-        "    2 MiB frame -> active_ceiling 512, trigger 563"
+-    );
+-    cnr3_cache_core_selftest_trace_line(
+-        "    slot_count 563 -> no prune; slot_count 564 -> prune target 512, remove 52"
+-    );
+-    cnr3_cache_core_selftest_trace_line(
+-        "    oversize frame -> active_ceiling 150, trigger 165"
+-    );
+-    cnr3_cache_core_selftest_trace_line(
+-        "    slot_count 165 -> no prune; slot_count 166 -> prune target 150, remove 16"
++        "    boundary slot_count == trigger + 1 proves prune target and remove count"
+     );
+ 
+     return Cnr3Status::ok;
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("as5_prune_execution_decide_detach_free");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -8412,9 +8517,14 @@ Cnr3Status cnr3_cache_core_selftest_as5_prune_execution_decide_detach_free() noe
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("as1_bounded_recovery_search_scaffold");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -8778,9 +8888,14 @@ Cnr3Status cnr3_cache_core_selftest_as1_bounded_recovery_search_scaffold() noexc
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("as1_recovery_anchor_pin_record");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -9021,6 +9136,7 @@ Cnr3Status cnr3_cache_core_selftest_as1_recovery_anchor_pin_record() noexcept {
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_as2_recovery_store_consumer() noexcept {
+diff --git a/src/cnr3_cache_core_selftest_main.cpp b/src/cnr3_cache_core_selftest_main.cpp
+index e330502..160ff03 100644
+--- a/src/cnr3_cache_core_selftest_main.cpp
++++ b/src/cnr3_cache_core_selftest_main.cpp
+@@ -2,6 +2,8 @@
+ 
+ #include "cnr3_cache_core_selftest.h"
+ 
++#include "cnr3_cache_core.h"
++
+ #include "cnr3_diagnostics.h"
+ 
+ #include <cstdio>
+@@ -102,6 +104,7 @@ namespace {
+     ) noexcept {
+         cnr3_selftest_write_summary_line("CNR3 cache-core selftest runner");
+         cnr3_selftest_write_summary_text_line("edit_version: ", CNR3_EDIT_VERSION);
++        cnr3_selftest_write_summary_text_line("cache_profile: ", CNR3_CACHE_PROFILE_NAME);
+         cnr3_selftest_write_summary_line("");
+ 
+         cnr3_selftest_write_summary_line("summary:");

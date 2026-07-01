@@ -14,6 +14,16 @@
 
     A behaviour-changing scaffold is not a diagnostic. It must use the project's
     behavioural-scaffold rules and must not use a CNR3_DIAG_* name.
+
+    BUILD TARGET: AVX2 REQUIRED.
+    This project is built with /arch:AVX2 (see cnr3.vcxproj, both Debug and Release:
+    EnableEnhancedInstructionSet = AdvancedVectorExtensions2). It targets CPUs with AVX2:
+    Intel Haswell (2013) / AMD Excavator-Zen (2015) or newer. This is a DELIBERATE, whole-DLL
+    requirement, not an accident — do not remove the /arch:AVX2 setting without a decision.
+    The DLL will HARD-FAULT (illegal instruction) on a pre-AVX2 CPU, possibly at load, with no
+    graceful message; the AVX2 requirement is therefore documented in the README and release notes.
+    (/arch:AVX2 also enables AVX, FMA, and BMI/BMI2. We are integer/bit-exact throughout, so FMA
+    does not affect results — the four-way cache-core selftest at 56/56 proves neutrality.)
 */
 
 /*

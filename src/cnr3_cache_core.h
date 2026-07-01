@@ -62,6 +62,21 @@
 */
 
 /*
+    Cache profile identity marker.
+
+    This is keyed off the same CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY macro
+    that gates the cache policy constants below, so the marker cannot drift
+    from the compiled constants. It is for human diagnostics, selftest
+    assertions, and future D-SUM summary headers only. Do not branch cache
+    behaviour on this string; the preprocessor macro is the only feature gate.
+*/
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "tiny-100";
+#else
+inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "normal";
+#endif
+
+/*
     The active cache ceiling is derived later from this nominal byte budget and
     the actual output frame byte size, then clamped to the hard min/max below.
 */
@@ -76,8 +91,17 @@ inline constexpr std::uint64_t CNR3_CACHE_BYTE_BUDGET_BYTES =
     5 x 60 + 48 = ~348; 1000 >> 348. If pruning can never reach target,
     this rule is violated.
 */
-inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;
-inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 40U;   // TINY-100 diagnostic profile.
+#else
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;  // NORMAL production profile.
+#endif
+
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 100U;   // TINY-100 diagnostic profile.
+#else
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;  // NORMAL production profile.
+#endif
 
 /*
     Non-checkpoint prune hysteresis factor, represented as an exact rational to
@@ -98,9 +122,23 @@ inline constexpr std::size_t CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR = 10U;
     material keeps the pool pinned at 48 with prune unable to reduce, raise it.
     MIN_RETAIN unchanged at 10.
 */
-inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;
-inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;
-inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 3;  // TINY-100 diagnostic profile.
+#else
+inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10; // NORMAL production profile.
+#endif
+
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 4U;   // TINY-100 diagnostic profile.
+#else
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;  // NORMAL production profile.
+#endif
+
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 12U;  // TINY-100 diagnostic profile.
+#else
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // NORMAL production profile.
+#endif
 
 /*
     Hot-zone radii.
@@ -115,8 +153,17 @@ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;
     CR3 BACK_RADIUS ~= 5 x CHECKPOINT_INTERVAL; a zone covers about five grid
     anchors. 50 = 5 x 10.
 */
-inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;
-inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 3;   // TINY-100 diagnostic profile.
+#else
+inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;  // NORMAL production profile.
+#endif
+
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 15;  // TINY-100 diagnostic profile.
+#else
+inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production profile.
+#endif
 inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
     CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
 
@@ -124,7 +171,11 @@ inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
     Hot-zone count. MAX_HOT_ZONES scales with concurrent distinct access
     regions, not thread count.
 */
-inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 2U;  // TINY-100 diagnostic profile.
+#else
+inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;  // NORMAL production profile.
+#endif
 
 /*
     CR1 JUMP_THRESHOLD is DERIVED = FORWARD_RADIUS + BACK_RADIUS + 1; never set
@@ -139,7 +190,11 @@ inline constexpr int CNR3_CACHE_JUMP_THRESHOLD =
     decay_margin bound: FORWARD_RADIUS <= decay_margin <= BACK_RADIUS
     (10 <= 20 <= 50); far below active_ceiling.
 */
-inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 6;   // TINY-100 diagnostic profile.
+#else
+inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;  // NORMAL production profile.
+#endif
 
 /*
     Bounded-prune victim cap. This bounds one AS5 decide/detach pass; the later

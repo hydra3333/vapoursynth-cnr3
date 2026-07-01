@@ -2,6 +2,8 @@
 
 #include "cnr3_cache_core_selftest.h"
 
+#include "cnr3_cache_core.h"
+
 #include "cnr3_diagnostics.h"
 
 #include <cstdio>
@@ -102,6 +104,7 @@ namespace {
     ) noexcept {
         cnr3_selftest_write_summary_line("CNR3 cache-core selftest runner");
         cnr3_selftest_write_summary_text_line("edit_version: ", CNR3_EDIT_VERSION);
+        cnr3_selftest_write_summary_text_line("cache_profile: ", CNR3_CACHE_PROFILE_NAME);
         cnr3_selftest_write_summary_line("");
 
         cnr3_selftest_write_summary_line("summary:");

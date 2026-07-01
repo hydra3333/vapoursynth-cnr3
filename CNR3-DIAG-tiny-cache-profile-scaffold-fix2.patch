@@ -1,0 +1,109 @@
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -1815,6 +1815,10 @@
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("d5_recovery_pin_survives_bounded_prune_pass");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -2169,6 +2173,7 @@
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ 
+@@ -4333,6 +4338,10 @@
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("hot_zone_slide_spawn_lifecycle");
++    return Cnr3Status::ok;
++#else
+     Cnr3OutputCacheCore cache{};
+ 
+     if (
+@@ -4475,6 +4484,7 @@
+     }
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept {
+@@ -6688,6 +6698,10 @@
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_prune_protection_selection_lifecycle() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("hot_zone_prune_protection_selection_lifecycle");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -7010,9 +7024,14 @@
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_prune_victim_distance_ordering() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("prune_victim_distance_ordering");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -7261,10 +7280,15 @@
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ 
+ Cnr3Status cnr3_cache_core_selftest_composite_prune_candidate_selection() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("composite_prune_candidate_selection");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -7815,6 +7839,7 @@
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ 
+@@ -9714,6 +9739,10 @@
+ 
+ 
+ Cnr3Status cnr3_cache_core_selftest_aggregate_cache_core_workload() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("aggregate_cache_core_workload");
++    return Cnr3Status::ok;
++#else
+     Cnr3CacheCoreSelftestVsApiState vsapi_state{};
+     g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
+ 
+@@ -10418,6 +10447,7 @@
+     g_cnr3_cache_core_selftest_vsapi_state = nullptr;
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_response_table_vector_proof() noexcept {

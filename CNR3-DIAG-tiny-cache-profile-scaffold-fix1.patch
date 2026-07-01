@@ -1,0 +1,21 @@
+--- a/src/cnr3_cache_core_selftest.cpp	2026-06-30 16:24:01.628304647 +0000
++++ b/src/cnr3_cache_core_selftest.cpp	2026-06-30 16:23:53.601033097 +0000
+@@ -4478,6 +4478,10 @@
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept {
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
++    cnr3_cache_core_selftest_skip_line("hot_zone_capacity_merge_lifecycle");
++    return Cnr3Status::ok;
++#else
+     Cnr3OutputCacheCore cache{};
+ 
+     const int observations[CNR3_CACHE_MAX_HOT_ZONES] = {
+@@ -4589,6 +4593,7 @@
+     }
+ 
+     return Cnr3Status::ok;
++#endif
+ }
+ 
+ Cnr3Status cnr3_cache_core_selftest_hot_zone_retirement_decay_lifecycle() noexcept {

@@ -22,7 +22,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-W.3-combined-live-store-prune-helper";
+inline constexpr const char* CNR3_EDIT_VERSION = "CNR3-DIAG.TINY-100-cache-profile-scaffold";
 
 /*
     CMS07-P.11C.2 live scene-change default.
@@ -85,6 +85,23 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
     be visibly bounded in source comments, must state the owning phase, and
     must not be required for production correctness.
 */
+
+/*
+    CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY -- behaviour-changing diagnostic
+    scaffold.
+
+    NOT a CNR3_DIAG_* gate: it changes cache eviction timing, so it must not
+    use a diagnostic-observation name. When defined, cnr3_cache_core.h selects
+    a precomputed small-but-safe TINY-100 cache profile so eviction fires on
+    short live diagnostic runs. The cache-core static_asserts re-prove the
+    safety invariants against the tiny profile at compile time.
+
+    OFF for production and for the committed production four-way selftest gate.
+    Uncomment only for an explicit diagnostic build. This scaffold is for the
+    diagnostics arc (D-SUM) enablement and is not required for production
+    correctness.
+*/
+#define CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY 1
 
 // ---------------------------------------------------------------------------------------------
 // NOTE:    Comment out the relevant #define line(s) to

@@ -1,0 +1,305 @@
+diff --git a/src/cnr3_arAllFramesReady.cpp b/src/cnr3_arAllFramesReady.cpp
+index 6e20b91..25c4cc5 100644
+--- a/src/cnr3_arAllFramesReady.cpp
++++ b/src/cnr3_arAllFramesReady.cpp
+@@ -562,10 +562,11 @@ void cnr3_trace_live_combined_store_and_prune(
+ #if defined(CNR3_KEYSTONE_DEV_TRACE)
+     std::fprintf(
+         stderr,
+-        "[KDT] instance=%d target_N=%d stored_frame=%d kind=%s "
++        "[KDT] instance=%d profile=%s target_N=%d stored_frame=%d kind=%s "
+         "store=%s retire=%s prune=%s "
+         "cap_trigger=%d ckpt_trigger=%d selected=%zu detached=%zu\n",
+         data.config.instance_id.value,
++        CNR3_CACHE_PROFILE_NAME,
+         summary.activation_target_frame,
+         summary.stored_frame_number,
+         cnr3_cache_store_kind_name(summary.store_kind),
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index 303f09d..182c211 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -2177,6 +2177,272 @@ Cnr3Status cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass(
+ }
+ 
+ 
++Cnr3Status cnr3_cache_core_selftest_profile_agnostic_protection_under_eviction() noexcept {
++    Cnr3CacheCoreSelftestVsApiState vsapi_state{};
++    g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
++
++    constexpr std::uint64_t prune_frame_byte_count =
++        CNR3_CACHE_BYTE_BUDGET_BYTES + 1ULL;
++    constexpr std::size_t retain_checkpoint_count = 0U;
++    constexpr std::size_t max_remove_count = 1U;
++
++    auto fail = []() noexcept -> Cnr3Status {
++        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++        return Cnr3Status::invariant_violation;
++    };
++
++    auto store_frame = [](Cnr3OutputCacheCore& cache,
++        int frame_number,
++        const VSFrame* frame,
++        const VSAPI* vsapi
++    ) noexcept -> Cnr3Status {
++        Cnr3OwnedFrameRef owned_frame{};
++
++        const Cnr3Status adopt_status =
++            owned_frame.reset_to_owned_frame(frame, vsapi);
++
++        if (!cnr3_status_is_ok(adopt_status)) {
++            return adopt_status;
++        }
++
++        const Cnr3Status store_status =
++            cache.store_noncheckpoint_owned_frame(
++                frame_number,
++                std::move(owned_frame)
++            );
++
++        if (!cnr3_status_is_ok(store_status)) {
++            return store_status;
++        }
++
++        if (owned_frame.has_frame()) {
++            return Cnr3Status::ownership_violation;
++        }
++
++        return Cnr3Status::ok;
++    };
++
++    auto lookup_present = [](Cnr3OutputCacheCore& cache,
++        int frame_number,
++        const VSFrame* expected_frame,
++        const VSAPI* vsapi
++    ) noexcept -> bool {
++        Cnr3OwnedFrameRef lookup{};
++
++        const Cnr3Status lookup_status =
++            cache.lookup_frame_and_add_ref(frame_number, vsapi, lookup);
++
++        const bool present =
++            lookup_status == Cnr3Status::ok &&
++            lookup.has_frame() &&
++            lookup.get() == expected_frame;
++
++        lookup.reset();
++
++        return present;
++    };
++
++    auto lookup_absent = [](Cnr3OutputCacheCore& cache,
++        int frame_number,
++        const VSAPI* vsapi
++    ) noexcept -> bool {
++        Cnr3OwnedFrameRef lookup{};
++
++        const Cnr3Status lookup_status =
++            cache.lookup_frame_and_add_ref(frame_number, vsapi, lookup);
++
++        const bool absent =
++            lookup_status == Cnr3Status::not_found &&
++            !lookup.has_frame();
++
++        lookup.reset();
++
++        return absent;
++    };
++
++    Cnr3CachePruneTriggerDecision trigger_decision{};
++
++    if (
++        cnr3_calculate_cache_prune_trigger_decision(
++            prune_frame_byte_count,
++            0U,
++            0U,
++            retain_checkpoint_count,
++            trigger_decision
++        ) != Cnr3Status::ok
++        ) {
++        return fail();
++    }
++
++    const std::size_t stored_frame_count =
++        trigger_decision.overflow_trigger_frame_count + 1U;
++
++    if (
++        stored_frame_count <= 3U ||
++        stored_frame_count >
++            static_cast<std::size_t>(std::numeric_limits<int>::max())
++        ) {
++        return fail();
++    }
++
++    const int pinned_frame_number = static_cast<int>(stored_frame_count - 1U);
++    const int hot_zone_frame_number = static_cast<int>(stored_frame_count / 2U);
++
++    if (
++        pinned_frame_number == hot_zone_frame_number ||
++        !cnr3_frame_number_is_valid(pinned_frame_number) ||
++        !cnr3_frame_number_is_valid(hot_zone_frame_number)
++        ) {
++        return fail();
++    }
++
++    std::vector<int> frame_storage(stored_frame_count);
++
++    if (frame_storage.size() != stored_frame_count) {
++        return fail();
++    }
++
++    for (std::size_t i = 0; i < stored_frame_count; ++i) {
++        frame_storage[i] = static_cast<int>(3000U + i);
++    }
++
++    const VSFrame* pinned_frame =
++        reinterpret_cast<const VSFrame*>(&frame_storage[pinned_frame_number]);
++    const VSFrame* hot_zone_frame =
++        reinterpret_cast<const VSFrame*>(&frame_storage[hot_zone_frame_number]);
++
++    VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++    Cnr3OutputCacheCore cache{};
++    Cnr3CachePinList pin_list{};
++
++    for (std::size_t i = 0; i < stored_frame_count; ++i) {
++        const int frame_number = static_cast<int>(i);
++        const VSFrame* frame =
++            reinterpret_cast<const VSFrame*>(&frame_storage[i]);
++
++        if (store_frame(cache, frame_number, frame, &vsapi) != Cnr3Status::ok) {
++            return fail();
++        }
++    }
++
++    if (
++        cache.slot_count() != stored_frame_count ||
++        cache.checkpoint_count() != 0U ||
++        cache.total_pin_count() != 0
++        ) {
++        return fail();
++    }
++
++    if (cache.record_hot_zone_observation(hot_zone_frame_number) != Cnr3Status::ok) {
++        return fail();
++    }
++
++    if (!cache.frame_is_inside_hot_zone(hot_zone_frame_number)) {
++        return fail();
++    }
++
++    if (cache.lookup_frame_and_record_pin(pinned_frame_number, pin_list) != Cnr3Status::ok) {
++        return fail();
++    }
++
++    if (pin_list.pin_count() != 1U || cache.total_pin_count() != 1) {
++        return fail();
++    }
++
++    Cnr3CachePruneExecutionSummary prune_summary{};
++
++    if (
++        cache.execute_bounded_prune_pass(
++            prune_frame_byte_count,
++            retain_checkpoint_count,
++            max_remove_count,
++            prune_summary
++        ) != Cnr3Status::ok
++        ) {
++        return fail();
++    }
++
++    if (
++        !prune_summary.trigger_decision.prune_is_required ||
++        prune_summary.trigger_decision.current_slot_count != stored_frame_count ||
++        prune_summary.bounded_remove_limit != max_remove_count ||
++        prune_summary.selected_candidate_count != 1U ||
++        prune_summary.detached_count != 1U ||
++        cache.slot_count() != stored_frame_count - 1U ||
++        cache.checkpoint_count() != 0U ||
++        pin_list.pin_count() != 1U ||
++        cache.total_pin_count() != 1
++        ) {
++        return fail();
++    }
++
++    if (
++        !lookup_present(cache, pinned_frame_number, pinned_frame, &vsapi) ||
++        !lookup_present(cache, hot_zone_frame_number, hot_zone_frame, &vsapi)
++        ) {
++        return fail();
++    }
++
++    bool evicted_unprotected_frame = false;
++
++    for (std::size_t i = 0; i < stored_frame_count; ++i) {
++        const int frame_number = static_cast<int>(i);
++
++        if (
++            frame_number == pinned_frame_number ||
++            frame_number == hot_zone_frame_number
++            ) {
++            continue;
++        }
++
++        if (lookup_absent(cache, frame_number, &vsapi)) {
++            evicted_unprotected_frame = true;
++            break;
++        }
++    }
++
++    if (!evicted_unprotected_frame) {
++        return fail();
++    }
++
++    if (pin_list.discharge_all(cache) != Cnr3Status::ok) {
++        return fail();
++    }
++
++    if (!pin_list.empty() || cache.total_pin_count() != 0) {
++        return fail();
++    }
++
++    if (cache.clear() != Cnr3Status::ok) {
++        return fail();
++    }
++
++    if (!cache.empty() || cache.total_pin_count() != 0) {
++        return fail();
++    }
++
++    cnr3_cache_core_selftest_trace_line(
++        "DIAG tiny/profile-agnostic protection-under-eviction scenario"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    trigger and store count are derived from the active profile constants"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    pinned frame survives a bounded prune that detaches another slot"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    hot-zone-covered frame survives the same bounded prune"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    at least one unprotected frame is absent after prune, proving non-vacuity"
++    );
++
++    g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++
++    return Cnr3Status::ok;
++}
++
++
+ Cnr3Status cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor() noexcept {
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+     cnr3_cache_core_selftest_skip_line("p11c5_scene_cut_checkpoint_recovery_anchor");
+@@ -16266,6 +16532,10 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+             "d5_recovery_pin_survives_bounded_prune_pass",
+             cnr3_cache_core_selftest_d5_recovery_pin_survives_bounded_prune_pass
+         },
++        {
++            "profile_agnostic_protection_under_eviction",
++            cnr3_cache_core_selftest_profile_agnostic_protection_under_eviction
++        },
+         {
+             "p11c5_scene_cut_checkpoint_recovery_anchor",
+             cnr3_cache_core_selftest_p11c5_scene_cut_checkpoint_recovery_anchor

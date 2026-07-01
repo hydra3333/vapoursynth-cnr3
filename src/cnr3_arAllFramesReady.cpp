@@ -562,10 +562,11 @@ void cnr3_trace_live_combined_store_and_prune(
 #if defined(CNR3_KEYSTONE_DEV_TRACE)
     std::fprintf(
         stderr,
-        "[KDT] instance=%d target_N=%d stored_frame=%d kind=%s "
+        "[KDT] instance=%d profile=%s target_N=%d stored_frame=%d kind=%s "
         "store=%s retire=%s prune=%s "
         "cap_trigger=%d ckpt_trigger=%d selected=%zu detached=%zu\n",
         data.config.instance_id.value,
+        CNR3_CACHE_PROFILE_NAME,
         summary.activation_target_frame,
         summary.stored_frame_number,
         cnr3_cache_store_kind_name(summary.store_kind),

@@ -17,7 +17,9 @@
     <ClCompile Include="..\..\src\cnr3_cache_core_selftest.cpp" />
     <ClCompile Include="..\..\src\cnr3_cache_diagnostics.cpp" />
     <ClCompile Include="..\..\src\cnr3_diagnostics.cpp" />
-    <ClCompile Include="..\..\src\cnr3_frame_processing.cpp" />
+    <ClCompile Include="..\..\src\cnr3_frame_processing.cpp">
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">/Qvec-report:2 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="..\..\src\cnr3_instance_config.cpp" />
     <ClCompile Include="..\..\src\cnr3_memory_diagnostics.cpp" />
     <ClCompile Include="..\..\src\cnr3_owned_frame_ref.cpp" />

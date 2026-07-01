@@ -49,7 +49,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
         per-frame lines:       [KDT]
         end-of-run summary:    [KDT-SUMMARY]
 */
-#define CNR3_KEYSTONE_DEV_TRACE 1
+//#define CNR3_KEYSTONE_DEV_TRACE 1
 
 
 /*
@@ -101,7 +101,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
     diagnostics arc (D-SUM) enablement and is not required for production
     correctness.
 */
-#define CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY 1
+//#define CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY 1
 
 // ---------------------------------------------------------------------------------------------
 // NOTE:    Comment out the relevant #define line(s) to

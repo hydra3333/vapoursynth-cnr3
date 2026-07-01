@@ -479,6 +479,53 @@ void cnr3_publish_vapoursynth_frame_triplet_summary(
     return Cnr3Status::ok;
 }
 
+/*
+    Convert scalar samples into a throwaway native staging buffer. This deliberately
+    preserves per-sample native-store validation, but it does not allocate a second
+    all-or-nothing buffer: the caller has already allocated staged_bytes and the real
+    destination frame is still protected by the later combined Y/U/V commit gate.
+    Use cnr3_copy_scalar_buffer_to_native_plane when writing to a real destination.
+*/
+[[nodiscard]] Cnr3Status cnr3_convert_scalar_plane_into_native_staging_bytes(
+    const Cnr3ConstPlaneBufferView& scalar_plane,
+    Cnr3MutableNativePlaneByteView& staged_plane
+) noexcept {
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        staged_plane.bits_per_sample,
+        storage_bytes
+    );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    if (
+        !cnr3_const_plane_view_is_valid(scalar_plane) ||
+        !cnr3_mutable_native_plane_byte_view_is_valid(staged_plane, storage_bytes) ||
+        !cnr3_native_plane_dimensions_match(scalar_plane, staged_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    for (int y = 0; y < scalar_plane.height; ++y) {
+        for (int x = 0; x < scalar_plane.width; ++x) {
+            const Cnr3Status sample_status = cnr3_store_native_plane_sample(
+                staged_plane,
+                x,
+                y,
+                cnr3_plane_sample_at(scalar_plane, x, y)
+            );
+
+            if (sample_status != Cnr3Status::ok) {
+                return sample_status;
+            }
+        }
+    }
+
+    return Cnr3Status::ok;
+}
+
 [[nodiscard]] Cnr3Status cnr3_stage_scalar_plane_to_native_bytes(
     const Cnr3ConstPlaneBufferView& scalar_plane,
     const Cnr3MutableNativePlaneByteView& destination_shape,
@@ -511,7 +558,10 @@ void cnr3_publish_vapoursynth_frame_triplet_summary(
         destination_shape.bits_per_sample
     };
 
-    return cnr3_copy_scalar_buffer_to_native_plane(scalar_plane, staged_plane);
+    return cnr3_convert_scalar_plane_into_native_staging_bytes(
+        scalar_plane,
+        staged_plane
+    );
 }
 
 /*

@@ -1,0 +1,71 @@
+diff --git a/src/cnr3_frame_processing.cpp b/src/cnr3_frame_processing.cpp
+index d25a37f..5d667cc 100644
+--- a/src/cnr3_frame_processing.cpp
++++ b/src/cnr3_frame_processing.cpp
+@@ -2210,21 +2210,44 @@ Cnr3Status cnr3_copy_native_plane_to_scalar_buffer(
+ 
+     const auto* base_bytes = static_cast<const std::uint8_t*>(native_plane.data);
+ 
+-    if (storage_bytes == 1) {
++    if (storage_bytes == 2) {
++        unsigned int out_of_range_sample_seen = 0;
++        const std::uint16_t sample_peak_u16 = static_cast<std::uint16_t>(sample_peak);
++
+         for (int y = 0; y < native_plane.height; ++y) {
+             const auto* row = base_bytes +
+                 (static_cast<std::size_t>(y) *
+                     static_cast<std::size_t>(native_plane.stride_bytes));
+ 
+             for (int x = 0; x < native_plane.width; ++x) {
+-                const int sample = static_cast<int>(row[x]);
++                std::uint16_t native_sample = 0;
++                // Preserve the previous unaligned-safe two-byte native load.
++                std::memcpy(
++                    &native_sample,
++                    row + (static_cast<std::size_t>(x) * sizeof(native_sample)),
++                    sizeof(native_sample)
++                );
+ 
+-                if (!cnr3_value_is_inclusive_range(sample, 0, sample_peak)) {
+-                    return Cnr3Status::invalid_argument;
+-                }
++                out_of_range_sample_seen |=
++                    static_cast<unsigned int>(native_sample > sample_peak_u16);
++            }
++        }
++
++        if (out_of_range_sample_seen != 0U) {
++            return Cnr3Status::invalid_argument;
++        }
++    }
+ 
++    if (storage_bytes == 1) {
++        // For the 8-bit storage path, uint8_t already spans exactly [0, 255].
++        for (int y = 0; y < native_plane.height; ++y) {
++            const auto* row = base_bytes +
++                (static_cast<std::size_t>(y) *
++                    static_cast<std::size_t>(native_plane.stride_bytes));
++
++            for (int x = 0; x < native_plane.width; ++x) {
+                 resolved_samples[static_cast<std::size_t>((y * native_plane.width) + x)] =
+-                    sample;
++                    static_cast<int>(row[x]);
+             }
+         }
+     } else {
+@@ -2242,14 +2265,8 @@ Cnr3Status cnr3_copy_native_plane_to_scalar_buffer(
+                     sizeof(native_sample)
+                 );
+ 
+-                const int sample = static_cast<int>(native_sample);
+-
+-                if (!cnr3_value_is_inclusive_range(sample, 0, sample_peak)) {
+-                    return Cnr3Status::invalid_argument;
+-                }
+-
+                 resolved_samples[static_cast<std::size_t>((y * native_plane.width) + x)] =
+-                    sample;
++                    static_cast<int>(native_sample);
+             }
+         }
+     }

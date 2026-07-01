@@ -1,0 +1,111 @@
+diff --git a/src/cnr3_frame_processing.cpp b/src/cnr3_frame_processing.cpp
+index 58a153b..d25a37f 100644
+--- a/src/cnr3_frame_processing.cpp
++++ b/src/cnr3_frame_processing.cpp
+@@ -2470,6 +2470,16 @@ Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(
+         return Cnr3Status::invalid_argument;
+     }
+ 
++    int sample_peak = 0;
++    const Cnr3Status peak_status = cnr3_sample_peak_for_bit_depth(
++        bits_per_sample,
++        sample_peak
++    );
++
++    if (peak_status != Cnr3Status::ok) {
++        return peak_status;
++    }
++
+     const int sample_count = expected_output_width * expected_output_height;
+     std::vector<int> resolved_outputs;
+ 
+@@ -2479,42 +2489,62 @@ Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(
+         return Cnr3Status::allocation_failed;
+     }
+ 
++    const int* const source_samples = source_luma_plane.samples;
++    const int source_stride = source_luma_plane.stride;
++    const int source_width = source_luma_plane.width;
++    const int source_height = source_luma_plane.height;
++
+     for (int y = 0; y < expected_output_height; ++y) {
++        const int y0 = y << sub_sampling_h;
++
++        if (y0 >= source_height) {
++            return Cnr3Status::invalid_argument;
++        }
++
++        /*
++            Preserve the asymmetric vsCnr2-compatible tap geometry exactly:
++            x1 intentionally uses x0 + 1 when available, even when
++            sub_sampling_w is 0, while y1 uses y0 + sub_sampling_h. Do not
++            symmetrise these rules; 4:4:4 still reads horizontal neighbours.
++        */
++        const int y1 = (y0 + sub_sampling_h < source_height) ?
++            (y0 + sub_sampling_h) : y0;
++
++        const int* const row0 = source_samples +
++            (static_cast<std::size_t>(y0) * static_cast<std::size_t>(source_stride));
++        const int* const row1 = source_samples +
++            (static_cast<std::size_t>(y1) * static_cast<std::size_t>(source_stride));
++
+         for (int x = 0; x < expected_output_width; ++x) {
+-            Cnr3DownsampledLumaTapCoordinates taps{};
+-
+-            const Cnr3Status coordinate_status =
+-                cnr3_downsample_luma_tap_coordinates(
+-                    x,
+-                    y,
+-                    source_luma_plane.width,
+-                    source_luma_plane.height,
+-                    sub_sampling_w,
+-                    sub_sampling_h,
+-                    taps
+-                );
++            const int x0 = x << sub_sampling_w;
+ 
+-            if (coordinate_status != Cnr3Status::ok) {
+-                return coordinate_status;
++            if (x0 >= source_width) {
++                return Cnr3Status::invalid_argument;
+             }
+ 
+-            int output_sample = 0;
+-
+-            const Cnr3Status sample_status = cnr3_downsample_luma_sample(
+-                cnr3_plane_sample_at(source_luma_plane, taps.x0, taps.y0),
+-                cnr3_plane_sample_at(source_luma_plane, taps.x1, taps.y0),
+-                cnr3_plane_sample_at(source_luma_plane, taps.x0, taps.y1),
+-                cnr3_plane_sample_at(source_luma_plane, taps.x1, taps.y1),
+-                bits_per_sample,
+-                output_sample
+-            );
++            const int x1 = (x0 < source_width - 1) ? (x0 + 1) : x0;
++            const int top_left_sample = row0[x0];
++            const int top_right_sample = row0[x1];
++            const int bottom_left_sample = row1[x0];
++            const int bottom_right_sample = row1[x1];
+ 
+-            if (sample_status != Cnr3Status::ok) {
+-                return sample_status;
++            if (
++                !cnr3_value_is_inclusive_range(top_left_sample, 0, sample_peak) ||
++                !cnr3_value_is_inclusive_range(top_right_sample, 0, sample_peak) ||
++                !cnr3_value_is_inclusive_range(bottom_left_sample, 0, sample_peak) ||
++                !cnr3_value_is_inclusive_range(bottom_right_sample, 0, sample_peak)
++                ) {
++                return Cnr3Status::invalid_argument;
+             }
+ 
+             resolved_outputs[static_cast<std::size_t>((y * expected_output_width) + x)] =
+-                output_sample;
++                (
++                    top_left_sample +
++                    top_right_sample +
++                    bottom_left_sample +
++                    bottom_right_sample +
++                    2
++                ) >> 2;
+         }
+     }
+ 

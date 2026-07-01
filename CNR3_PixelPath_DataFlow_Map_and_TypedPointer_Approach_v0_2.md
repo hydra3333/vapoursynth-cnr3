@@ -182,6 +182,13 @@ AVX2; both target machines (Ryzen 3900X, i4670) clear it; the excluded populatio
 `/arch:AVX2` (MSBuild `<EnableEnhancedInstructionSet>AdvancedVectorExtensions2</...>`), Release AND Debug
 for parity.
 
+BUILD-SCOPE (do not miss): the solution has TWO projects — `cnr3.vcxproj` (the plugin DLL) AND
+`cnr3_cache_core_selftest.vcxproj` (the correctness gate). BOTH must get `/arch:AVX2` (Release+Debug),
+or the selftest validates the maths under DIFFERENT codegen than the shipping DLL — which undercuts the
+"AVX2 is neutral" proof. Also: the project + solution were reduced to x64-ONLY (Win32/x86 platforms
+removed from cnr3.vcxproj, cnr3_cache_core_selftest.vcxproj, and the .slnx) — a VS plugin is x64-only
+(VS itself is 64-bit), and this removes the footgun of ever building a non-AVX2 32-bit DLL by accident.
+
 CONSEQUENCES (decided consciously, not drifted into):
 - `/arch:AVX2` is WHOLE-DLL and enables AVX+AVX2+FMA+BMI/BMI2 (broader than the name). It gives the
   auto-vectoriser 256-bit integer vectors and the full AVX2 integer instruction set — the point of the

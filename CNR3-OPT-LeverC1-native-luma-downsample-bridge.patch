@@ -1,0 +1,262 @@
+diff --git a/src/cnr3_frame_processing.cpp b/src/cnr3_frame_processing.cpp
+index 7ef32df..de53423 100644
+--- a/src/cnr3_frame_processing.cpp
++++ b/src/cnr3_frame_processing.cpp
+@@ -2410,49 +2410,226 @@ Cnr3Status cnr3_downsample_native_luma_plane_to_scalar_chroma_grid(
+         return Cnr3Status::invalid_argument;
+     }
+ 
+-    const int source_sample_count =
+-        source_luma_native_plane.width * source_luma_native_plane.height;
+-    std::vector<int> source_luma_scalar;
++    int expected_output_width = 0;
++    int expected_output_height = 0;
++
++    const Cnr3Status width_status =
++        cnr3_expected_chroma_dimension_for_luma_dimension(
++            source_luma_native_plane.width,
++            sub_sampling_w,
++            expected_output_width
++        );
++
++    if (width_status != Cnr3Status::ok) {
++        return width_status;
++    }
++
++    const Cnr3Status height_status =
++        cnr3_expected_chroma_dimension_for_luma_dimension(
++            source_luma_native_plane.height,
++            sub_sampling_h,
++            expected_output_height
++        );
++
++    if (height_status != Cnr3Status::ok) {
++        return height_status;
++    }
++
++    if (
++        !cnr3_mutable_plane_dimensions_match(
++            output_downsampled_luma_plane,
++            expected_output_width,
++            expected_output_height
++        )
++        ) {
++        return Cnr3Status::invalid_argument;
++    }
++
++    int sample_peak = 0;
++    const Cnr3Status peak_status = cnr3_sample_peak_for_bit_depth(
++        source_luma_native_plane.bits_per_sample,
++        sample_peak
++    );
++
++    if (peak_status != Cnr3Status::ok) {
++        return peak_status;
++    }
++
++    const auto* base_bytes =
++        static_cast<const std::uint8_t*>(source_luma_native_plane.data);
++
++    if (storage_bytes == 2) {
++        unsigned int out_of_range_sample_seen = 0;
++        const std::uint16_t sample_peak_u16 = static_cast<std::uint16_t>(sample_peak);
++
++        for (int y = 0; y < source_luma_native_plane.height; ++y) {
++            const auto* row = base_bytes +
++                (static_cast<std::size_t>(y) *
++                    static_cast<std::size_t>(source_luma_native_plane.stride_bytes));
++
++            for (int x = 0; x < source_luma_native_plane.width; ++x) {
++                std::uint16_t native_sample = 0;
++                // Preserve the unaligned-safe two-byte native load used by P.8A.
++                std::memcpy(
++                    &native_sample,
++                    row + (static_cast<std::size_t>(x) * sizeof(native_sample)),
++                    sizeof(native_sample)
++                );
++
++                out_of_range_sample_seen |=
++                    static_cast<unsigned int>(native_sample > sample_peak_u16);
++            }
++        }
++
++        if (out_of_range_sample_seen != 0U) {
++            return Cnr3Status::invalid_argument;
++        }
++    }
++
++    const int sample_count = expected_output_width * expected_output_height;
++    std::vector<int> resolved_outputs;
+ 
+     try {
+-        source_luma_scalar.resize(static_cast<std::size_t>(source_sample_count));
++        resolved_outputs.resize(static_cast<std::size_t>(sample_count));
+     } catch (...) {
+         return Cnr3Status::allocation_failed;
+     }
+ 
+-    Cnr3MutablePlaneBufferView source_luma_scalar_plane{
+-        source_luma_scalar.data(),
+-        source_luma_native_plane.width,
+-        source_luma_native_plane.height,
+-        source_luma_native_plane.width
+-    };
++    const int source_width = source_luma_native_plane.width;
++    const int source_height = source_luma_native_plane.height;
++    const int source_stride_bytes = source_luma_native_plane.stride_bytes;
+ 
+-    const Cnr3Status copy_status = cnr3_copy_native_plane_to_scalar_buffer(
+-        source_luma_native_plane,
+-        source_luma_scalar_plane
+-    );
++    if (storage_bytes == 1) {
++        for (int y = 0; y < expected_output_height; ++y) {
++            const int y0 = y << sub_sampling_h;
++
++            if (y0 >= source_height) {
++                return Cnr3Status::invalid_argument;
++            }
+ 
+-    if (copy_status != Cnr3Status::ok) {
+-        return copy_status;
++            /*
++                Preserve the asymmetric vsCnr2-compatible tap geometry exactly:
++                x1 intentionally uses x0 + 1 when available, even when
++                sub_sampling_w is 0, while y1 uses y0 + sub_sampling_h. Do not
++                symmetrise these rules; 4:4:4 still reads horizontal neighbours.
++            */
++            const int y1 = (y0 + sub_sampling_h < source_height) ?
++                (y0 + sub_sampling_h) : y0;
++
++            const auto* const row0 = base_bytes +
++                (static_cast<std::size_t>(y0) * static_cast<std::size_t>(source_stride_bytes));
++            const auto* const row1 = base_bytes +
++                (static_cast<std::size_t>(y1) * static_cast<std::size_t>(source_stride_bytes));
++            int* const resolved_row = resolved_outputs.data() +
++                (static_cast<std::size_t>(y) * static_cast<std::size_t>(expected_output_width));
++
++            for (int x = 0; x < expected_output_width; ++x) {
++                const int x0 = x << sub_sampling_w;
++
++                if (x0 >= source_width) {
++                    return Cnr3Status::invalid_argument;
++                }
++
++                const int x1 = (x0 < source_width - 1) ? (x0 + 1) : x0;
++                const int top_left_sample = static_cast<int>(row0[x0]);
++                const int top_right_sample = static_cast<int>(row0[x1]);
++                const int bottom_left_sample = static_cast<int>(row1[x0]);
++                const int bottom_right_sample = static_cast<int>(row1[x1]);
++
++                resolved_row[x] =
++                    (
++                        top_left_sample +
++                        top_right_sample +
++                        bottom_left_sample +
++                        bottom_right_sample +
++                        2
++                    ) >> 2;
++            }
++        }
++    } else {
++        for (int y = 0; y < expected_output_height; ++y) {
++            const int y0 = y << sub_sampling_h;
++
++            if (y0 >= source_height) {
++                return Cnr3Status::invalid_argument;
++            }
++
++            /*
++                Preserve the asymmetric vsCnr2-compatible tap geometry exactly:
++                x1 intentionally uses x0 + 1 when available, even when
++                sub_sampling_w is 0, while y1 uses y0 + sub_sampling_h. Do not
++                symmetrise these rules; 4:4:4 still reads horizontal neighbours.
++            */
++            const int y1 = (y0 + sub_sampling_h < source_height) ?
++                (y0 + sub_sampling_h) : y0;
++
++            const auto* const row0 = base_bytes +
++                (static_cast<std::size_t>(y0) * static_cast<std::size_t>(source_stride_bytes));
++            const auto* const row1 = base_bytes +
++                (static_cast<std::size_t>(y1) * static_cast<std::size_t>(source_stride_bytes));
++            int* const resolved_row = resolved_outputs.data() +
++                (static_cast<std::size_t>(y) * static_cast<std::size_t>(expected_output_width));
++
++            for (int x = 0; x < expected_output_width; ++x) {
++                const int x0 = x << sub_sampling_w;
++
++                if (x0 >= source_width) {
++                    return Cnr3Status::invalid_argument;
++                }
++
++                const int x1 = (x0 < source_width - 1) ? (x0 + 1) : x0;
++                const std::size_t x0_offset =
++                    static_cast<std::size_t>(x0) * static_cast<std::size_t>(storage_bytes);
++                const std::size_t x1_offset =
++                    static_cast<std::size_t>(x1) * static_cast<std::size_t>(storage_bytes);
++                std::uint16_t top_left_native = 0;
++                std::uint16_t top_right_native = 0;
++                std::uint16_t bottom_left_native = 0;
++                std::uint16_t bottom_right_native = 0;
++
++                // Preserve unaligned-safe native reads; the pre-pass already
++                // proved the 9..16-bit source samples are in range.
++                std::memcpy(&top_left_native, row0 + x0_offset, sizeof(top_left_native));
++                std::memcpy(&top_right_native, row0 + x1_offset, sizeof(top_right_native));
++                std::memcpy(&bottom_left_native, row1 + x0_offset, sizeof(bottom_left_native));
++                std::memcpy(&bottom_right_native, row1 + x1_offset, sizeof(bottom_right_native));
++
++                resolved_row[x] =
++                    (
++                        static_cast<int>(top_left_native) +
++                        static_cast<int>(top_right_native) +
++                        static_cast<int>(bottom_left_native) +
++                        static_cast<int>(bottom_right_native) +
++                        2
++                    ) >> 2;
++            }
++        }
+     }
+ 
+-    const Cnr3ConstPlaneBufferView source_luma_scalar_const_plane{
+-        source_luma_scalar.data(),
+-        source_luma_native_plane.width,
+-        source_luma_native_plane.height,
+-        source_luma_native_plane.width
+-    };
++    for (int y = 0; y < expected_output_height; ++y) {
++        const int* const resolved_row = resolved_outputs.data() +
++            (static_cast<std::size_t>(y) * static_cast<std::size_t>(expected_output_width));
++        int* const output_row = output_downsampled_luma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(output_downsampled_luma_plane.stride));
+ 
+-    return cnr3_downsample_luma_plane_to_chroma_grid(
+-        source_luma_scalar_const_plane,
+-        sub_sampling_w,
+-        sub_sampling_h,
+-        source_luma_native_plane.bits_per_sample,
+-        output_downsampled_luma_plane,
+-        summary
+-    );
+-}
++        for (int x = 0; x < expected_output_width; ++x) {
++            output_row[x] = resolved_row[x];
++        }
++    }
+ 
++    Cnr3DownsampledLumaPlaneProcessSummary resolved_summary{};
++    resolved_summary.source_width = source_luma_native_plane.width;
++    resolved_summary.source_height = source_luma_native_plane.height;
++    resolved_summary.output_width = expected_output_width;
++    resolved_summary.output_height = expected_output_height;
++    resolved_summary.samples_processed = sample_count;
++    resolved_summary.first_output_sample = resolved_outputs.front();
++    resolved_summary.last_output_sample = resolved_outputs.back();
++
++    summary = resolved_summary;
++    return Cnr3Status::ok;
++}
+ 
+ Cnr3Status cnr3_downsample_luma_plane_to_chroma_grid(
+     const Cnr3ConstPlaneBufferView& source_luma_plane,

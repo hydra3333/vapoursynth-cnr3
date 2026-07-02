@@ -1,5 +1,8 @@
 # CNR3 pixel-path data-flow map + typed-pointer optimisation — DESIGNER working note (W3D) — v0.2 (adds AVX2 requirement + Path-A auto-vectorisation contract)
 
+> **ARC-COMPLETE NOTE (2026-07-02):** the marshalling arc this map guided is now substantially COMPLETE at ~-80% (see DELTA v4.23). The unpack/downsample/blend/staging materialisations described below have been typed, inlined, or eliminated (C1 removed the full-res luma downsample buffer; F/3c inlined the blend; Staging inlined the scalar->native conversion). The nine-buffer inventory and per-frame allocation cost described here is the PRE-arc state; the allocation leaf that remains (~587) is Lever B (pooling), the only un-taken headroom. The dependency analysis, two-luma-role split, and edge-clamp geometry still hold.
+
+
 > **STALENESS NOTE (added post-3b.1).** This map predates the marshalling levers. Two things are now
 > historical: (1) the buffer inventory still lists `current_luma_storage` / buffer 1 — **Lever 0A REMOVED
 > that** (full-res luma is now a native passthrough staged directly into `staged_y`, no int round-trip).

@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CNR3-OPT-LeverStaging-scalar-native-inline";
+inline constexpr const char* CNR3_EDIT_VERSION = "CNR3-OPT-LeverE-scenechange-local-accumulator";
 
 /*
     CMS07-P.11C.2 live scene-change default.

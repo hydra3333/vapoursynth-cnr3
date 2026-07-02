@@ -1,0 +1,293 @@
+|Function Name|Total CPU \[unit, %\]|Self CPU \[unit, %\]|Module|Category|
+|-|-|-|-|-|
+| + vspipe \(PID: 16928\)|18549 \(100.00%\)|0 \(0.00%\)|Multiple modules||
+|\| + \[External Call\]
+        ntdll.dll!0x00007ffe1f72ad6c|17606 \(94.92%\)|7878 \(42.47%\)|ntdll|Kernel \| Runtime|
+|\|\| + \`anonymous namespace'::cnr3\_get\_frame\_keystone\_live\_k1f\_proof|9629 \(51.91%\)|2 \(0.01%\)|cnr3|Runtime|
+|\|\|\| + \`anonymous namespace'::cnr3\_process\_caller\_supplied\_vapoursynth\_frame\_triplet\_impl|7179 \(38.70%\)|3073 \(16.57%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_copy\_native\_plane\_to\_scalar\_buffer|1341 \(7.23%\)|1145 \(6.17%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_downsample\_native\_luma\_plane\_to\_scalar\_chroma\_grid|1245 \(6.71%\)|948 \(5.11%\)|cnr3|Runtime|
+|\|\|\|\| - \`anonymous namespace'::cnr3\_allocate\_scalar\_plane\_storage|587 \(3.16%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - \`anonymous namespace'::cnr3\_stage\_scalar\_plane\_to\_native\_bytes|445 \(2.40%\)|371 \(2.00%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_make\_caller\_supplied\_vapoursynth\_frame\_triplet\_views|171 \(0.92%\)|0 \(0.00%\)|cnr3||
+|\|\|\|\| - \`anonymous namespace'::cnr3\_stage\_native\_plane\_passthrough\_to\_bytes|99 \(0.53%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<int,std::allocator\<int\> \>::~vector\<int,std::allocator\<int\> \>|69 \(0.37%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<unsigned char,std::allocator\<unsigned char\> \>::~vector\<unsigned char,std::allocator\<unsigned char\> \>|37 \(0.20%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<int,std::allocator\<int\> \>::operator=|27 \(0.15%\)|0 \(0.00%\)|cnr3||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08ae54c|8 \(0.04%\)|8 \(0.04%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc98|6 \(0.03%\)|6 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08b2d7f|5 \(0.03%\)|5 \(0.03%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd2e|5 \(0.03%\)|5 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd36|5 \(0.03%\)|5 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd46|5 \(0.03%\)|5 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddc1|5 \(0.03%\)|5 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc91|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcfc|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd06|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd3e|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dce9|3 \(0.02%\)|3 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd16|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddd5|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddea|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddf8|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddff|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2f020|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2db0a|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc24|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc44|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dce4|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcee|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcf3|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcf7|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd01|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd0e|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd1e|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dddc|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dde3|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddf1|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2de06|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2de0d|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\| - Cnr3OutputCacheCore::store\_production\_output\_and\_prune|1149 \(6.19%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\| - Cnr3OutputCacheCore::lookup\_frame\_and\_record\_pin|470 \(2.53%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\| - Cnr3OutputCacheCore::record\_hot\_zone\_observation|354 \(1.91%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3CachePinList::discharge\_all|302 \(1.63%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3OutputCacheCore::lookup\_frame\_and\_add\_ref|166 \(0.89%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - operator new|3 \(0.02%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\| - Cnr3LiveGetFrameFrameData::\`scalar deleting destructor'|2 \(0.01%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd456d49e6|1 \(0.01%\)|1 \(0.01%\)|libvapoursynth||
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd456d512f|1 \(0.01%\)|1 \(0.01%\)|libvapoursynth||
+|\|\| - \`anonymous namespace'::cnr3\_free\_filter|99 \(0.53%\)|0 \(0.00%\)|cnr3||
+|\| - \[Unwalkable\]|615 \(3.32%\)|0 \(0.00%\)|||
+|\| - \[System Code\]
+        0x0000000001000001|17 \(0.09%\)|17 \(0.09%\)|\[Unknown Code\]||
+        
+|Function Name|Total CPU \[unit, %\]|Self CPU \[unit, %\]|Module|Category|
+|-|-|-|-|-|
+| + vspipe \(PID: 23672\)|18766 \(100.00%\)|0 \(0.00%\)|Multiple modules||
+|\| + \[External Call\]
+        ntdll.dll!0x00007ffe1f72ad6c|17773 \(94.71%\)|7831 \(41.73%\)|ntdll|Kernel \| Runtime|
+|\|\| + \`anonymous namespace'::cnr3\_get\_frame\_keystone\_live\_k1f\_proof|9838 \(52.42%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\| + \`anonymous namespace'::cnr3\_process\_caller\_supplied\_vapoursynth\_frame\_triplet\_impl|7553 \(40.25%\)|3046 \(16.23%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_copy\_native\_plane\_to\_scalar\_buffer|1327 \(7.07%\)|1101 \(5.87%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_downsample\_native\_luma\_plane\_to\_scalar\_chroma\_grid|1268 \(6.76%\)|957 \(5.10%\)|cnr3|Runtime|
+|\|\|\|\| - \`anonymous namespace'::cnr3\_allocate\_scalar\_plane\_storage|708 \(3.77%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - \`anonymous namespace'::cnr3\_stage\_scalar\_plane\_to\_native\_bytes|506 \(2.70%\)|415 \(2.21%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<int,std::allocator\<int\> \>::~vector\<int,std::allocator\<int\> \>|238 \(1.27%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_make\_caller\_supplied\_vapoursynth\_frame\_triplet\_views|219 \(1.17%\)|0 \(0.00%\)|cnr3||
+|\|\|\|\| - \`anonymous namespace'::cnr3\_stage\_native\_plane\_passthrough\_to\_bytes|103 \(0.55%\)|2 \(0.01%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<unsigned char,std::allocator\<unsigned char\> \>::~vector\<unsigned char,std::allocator\<unsigned char\> \>|36 \(0.19%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<int,std::allocator\<int\> \>::operator=|24 \(0.13%\)|0 \(0.00%\)|cnr3||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc98|10 \(0.05%\)|10 \(0.05%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd46|7 \(0.04%\)|7 \(0.04%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcfc|6 \(0.03%\)|6 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2de0d|5 \(0.03%\)|5 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd1e|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2f020|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08ae574|3 \(0.02%\)|3 \(0.02%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dce9|3 \(0.02%\)|3 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcf7|3 \(0.02%\)|3 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd2e|3 \(0.02%\)|3 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc91|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcee|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd36|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddc1|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dde3|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddf1|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddff|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2de06|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08ae54c|1 \(0.01%\)|1 \(0.01%\)|\[Unknown Code\]||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08b2d7f|1 \(0.01%\)|1 \(0.01%\)|\[Unknown Code\]||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08badcb|1 \(0.01%\)|1 \(0.01%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc24|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc44|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dca8|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcb6|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dce4|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd06|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd0e|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd16|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd70|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddcb|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddf8|1 \(0.01%\)|1 \(0.01%\)|vcruntime140||
+|\|\|\| - Cnr3OutputCacheCore::store\_production\_output\_and\_prune|1088 \(5.80%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\| - Cnr3OutputCacheCore::lookup\_frame\_and\_record\_pin|436 \(2.32%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\| - Cnr3OutputCacheCore::record\_hot\_zone\_observation|330 \(1.76%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3CachePinList::discharge\_all|275 \(1.47%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3OutputCacheCore::lookup\_frame\_and\_add\_ref|151 \(0.80%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - operator new|2 \(0.01%\)|1 \(0.01%\)|cnr3|Runtime|
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd4560512f|1 \(0.01%\)|1 \(0.01%\)|libvapoursynth||
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd4560515e|1 \(0.01%\)|1 \(0.01%\)|libvapoursynth||
+|\|\| - \`anonymous namespace'::cnr3\_free\_filter|104 \(0.55%\)|0 \(0.00%\)|cnr3||
+|\| - \[Unwalkable\]|650 \(3.46%\)|0 \(0.00%\)|||
+|\| - \[System Code\]
+        0x00000000437f0000|21 \(0.11%\)|21 \(0.11%\)|\[Unknown Code\]||
+
+
+
+|Function Name|Total CPU \[unit, %\]|Self CPU \[unit, %\]|Module|Category|
+|-|-|-|-|-|
+| + vspipe \(PID: 23480\)|22975 \(100.00%\)|0 \(0.00%\)|Multiple modules||
+|\| + \[External Call\]
+        ntdll.dll!0x00007ffe1f72ad6c|21766 \(94.74%\)|9479 \(41.26%\)|ntdll|Kernel \| Runtime|
+|\|\| + \`anonymous namespace'::cnr3\_get\_frame\_keystone\_live\_k1f\_proof|12182 \(53.02%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\| + \`anonymous namespace'::cnr3\_process\_caller\_supplied\_vapoursynth\_frame\_triplet\_impl|9533 \(41.49%\)|3914 \(17.04%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_copy\_native\_plane\_to\_scalar\_buffer|1833 \(7.98%\)|1551 \(6.75%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_downsample\_native\_luma\_plane\_to\_scalar\_chroma\_grid|1689 \(7.35%\)|1307 \(5.69%\)|cnr3|Runtime|
+|\|\|\|\| - \`anonymous namespace'::cnr3\_allocate\_scalar\_plane\_storage|821 \(3.57%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - \`anonymous namespace'::cnr3\_stage\_scalar\_plane\_to\_native\_bytes|511 \(2.22%\)|412 \(1.79%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<int,std::allocator\<int\> \>::~vector\<int,std::allocator\<int\> \>|226 \(0.98%\)|1 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - cnr3\_make\_caller\_supplied\_vapoursynth\_frame\_triplet\_views|212 \(0.92%\)|0 \(0.00%\)|cnr3||
+|\|\|\|\| - \`anonymous namespace'::cnr3\_stage\_native\_plane\_passthrough\_to\_bytes|147 \(0.64%\)|2 \(0.01%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<unsigned char,std::allocator\<unsigned char\> \>::~vector\<unsigned char,std::allocator\<unsigned char\> \>|48 \(0.21%\)|1 \(0.00%\)|cnr3|Runtime|
+|\|\|\|\| - std::vector\<int,std::allocator\<int\> \>::operator=|33 \(0.14%\)|0 \(0.00%\)|cnr3||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc98|9 \(0.04%\)|9 \(0.04%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08b2d7f|8 \(0.03%\)|8 \(0.03%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcf7|8 \(0.03%\)|8 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddff|7 \(0.03%\)|7 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08ae54c|6 \(0.03%\)|6 \(0.03%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd46|6 \(0.03%\)|6 \(0.03%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd36|5 \(0.02%\)|5 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2de0d|5 \(0.02%\)|5 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd06|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd3e|4 \(0.02%\)|4 \(0.02%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcee|3 \(0.01%\)|3 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcfc|3 \(0.01%\)|3 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd01|3 \(0.01%\)|3 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08ae574|2 \(0.01%\)|2 \(0.01%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dce9|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd16|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd26|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd77|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddc1|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dddc|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dde3|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2f020|2 \(0.01%\)|2 \(0.01%\)|vcruntime140||
+|\|\|\|\| - \[System Code\]
+        0xfffff804b08addb4|1 \(0.00%\)|1 \(0.00%\)|\[Unknown Code\]||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dc65|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcc0|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dce4|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dcf3|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd0e|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd7f|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2dd82|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddea|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\|\| - \[External Call\]
+        vcruntime140.dll!0x00007ffe01d2ddf1|1 \(0.00%\)|1 \(0.00%\)|vcruntime140||
+|\|\|\| - Cnr3OutputCacheCore::store\_production\_output\_and\_prune|1270 \(5.53%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\| - Cnr3OutputCacheCore::lookup\_frame\_and\_record\_pin|437 \(1.90%\)|1 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3OutputCacheCore::record\_hot\_zone\_observation|371 \(1.61%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3CachePinList::discharge\_all|329 \(1.43%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - Cnr3OutputCacheCore::lookup\_frame\_and\_add\_ref|237 \(1.03%\)|0 \(0.00%\)|cnr3||
+|\|\|\| - operator new|2 \(0.01%\)|0 \(0.00%\)|cnr3|Runtime|
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd456049d3|1 \(0.00%\)|1 \(0.00%\)|libvapoursynth||
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd456049e6|1 \(0.00%\)|1 \(0.00%\)|libvapoursynth||
+|\|\|\| - \[External Call\]
+        libvapoursynth.dll!0x00007ffd4560515e|1 \(0.00%\)|1 \(0.00%\)|libvapoursynth||
+|\|\| - \`anonymous namespace'::cnr3\_free\_filter|105 \(0.46%\)|0 \(0.00%\)|cnr3||
+|\| - \[Unwalkable\]|776 \(3.38%\)|0 \(0.00%\)|||
+|\| - \[System Code\]
+        0x00000000437f0000|33 \(0.14%\)|33 \(0.14%\)|\[Unknown Code\]||
+|\| - \[System Code\]
+        0x0000000900010000|16 \(0.07%\)|16 \(0.07%\)|\[Unknown Code\]||

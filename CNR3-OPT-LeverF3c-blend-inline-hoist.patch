@@ -1,0 +1,205 @@
+diff --git a/src/cnr3_frame_processing.cpp b/src/cnr3_frame_processing.cpp
+index 59e6272..4696d0d 100644
+--- a/src/cnr3_frame_processing.cpp
++++ b/src/cnr3_frame_processing.cpp
+@@ -2819,49 +2819,157 @@ Cnr3Status cnr3_process_chroma_plane_from_downsampled_luma(
+         return Cnr3Status::invalid_argument;
+     }
+ 
+-    const int sample_count = width * height;
+-    std::vector<int> resolved_outputs;
++    int sample_peak = 0;
+ 
+-    try {
+-        resolved_outputs.resize(static_cast<std::size_t>(sample_count));
+-    } catch (...) {
+-        return Cnr3Status::allocation_failed;
++    const Cnr3Status peak_status = cnr3_sample_peak_for_bit_depth(
++        bits_per_sample,
++        sample_peak
++    );
++
++    if (peak_status != Cnr3Status::ok) {
++        return peak_status;
+     }
+ 
++    int expected_table_offset = 0;
++    int expected_table_size = 0;
++
++    const Cnr3Status geometry_status =
++        cnr3_response_table_geometry_for_sample_peak(
++            sample_peak,
++            expected_table_offset,
++            expected_table_size
++        );
++
++    if (geometry_status != Cnr3Status::ok) {
++        return geometry_status;
++    }
++
++    if (
++        table_offset != expected_table_offset ||
++        y_response_table.size() != static_cast<std::size_t>(expected_table_size) ||
++        chroma_response_table.size() != static_cast<std::size_t>(expected_table_size)
++        ) {
++        return Cnr3Status::invalid_argument;
++    }
++
++    /*
++        Preserve the tested no-partial-output contract for this shared traversal
++        primitive: reject any out-of-range scalar input before publishing to the
++        destination plane. The fused production loop below then trusts Tier-2
++        inputs and contains no per-sample status path.
++    */
+     for (int y = 0; y < height; ++y) {
+-        for (int x = 0; x < width; ++x) {
+-            Cnr3ChromaBlendSampleResult sample_result{};
+-
+-            const Cnr3Status sample_status =
+-                cnr3_blend_chroma_sample_from_response_tables(
+-                    cnr3_plane_sample_at(current_downsampled_luma_plane, x, y),
+-                    cnr3_plane_sample_at(previous_downsampled_luma_plane, x, y),
+-                    cnr3_plane_sample_at(current_source_chroma_plane, x, y),
+-                    cnr3_plane_sample_at(previous_filtered_chroma_plane, x, y),
+-                    y_response_table,
+-                    chroma_response_table,
+-                    table_offset,
+-                    bits_per_sample,
+-                    sample_result
+-                );
++        const int* __restrict current_luma_row =
++            current_downsampled_luma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(current_downsampled_luma_plane.stride));
++        const int* __restrict previous_luma_row =
++            previous_downsampled_luma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(previous_downsampled_luma_plane.stride));
++        const int* __restrict current_chroma_row =
++            current_source_chroma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(current_source_chroma_plane.stride));
++        const int* __restrict previous_chroma_row =
++            previous_filtered_chroma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(previous_filtered_chroma_plane.stride));
+ 
+-            if (sample_status != Cnr3Status::ok) {
+-                return sample_status;
++        for (int x = 0; x < width; ++x) {
++            if (
++                !cnr3_value_is_inclusive_range(current_luma_row[x], 0, sample_peak) ||
++                !cnr3_value_is_inclusive_range(previous_luma_row[x], 0, sample_peak) ||
++                !cnr3_value_is_inclusive_range(current_chroma_row[x], 0, sample_peak) ||
++                !cnr3_value_is_inclusive_range(previous_chroma_row[x], 0, sample_peak)
++                ) {
++                return Cnr3Status::invalid_argument;
+             }
+-
+-            resolved_outputs[static_cast<std::size_t>((y * width) + x)] =
+-                sample_result.output_sample;
+         }
+     }
+ 
++    const int sample_count = width * height;
++    const int shift2 = bits_per_sample << 1;
++    const std::int64_t shift = std::int64_t{1} << shift2;
++    const std::int64_t shift1 = shift >> 1;
++    const int* __restrict y_response_values = y_response_table.data();
++    const int* __restrict chroma_response_values = chroma_response_table.data();
++
++    /*
++        Production-private fast path per validation policy:
++        - scalar inputs are Tier-2 values produced through the Tier-1 source gate;
++        - response values are Tier-3 values from sanctioned, geometry-validated tables.
++        If either provenance invariant changes, the per-sample range checks from the
++        shared blend primitives must be restored or replaced by an equivalent guard.
++    */
++    int first_output_sample = 0;
++    int last_output_sample = 0;
++    bool have_output_sample = false;
++
+     for (int y = 0; y < height; ++y) {
++        const int* __restrict current_luma_row =
++            current_downsampled_luma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(current_downsampled_luma_plane.stride));
++        const int* __restrict previous_luma_row =
++            previous_downsampled_luma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(previous_downsampled_luma_plane.stride));
++        const int* __restrict current_chroma_row =
++            current_source_chroma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(current_source_chroma_plane.stride));
++        const int* __restrict previous_chroma_row =
++            previous_filtered_chroma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(previous_filtered_chroma_plane.stride));
++        int* __restrict output_row =
++            output_chroma_plane.samples +
++            (static_cast<std::size_t>(y) *
++                static_cast<std::size_t>(output_chroma_plane.stride));
++
+         for (int x = 0; x < width; ++x) {
+-            cnr3_write_plane_sample(
+-                output_chroma_plane,
+-                x,
+-                y,
+-                resolved_outputs[static_cast<std::size_t>((y * width) + x)]
+-            );
++            const int current_luma = current_luma_row[x];
++            const int previous_luma = previous_luma_row[x];
++            const int current_chroma = current_chroma_row[x];
++            const int previous_chroma = previous_chroma_row[x];
++
++            const int luma_signed_diff = current_luma - previous_luma;
++            const int chroma_signed_diff = current_chroma - previous_chroma;
++            const int y_response_index = luma_signed_diff + table_offset;
++            const int chroma_response_index = chroma_signed_diff + table_offset;
++            const int y_response =
++                (y_response_index >= 0 && y_response_index < expected_table_size) ?
++                    y_response_values[y_response_index] :
++                    0;
++            const int chroma_response =
++                (chroma_response_index >= 0 && chroma_response_index < expected_table_size) ?
++                    chroma_response_values[chroma_response_index] :
++                    0;
++            const std::int64_t weight =
++                static_cast<std::int64_t>(y_response) *
++                static_cast<std::int64_t>(chroma_response);
++
++            /*
++                Bit-exact P.3A/P.5A blend arithmetic. Weight pulls toward the
++                previous filtered output; shift-weight keeps the current source.
++                Keep int64 throughout for 16-bit safety.
++            */
++            const std::int64_t blended_sample = (
++                weight * static_cast<std::int64_t>(previous_chroma) +
++                (shift - weight) * static_cast<std::int64_t>(current_chroma) +
++                shift1
++            ) >> shift2;
++            const int output_sample = static_cast<int>(blended_sample);
++
++            output_row[x] = output_sample;
++
++            if (!have_output_sample) {
++                first_output_sample = output_sample;
++                have_output_sample = true;
++            }
++
++            last_output_sample = output_sample;
+         }
+     }
+ 
+@@ -2869,8 +2977,8 @@ Cnr3Status cnr3_process_chroma_plane_from_downsampled_luma(
+     resolved_summary.width = width;
+     resolved_summary.height = height;
+     resolved_summary.samples_processed = sample_count;
+-    resolved_summary.first_output_sample = resolved_outputs.front();
+-    resolved_summary.last_output_sample = resolved_outputs.back();
++    resolved_summary.first_output_sample = first_output_sample;
++    resolved_summary.last_output_sample = last_output_sample;
+ 
+     summary = resolved_summary;
+     return Cnr3Status::ok;

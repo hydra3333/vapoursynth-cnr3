@@ -1,0 +1,285 @@
+cd /d "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3"
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>x64\Debug\cnr3_cache_core_selftest.exe 1>NUL
+CNR3[0] INFO cache_core_selftest: CNR3 cache-core selftest runner
+CNR3[0] INFO cache_core_selftest: edit_version: CNR3-OPT-LeverF3c-blend-inline-hoist
+CNR3[0] INFO cache_core_selftest: cache_profile: normal
+CNR3[0] INFO cache_core_selftest:
+CNR3[0] INFO cache_core_selftest: summary:
+CNR3[0] INFO cache_core_selftest:     total: 56
+CNR3[0] INFO cache_core_selftest:     passed: 56
+CNR3[0] INFO cache_core_selftest:     failed: 0
+CNR3[0] INFO cache_core_selftest:     result: PASS
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>echo Debug normal exit_code=%ERRORLEVEL%
+Debug normal exit_code=0
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>x64\Release\cnr3_cache_core_selftest.exe 1>NUL
+CNR3[0] INFO cache_core_selftest: CNR3 cache-core selftest runner
+CNR3[0] INFO cache_core_selftest: edit_version: CNR3-OPT-LeverF3c-blend-inline-hoist
+CNR3[0] INFO cache_core_selftest: cache_profile: normal
+CNR3[0] INFO cache_core_selftest:
+CNR3[0] INFO cache_core_selftest: summary:
+CNR3[0] INFO cache_core_selftest:     total: 56
+CNR3[0] INFO cache_core_selftest:     passed: 56
+CNR3[0] INFO cache_core_selftest:     failed: 0
+CNR3[0] INFO cache_core_selftest:     result: PASS
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>echo Release normal exit_code=%ERRORLEVEL%
+Release normal exit_code=0
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>x64\Release\cnr3_cache_core_selftest.exe --force-fail-for-harness-proof 1>NUL
+CNR3[0] INFO cache_core_selftest: CNR3 cache-core selftest runner
+CNR3[0] INFO cache_core_selftest: edit_version: CNR3-OPT-LeverF3c-blend-inline-hoist
+CNR3[0] INFO cache_core_selftest: cache_profile: normal
+CNR3[0] INFO cache_core_selftest:
+CNR3[0] INFO cache_core_selftest: summary:
+CNR3[0] INFO cache_core_selftest:     total: 56
+CNR3[0] INFO cache_core_selftest:     passed: 55
+CNR3[0] INFO cache_core_selftest:     failed: 1
+CNR3[0] INFO cache_core_selftest:     result: FAIL
+CNR3[0] INFO cache_core_selftest:     first_failed_test_name: forced_failure_for_harness_proof
+CNR3[0] INFO cache_core_selftest:     first_failed_status: invariant_violation
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>echo Release forced-fail exit_code=%ERRORLEVEL%
+Release forced-fail exit_code=1
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>x64\Release\cnr3_cache_core_selftest.exe --verbose 1>NUL
+CNR3[0] INFO cache_core_selftest_trace: G.12A AS2 store-record monotonic checkpoint scenario
+CNR3[0] INFO cache_core_selftest_trace:     duplicate checkpoint promotes existing non-checkpoint frame 10
+CNR3[0] INFO cache_core_selftest_trace:     duplicate non-checkpoint does not demote checkpoint frame 20
+CNR3[0] INFO cache_core_selftest_trace:     loser frames freed once after lock; winners remain first-in-best-dressed
+CNR3[0] INFO cache_core_selftest_trace: D.4 present-frame adopt-skip primitive scenario
+CNR3[0] INFO cache_core_selftest_trace:     pre-present frame 40 is adopted by lookup_frame_and_record_pin
+CNR3[0] INFO cache_core_selftest_trace:     no addFrameRef/freeFrame side effects occur during pin adoption
+CNR3[0] INFO cache_core_selftest_trace:     AS4 discharge balances the adopted pin and releases clear normally
+CNR3[0] INFO cache_core_selftest_trace: D.4 first-in-best-dressed duplicate scenario
+CNR3[0] INFO cache_core_selftest_trace:     duplicate store for frame 41 preserves the existing winner
+CNR3[0] INFO cache_core_selftest_trace:     incoming loser is released once after the cache lock
+CNR3[0] INFO cache_core_selftest_trace:     duplicate_existing_slot reports the adopted-post-compute-loser outcome
+CNR3[0] INFO cache_core_selftest_trace: D.5 recovery pin survives bounded prune-pass scenario
+CNR3[0] INFO cache_core_selftest_trace:     control: unpinned foundation frame 165 is the single prune victim
+CNR3[0] INFO cache_core_selftest_trace:     protected: recovery-pinned frame 165 survives the same prune pressure
+CNR3[0] INFO cache_core_selftest_trace:     protected: frame 164 is detached instead and AS4 discharge balances
+CNR3[0] INFO cache_core_selftest_trace:     survivor remains lookup-addref usable as the original predecessor
+CNR3[0] INFO cache_core_selftest_trace: DIAG tiny/profile-agnostic protection-under-eviction scenario
+CNR3[0] INFO cache_core_selftest_trace:     trigger and store count are derived from the active profile constants
+CNR3[0] INFO cache_core_selftest_trace:     pinned frame survives a bounded prune that detaches another slot
+CNR3[0] INFO cache_core_selftest_trace:     hot-zone-covered frame survives the same bounded prune
+CNR3[0] INFO cache_core_selftest_trace:     at least one unprotected frame is absent after prune, proving non-vacuity
+CNR3[0] INFO cache_core_selftest_trace: P.11C.5 scene-cut checkpoint recovery-anchor composition scenario
+CNR3[0] INFO cache_core_selftest_trace:     frame 165 is non-grid, unpinned, and stored as the sole checkpoint
+CNR3[0] INFO cache_core_selftest_trace:     bounded prune removes ordinary non-checkpoint frame 1 while checkpoint 165 survives
+CNR3[0] INFO cache_core_selftest_trace:     frame 166 is absent by construction and becomes the exact recovery hole
+CNR3[0] INFO cache_core_selftest_trace:     read-only bounded recovery for frame 167 anchors on checkpoint 165
+CNR3[0] INFO cache_core_selftest_trace: W.3 combined store-and-prune helper scenario
+CNR3[0] INFO cache_core_selftest_trace:     production wrapper stores, retires, and prunes under one public call
+CNR3[0] INFO cache_core_selftest_trace:     target output remains lookup-addref usable after its own prune
+CNR3[0] INFO cache_core_selftest_trace:     AS2 duplicate normalizes store_status while preserving pin proof
+CNR3[0] INFO cache_core_selftest_trace:     duplicate loser releases after the wrapper lock scope
+CNR3[0] INFO cache_core_selftest_trace: W.1 checkpoint-retention trigger scenario
+CNR3[0] INFO cache_core_selftest_trace:     pure checkpoint trigger fires below capacity and uses the composite selector
+CNR3[0] INFO cache_core_selftest_trace:     non-checkpoint controls survive when capacity pressure is absent
+CNR3[0] INFO cache_core_selftest_trace:     frame 0, pinned checkpoints, and hot-zone-covered checkpoints are retained
+CNR3[0] INFO cache_core_selftest_trace:     greatest-distance-first order and K-bounded trim-while-over-MAX are proven
+CNR3[0] INFO cache_core_selftest_trace: G.8A multi-zone prune-victim ordering scenario
+CNR3[0] INFO cache_core_selftest_trace:     active hot zones: [50-110], [250-310]
+CNR3[0] INFO cache_core_selftest_trace:     eligible cached frames: 40,112,200,220,249,400
+CNR3[0] INFO cache_core_selftest_trace:     returned order and nearest-zone distances:
+CNR3[0] INFO cache_core_selftest_trace:     frame=400 nearest_zone_distance=90
+CNR3[0] INFO cache_core_selftest_trace:     frame=200 nearest_zone_distance=50
+CNR3[0] INFO cache_core_selftest_trace:     frame=220 nearest_zone_distance=30
+CNR3[0] INFO cache_core_selftest_trace:     frame=40 nearest_zone_distance=10
+CNR3[0] INFO cache_core_selftest_trace:     frame=112 nearest_zone_distance=2
+CNR3[0] INFO cache_core_selftest_trace:     frame=249 nearest_zone_distance=1
+CNR3[0] INFO cache_core_selftest_trace:     expected: 400(90), 200(50), 220(30), 40(10), 112(2), 249(1)
+CNR3[0] INFO cache_core_selftest_trace: G.9A cross-pool bounded top-K scenario
+CNR3[0] INFO cache_core_selftest_trace:     active hot zones: [50-110]
+CNR3[0] INFO cache_core_selftest_trace:     eligible checkpoints: 150(40),180(70); frame 0 excluded
+CNR3[0] INFO cache_core_selftest_trace:     eligible non-checkpoints: 160(50),170(60),200(90)
+CNR3[0] INFO cache_core_selftest_trace:     returned global top-3 and nearest-zone distances:
+CNR3[0] INFO cache_core_selftest_trace:     frame=200 nearest_zone_distance=90
+CNR3[0] INFO cache_core_selftest_trace:     frame=180 nearest_zone_distance=70
+CNR3[0] INFO cache_core_selftest_trace:     frame=170 nearest_zone_distance=60
+CNR3[0] INFO cache_core_selftest_trace:     expected: 200 noncheckpoint(90), 180 checkpoint(70), 170 noncheckpoint(60)
+CNR3[0] INFO cache_core_selftest_trace:     absent by assertion: 160 noncheckpoint(50), 150 checkpoint(40)
+CNR3[0] INFO cache_core_selftest_trace: G.10A prune-trigger decision hysteresis scenario
+CNR3[0] INFO cache_core_selftest_trace:     profile-aware active-ceiling and trigger vectors passed
+CNR3[0] INFO cache_core_selftest_trace:     boundary slot_count == trigger proves no prune
+CNR3[0] INFO cache_core_selftest_trace:     boundary slot_count == trigger + 1 proves prune target and remove count
+CNR3[0] INFO cache_core_selftest_trace: G.11A AS5 prune execution decide/detach/free scenario
+CNR3[0] INFO cache_core_selftest_trace:     hot zone: [50-110]; frame 164 pinned; frame 0 retained checkpoint
+CNR3[0] INFO cache_core_selftest_trace:     hot-zone pins for D-SUM discrimination: 55, 60, 65
+CNR3[0] INFO cache_core_selftest_trace:     slot_count 165 -> no prune; slot_count 166 -> prune required
+CNR3[0] INFO cache_core_selftest_trace:     target remove 16, bounded remove limit 3
+CNR3[0] INFO cache_core_selftest_trace:     detached/free after lock: 165 checkpoint, 163 noncheckpoint, 162 noncheckpoint
+CNR3[0] INFO cache_core_selftest_trace:     preserved: 164 pinned noncheckpoint, frame 0 retained checkpoint
+CNR3[0] INFO cache_core_selftest_trace: G.13A D-SUM-11 hot-zone prune-rejection counter scenario
+CNR3[0] INFO cache_core_selftest_trace:     no-prune boundary leaves rejected-frame counter at 0
+CNR3[0] INFO cache_core_selftest_trace:     prune pass counts 58 cached, unpinned, prunable frames in hot zone [50-110]
+CNR3[0] INFO cache_core_selftest_trace:     test would fail if counter returned the 61-frame hot-zone width
+CNR3[0] INFO cache_core_selftest_trace:     idempotent post-prune pass does not increment counter again
+CNR3[0] INFO cache_core_selftest_trace: H.1A AS1 bounded recovery search scaffold scenario
+CNR3[0] INFO cache_core_selftest_trace:     recovery window B = 50; search interval is [requested-B, requested-1]
+CNR3[0] INFO cache_core_selftest_trace:     lower bound is inclusive: candidate at requested-B is found
+CNR3[0] INFO cache_core_selftest_trace:     below-bound candidate at requested-B-1 is not found
+CNR3[0] INFO cache_core_selftest_trace:     checkpoint flag is irrelevant: nearer non-checkpoint and nearer checkpoint both win
+CNR3[0] INFO cache_core_selftest_trace:     requested frame is the later repair target, not a hole-catalogue entry
+CNR3[0] INFO cache_core_selftest_trace:     underflow edge clamps lower bound to frame 0
+CNR3[0] INFO cache_core_selftest_trace: H.2A AS1 recovery anchor pin-record scenario
+CNR3[0] INFO cache_core_selftest_trace:     bounded search, anchor pin, and pin-list record occur under one cache lock
+CNR3[0] INFO cache_core_selftest_trace:     no-anchor and requested-frame-only cases record no pin
+CNR3[0] INFO cache_core_selftest_trace:     ordered proof: clear refused while pinned, discharge, then clear succeeds
+CNR3[0] INFO cache_core_selftest_trace: H.3A AS2 recovery store-consumer scenario
+CNR3[0] INFO cache_core_selftest_trace:     planned holes 11 and 12 are consumed through the existing AS2 helper
+CNR3[0] INFO cache_core_selftest_trace:     duplicate race: existing winner 12 survives, incoming loser is released once
+CNR3[0] INFO cache_core_selftest_trace:     expected pins: anchor 1 + inserted-hole AS2 1 + duplicate-hole AS2 1 = 3
+CNR3[0] INFO cache_core_selftest_trace:     G.12A owns freeFrame-outside-lock timing; H.3A proves recovery pin accounting
+CNR3[0] INFO cache_core_selftest_trace: C.13B recovery-plan contiguity guard scenario
+CNR3[0] INFO cache_core_selftest_trace:     source guard accepts reachable nearest-anchor + contiguous-hole plan 10 -> 13
+CNR3[0] INFO cache_core_selftest_trace:     consumer guard rejects corrupt non-contiguous holes {11,13} for requested 14
+CNR3[0] INFO cache_core_selftest_trace:     rejection returns invariant_violation before AS2 delegation, with no pins recorded
+CNR3[0] INFO cache_core_selftest_trace:     cache core emits no stderr; future getFrame integration owns developer-alert text
+CNR3[0] INFO cache_core_selftest_trace: C.14A aggregate cache-core workload scenario
+CNR3[0] INFO cache_core_selftest_trace:     sub-1 AS2 duplicate/adopt proves checkpoint promote and no-demote with 4 pins
+CNR3[0] INFO cache_core_selftest_trace:     sub-2 hot-zone/prune executes bounded AS5 detach/free with D-SUM-11 observe-only
+CNR3[0] INFO cache_core_selftest_trace:     sub-3 recovery pins anchor 30 and fills holes 31,32 through AS2 duplicate/adopt
+CNR3[0] INFO cache_core_selftest_trace:     sub-4 C.13B guard rejects non-contiguous holes {11,13} by hard status only
+CNR3[0] INFO cache_core_selftest_trace:     behavioural assertions do not read D-SUM counters; macro-off must also pass
+CNR3[0] INFO cache_core_selftest_trace: P.1A response-table vector proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     safe signed lookup proves table_offset indexing and out-of-range zero
+CNR3[0] INFO cache_core_selftest_trace:     threshold-zero proof sets only the centre entry
+CNR3[0] INFO cache_core_selftest_trace:     narrow 255/10 proves diff 5 -> 127 and peak 254 integer-division quirk
+CNR3[0] INFO cache_core_selftest_trace:     wide 255/10 proves diff 5 -> 216 through squared response curve
+CNR3[0] INFO cache_core_selftest_trace:     second 200/20 family proves narrow diff 7 -> 145 and wide diff 7 -> 192
+CNR3[0] INFO cache_core_selftest_trace:     clamp vectors prove threshold/strength are clamped before table generation
+CNR3[0] INFO cache_core_selftest_trace: P.2A response-table config surface proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     geometry proof maps sample_peak to signed table offset and size
+CNR3[0] INFO cache_core_selftest_trace:     scaling proof codifies round-to-nearest 8-bit-domain native scaling
+CNR3[0] INFO cache_core_selftest_trace:     8-bit Y/U/V build proves per-plane narrow/wide configs do not cross
+CNR3[0] INFO cache_core_selftest_trace:     16-bit build proves scaled thresholds/strengths and native table geometry
+CNR3[0] INFO cache_core_selftest_trace:     Y table is a luma-difference response for chroma blend, not a luma filter
+CNR3[0] INFO cache_core_selftest_trace:     subsampling traversal, downSampleLuma, and int64 blend are deferred to P.3A/P.4A/P.5A
+CNR3[0] INFO cache_core_selftest_trace:     invalid config proof preserves prior output tables without partial publish
+CNR3[0] INFO cache_core_selftest_trace:     reassess separate pixel selftest module at P.3A with project wiring review
+CNR3[0] INFO cache_core_selftest_trace: P.3A weighted chroma blend vector proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     source check confirms shift2=depth<<1, shift=1LL<<shift2, shift1=shift>>1
+CNR3[0] INFO cache_core_selftest_trace:     compatibility claim is bit-exact blend/curve maths plus improved native parameter scaling
+CNR3[0] INFO cache_core_selftest_trace:     zero-weight proof returns current source chroma
+CNR3[0] INFO cache_core_selftest_trace:     max-weight proof keeps shift-weight positive at 8-bit and 16-bit bounds
+CNR3[0] INFO cache_core_selftest_trace:     half-point proof preserves vsCnr2 shift1 round-half-up behaviour
+CNR3[0] INFO cache_core_selftest_trace:     8-bit vectors prove response multiplication, shift1 rounding, and shift2 depth
+CNR3[0] INFO cache_core_selftest_trace:     directionality proof distinguishes current source from previous filtered output
+CNR3[0] INFO cache_core_selftest_trace:     16-bit vectors prove int64 accumulator safety for high-bit-depth chroma blend
+CNR3[0] INFO cache_core_selftest_trace:     invalid input proof preserves output sentinel without partial publish
+CNR3[0] INFO cache_core_selftest_trace:     signed-difference/table-lookup and downSampleLuma rules are carried forward to P.4A/P.5A
+CNR3[0] INFO cache_core_selftest_trace: P.4A downsampled-luma vector proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     source check confirms x0=x<<subw, x1=x0+1, y0=y<<subh, y1=y0+subh
+CNR3[0] INFO cache_core_selftest_trace:     four-tap proof preserves (a+b+c+d+2)>>2 round-to-nearest behaviour
+CNR3[0] INFO cache_core_selftest_trace:     4:2:0 proof maps chroma samples to the expected 2x2 luma box
+CNR3[0] INFO cache_core_selftest_trace:     4:2:2, 4:4:0, and 4:4:4 proofs preserve vsCnr2 degenerate averages
+CNR3[0] INFO cache_core_selftest_trace:     right/bottom edge proof clamps taps instead of relying on frame padding
+CNR3[0] INFO cache_core_selftest_trace:     invalid coordinate and sample proofs preserve sentinels without partial publish
+CNR3[0] INFO cache_core_selftest_trace:     frame traversal, signed differences, table lookup, and scene-change remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.5A signed-difference/table-lookup blend proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     signed current-minus-previous luma/chroma diffs feed P.1A total lookup
+CNR3[0] INFO cache_core_selftest_trace:     P.2A geometry proof requires table_offset=sample_peak and full signed-diff table size
+CNR3[0] INFO cache_core_selftest_trace:     positive luma plus negative chroma diff proves no unsigned wrap on table path
+CNR3[0] INFO cache_core_selftest_trace:     negative luma plus positive chroma diff proves signed lookup before blending
+CNR3[0] INFO cache_core_selftest_trace:     zero-response proof returns current source chroma after table lookup
+CNR3[0] INFO cache_core_selftest_trace:     16-bit vector proves signed lookup and P.3A int64 blend remain composed
+CNR3[0] INFO cache_core_selftest_trace:     invalid geometry/sample proofs preserve result sentinel without partial publish
+CNR3[0] INFO cache_core_selftest_trace:     frame traversal, source-frame access, and scene-change remain deferred to P.6A
+CNR3[0] INFO cache_core_selftest_trace: P.6A chroma-plane traversal vector proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     matching scalar planes are traversed row-major with explicit strides
+CNR3[0] INFO cache_core_selftest_trace:     each chroma sample composes P.5A signed lookup and P.3A int64 blend
+CNR3[0] INFO cache_core_selftest_trace:     positive/negative/zero/extreme/half-point paths are proven across one plane
+CNR3[0] INFO cache_core_selftest_trace:     row padding is preserved and not treated as active chroma width
+CNR3[0] INFO cache_core_selftest_trace:     invalid late-sample and geometry proofs publish no partial output
+CNR3[0] INFO cache_core_selftest_trace:     source luma downsample traversal, frame access, and scene-change remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.7A source-luma downsample plane traversal proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     scalar source-luma buffers are traversed with explicit strides
+CNR3[0] INFO cache_core_selftest_trace:     expected chroma-grid dimensions are derived from luma size and subsampling
+CNR3[0] INFO cache_core_selftest_trace:     4:2:0, 4:2:2, 4:4:0, and 4:4:4 traversal shapes are proven
+CNR3[0] INFO cache_core_selftest_trace:     right/bottom edge taps are clamped during full-plane traversal
+CNR3[0] INFO cache_core_selftest_trace:     output padding is preserved and invalid late-sample failure publishes no partial plane
+CNR3[0] INFO cache_core_selftest_trace:     real frame-memory access, byte-stride reinterpretation, and scene-change remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.8A native byte-plane access vector proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     bit-depth proof maps 8-bit to one-byte storage and 9..16-bit to two-byte storage
+CNR3[0] INFO cache_core_selftest_trace:     native byte-stride loads convert 8-bit and 10-bit rows into scalar int planes
+CNR3[0] INFO cache_core_selftest_trace:     10-bit vectors prove column byte offsets use x*storage_bytes
+CNR3[0] INFO cache_core_selftest_trace:     scalar-to-native stores preserve active samples and native padding bytes
+CNR3[0] INFO cache_core_selftest_trace:     invalid late native/scalar samples publish no partial destination plane
+CNR3[0] INFO cache_core_selftest_trace:     VapourSynth frame ownership, source-frame lifecycle, and scene-change remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.9A native luma downsample bridge proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     native source-luma byte buffers are copied through P.8A before P.7A downsample traversal
+CNR3[0] INFO cache_core_selftest_trace:     10-bit native luma vector proves x*storage_bytes survives the composed downsample path
+CNR3[0] INFO cache_core_selftest_trace:     8-bit native luma vector proves one-byte source-luma input path
+CNR3[0] INFO cache_core_selftest_trace:     invalid late native sample and output geometry proofs publish no partial scalar plane
+CNR3[0] INFO cache_core_selftest_trace:     VapourSynth frame ownership, source-frame lifecycle, scene-change, and getFrame/cache integration remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.10A VapourSynth plane-view adapter proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     VSAPI getFrameWidth/getFrameHeight/getStride/getReadPtr build read native byte views
+CNR3[0] INFO cache_core_selftest_trace:     VSAPI getWritePtr builds write native byte views without calling getReadPtr again
+CNR3[0] INFO cache_core_selftest_trace:     10-bit read/write vectors prove VS stride and x*storage_bytes composition
+CNR3[0] INFO cache_core_selftest_trace:     two-byte VS strides must be storage-byte aligned before a view is published
+CNR3[0] INFO cache_core_selftest_trace:     source-frame lifecycle, predecessor acquisition, scene-change, and getFrame/cache integration remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.11A caller-supplied frame-triplet view proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     current source, previous filtered output, and destination VSFrames are caller supplied
+CNR3[0] INFO cache_core_selftest_trace:     triplet validation composes P.10A read/write plane adapters without lifecycle decisions
+CNR3[0] INFO cache_core_selftest_trace:     4:2:0 real-frame dimensions require exact luma divisibility and matching U/V triplets
+CNR3[0] INFO cache_core_selftest_trace:     stale triplet views are cleared on plane mismatch or invalid real-frame dimensions
+CNR3[0] INFO cache_core_selftest_trace:     source-frame lifecycle, predecessor sourcing, scene-change, pixel composition, and getFrame/cache integration remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.11B caller-supplied real-frame pixel-composition proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     caller-supplied frame triplet composes P.11A views with the proven pixel pipeline
+CNR3[0] INFO cache_core_selftest_trace:     output luma is staged and copied unchanged from current source luma
+CNR3[0] INFO cache_core_selftest_trace:     chroma U/V are blended against previous filtered output frame planes
+CNR3[0] INFO cache_core_selftest_trace:     predecessor semantics vector proves previous filtered output is used, not source[N-1]
+CNR3[0] INFO cache_core_selftest_trace:     two-byte samples retain the P.8A memcpy path; typed row-pointer optimization is deferred to fmParallel measurement
+CNR3[0] INFO cache_core_selftest_trace:     invalid late pixel/response-table proofs publish no partial destination frame
+CNR3[0] INFO cache_core_selftest_trace:     source-frame lifecycle, predecessor sourcing, scene-change, and getFrame/cache integration remain deferred
+CNR3[0] INFO cache_core_selftest_trace: P.11C caller-supplied scene-change/reset proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     scene-change uses caller-supplied frames and an already-computed integer threshold
+CNR3[0] INFO cache_core_selftest_trace:     diff_total accumulates scaled downsampled-luma differences and optional chroma differences
+CNR3[0] INFO cache_core_selftest_trace:     strict diff_total > threshold fires reset; equality keeps recursive chroma blend active
+CNR3[0] INFO cache_core_selftest_trace:     scene reset stages current source chroma unchanged with all-or-nothing destination commit
+CNR3[0] INFO cache_core_selftest_trace:     source-frame lifecycle, threshold calculation, checkpoint promotion, and getFrame/cache integration remain deferred
+CNR3[0] INFO cache_core_selftest_trace: K.1A keystone request-plan and temporary KDT trace proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     synthetic vectors prove plan branch shape, not predecessor pixel correctness
+CNR3[0] INFO cache_core_selftest_trace:     recovery request representation is holes-list/source-set, never a blanket span
+CNR3[0] INFO cache_core_selftest_trace:     hard-status branch is a carrier for existing C.13B guard results, not a new validator
+CNR3[0] INFO cache_core_selftest_trace:     [KDT] and [KDT-SUMMARY] formatting is driven by the plan structure
+CNR3[0] INFO cache_core_selftest_trace:     no getFrame wiring, source lifecycle, pixel-path call, cache semantic change, or VS header edit is introduced
+CNR3[0] INFO cache_core_selftest_trace: K.1B direct cached-output return ownership proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     synthetic proof uses real Cnr3OwnedFrameRef and real cache lookup/addref operations
+CNR3[0] INFO cache_core_selftest_trace:     success path transfers lookup ref once to a getFrame-return sink and releases zero
+CNR3[0] INFO cache_core_selftest_trace:     cleanup-before-transfer path releases the lookup ref once and transfers zero
+CNR3[0] INFO cache_core_selftest_trace:     no-acquire miss path acquires, releases, and transfers zero lookup refs
+CNR3[0] INFO cache_core_selftest_trace:     real VSFrame return-to-VapourSynth integration remains owed by a later keystone wiring step
+CNR3[0] INFO cache_core_selftest_trace: K.1E.1 frameData pin-gap synthetic proof scenario
+CNR3[0] INFO cache_core_selftest_trace:     frameData-shaped holder carries predecessor frame number and caller-owned pin-list only
+CNR3[0] INFO cache_core_selftest_trace:     no predecessor VSFrame ref is carried across the arInitial/arAllFramesReady gap
+CNR3[0] INFO cache_core_selftest_trace:     normal path discharges the pin-list before deleting the holder
+CNR3[0] INFO cache_core_selftest_trace:     abandoned/free path uses the same discharge-before-delete helper
+CNR3[0] INFO cache_core_selftest_trace:     intervening prune during the gap leaves the pinned predecessor present and retrievable
+CNR3[0] INFO cache_core_selftest_trace: Recovery-Step-0 AS4 single-lock batch discharge scenario
+CNR3[0] INFO cache_core_selftest_trace:     public discharge_all call site is stable and delegates to cache.discharge_pin_list
+CNR3[0] INFO cache_core_selftest_trace:     batch path uses one AS4 cache-lock acquisition and unpin_frame_locked worker
+CNR3[0] INFO cache_core_selftest_trace:     multi-pin discharge releases every token and double-discharge no-ops
+CNR3[0] INFO cache_core_selftest_trace:     partial invalid-token proof attempts all entries and returns first failure
+CNR3[0] INFO cache_core_selftest_trace:     public clear/remove cannot invalidate pinned tokens before discharge
+CNR3[0] INFO cache_core_selftest: CNR3 cache-core selftest runner
+CNR3[0] INFO cache_core_selftest: edit_version: CNR3-OPT-LeverF3c-blend-inline-hoist
+CNR3[0] INFO cache_core_selftest: cache_profile: normal
+CNR3[0] INFO cache_core_selftest:
+CNR3[0] INFO cache_core_selftest: summary:
+CNR3[0] INFO cache_core_selftest:     total: 56
+CNR3[0] INFO cache_core_selftest:     passed: 56
+CNR3[0] INFO cache_core_selftest:     failed: 0
+CNR3[0] INFO cache_core_selftest:     result: PASS
+
+E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3>echo Release verbose exit_code=%ERRORLEVEL%
+Release verbose exit_code=0

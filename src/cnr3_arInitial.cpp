@@ -478,6 +478,13 @@ const VSFrame* cnr3_arInitial(
         return nullptr;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+    cnr3_diag_dsum01_observe_ar_initial(
+        data.dsum01_request_order,
+        n
+    );
+#endif
+
     Cnr3LiveGetFrameFrameData* request_data =
         new (std::nothrow) Cnr3LiveGetFrameFrameData{};
 

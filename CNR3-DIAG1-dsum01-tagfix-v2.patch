@@ -1,0 +1,54 @@
+diff --git a/src/cnr3_diagnostics.cpp b/src/cnr3_diagnostics.cpp
+index 34966db..ca08637 100644
+--- a/src/cnr3_diagnostics.cpp
++++ b/src/cnr3_diagnostics.cpp
+@@ -158,7 +158,7 @@ namespace {
+         const int written = std::snprintf(
+             message,
+             sizeof(message),
+-            "[KDT-SUMMARY] D-SUM-01 %-36s %llu",
++            "[DSUM-SUMMARY] D-SUM-01 %-36s %llu",
+             label != nullptr ? label : "(null)",
+             static_cast<unsigned long long>(value)
+         );
+@@ -168,7 +168,7 @@ namespace {
+                 instance_id,
+                 Cnr3DiagnosticLevel::error,
+                 "D-SUM-01",
+-                "[KDT-SUMMARY] formatting_error",
++                "[DSUM-SUMMARY] formatting_error",
+                 Cnr3StderrFlushPolicy::no_flush
+             );
+             return;
+@@ -195,7 +195,7 @@ namespace {
+         const int written = std::snprintf(
+             message,
+             sizeof(message),
+-            "[KDT-SUMMARY] D-SUM-01 %-36s %d",
++            "[DSUM-SUMMARY] D-SUM-01 %-36s %d",
+             label != nullptr ? label : "(null)",
+             value
+         );
+@@ -205,7 +205,7 @@ namespace {
+                 instance_id,
+                 Cnr3DiagnosticLevel::error,
+                 "D-SUM-01",
+-                "[KDT-SUMMARY] formatting_error",
++                "[DSUM-SUMMARY] formatting_error",
+                 Cnr3StderrFlushPolicy::no_flush
+             );
+             return;
+@@ -311,11 +311,11 @@ void cnr3_diag_dsum01_write_request_order_summary_to_stderr(
+ 
+     cnr3_diag_dsum01_write_text_line(
+         instance_id,
+-        "[KDT-SUMMARY] D-SUM-01 request-arrival/order summary"
++        "[DSUM-SUMMARY] D-SUM-01 request-arrival/order summary"
+     );
+     cnr3_diag_dsum01_write_text_line(
+         instance_id,
+-        "[KDT-SUMMARY] D-SUM-01 interpretation: out-of-order is INFO under stress; WARN only if sequential order was expected"
++        "[DSUM-SUMMARY] D-SUM-01 interpretation: out-of-order is INFO under stress; WARN only if sequential order was expected"
+     );
+ 
+     cnr3_diag_dsum01_write_uint64_row(

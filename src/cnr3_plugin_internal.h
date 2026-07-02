@@ -16,6 +16,7 @@
 #include "cnr3_build_config.h"
 #include "cnr3_cache_core.h"
 #include "cnr3_common.h"
+#include "cnr3_diagnostics.h"
 #include "cnr3_frame_processing.h"
 #include "cnr3_instance_config.h"
 #include "cnr3_owned_frame_ref.h"
@@ -36,6 +37,9 @@ struct Cnr3FilterData {
     int sub_sampling_h = -1;
     double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
     Cnr3SceneChangeConfig scene_change_config{};
+#if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+    Cnr3DiagDsum01RequestOrderStats dsum01_request_order{};
+#endif
 };
 
 struct Cnr3LiveOutputStoreRequest {

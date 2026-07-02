@@ -131,6 +131,30 @@ namespace {
         cnr3_diag_flush_stderr();
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+
+    void cnr3_selftest_emit_dsum01_reference_summary() noexcept {
+        Cnr3DiagDsum01RequestOrderStats stats{};
+
+        cnr3_diag_dsum01_observe_ar_initial(stats, 0);
+        cnr3_diag_dsum01_observe_ar_all_frames_ready(stats);
+        cnr3_diag_dsum01_observe_ar_initial(stats, 1);
+        cnr3_diag_dsum01_observe_ar_all_frames_ready(stats);
+        cnr3_diag_dsum01_observe_ar_initial(stats, 1);
+        cnr3_diag_dsum01_observe_ar_initial(stats, 5);
+        cnr3_diag_dsum01_observe_ar_initial(stats, 3);
+        cnr3_diag_dsum01_observe_ar_initial(stats, 4);
+
+#if defined(CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER)
+        cnr3_diag_dsum01_write_request_order_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
     bool cnr3_selftest_argument_is_present(
         int argc,
         char** argv,
@@ -176,6 +200,10 @@ int main(int argc, char** argv) {
         force_failure_proof ?
         cnr3_selftest_make_forced_failure_result(natural_result) :
         natural_result;
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+    cnr3_selftest_emit_dsum01_reference_summary();
+#endif
 
     cnr3_selftest_print_summary_to_stderr(result);
 

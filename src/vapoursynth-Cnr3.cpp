@@ -299,6 +299,13 @@ void VS_CC cnr3_free_filter(
         return;
     }
 
+#if defined(CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER)
+    cnr3_diag_dsum01_write_request_order_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum01_request_order
+    );
+#endif
+
     if (data->source != nullptr && vsapi != nullptr) {
         vsapi->freeNode(data->source);
         data->source = nullptr;

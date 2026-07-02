@@ -1777,6 +1777,12 @@ const VSFrame* cnr3_arAllFramesReady(
         return nullptr;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+    cnr3_diag_dsum01_observe_ar_all_frames_ready(
+        data.dsum01_request_order
+    );
+#endif
+
     switch (request_data->branch) {
     case Cnr3LiveGetFrameBranch::cache_hit_return:
         return cnr3_get_frame_live_cache_hit_return(

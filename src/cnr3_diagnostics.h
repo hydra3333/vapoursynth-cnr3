@@ -2,6 +2,10 @@
 
 #include "cnr3_common.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <mutex>
+
 /*
     CNR3 generic diagnostics output core.
 
@@ -90,3 +94,87 @@ void cnr3_diag_write_line(
     Cnr3StderrFlushPolicy::no_flush for individual lines.
 */
 void cnr3_diag_flush_stderr() noexcept;
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+
+inline constexpr std::size_t CNR3_DIAG_DSUM01_GAP_HISTOGRAM_BIN_COUNT = 9U;
+
+/*
+    D-SUM-01 request-arrival / ordering diagnostic state.
+
+    This state is per filter instance and observe-only. The mutex protects the
+    diagnostic counters only; it is not a cache/CMS atomic-scope lock. Summary
+    printing must take a snapshot and release this mutex before formatting or
+    writing stderr.
+*/
+struct Cnr3DiagDsum01RequestOrderStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t ar_initial_count = 0;
+    std::uint64_t ar_all_frames_ready_count = 0;
+
+    bool have_requested_frame = false;
+    int first_requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    int last_requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    int previous_requested_frame = CNR3_INVALID_FRAME_NUMBER;
+
+    std::uint64_t monotonic_forward_count = 0;
+    std::uint64_t same_frame_or_duplicate_count = 0;
+    std::uint64_t backward_jump_count = 0;
+    std::uint64_t forward_jump_count = 0;
+    std::uint64_t out_of_order_count = 0;
+
+    int max_forward_jump = 0;
+    int max_backward_jump = 0;
+
+    std::uint64_t arrival_gap_histogram[
+        CNR3_DIAG_DSUM01_GAP_HISTOGRAM_BIN_COUNT
+    ] = {};
+};
+
+struct Cnr3DiagDsum01RequestOrderSnapshot {
+    std::uint64_t ar_initial_count = 0;
+    std::uint64_t ar_all_frames_ready_count = 0;
+
+    bool have_requested_frame = false;
+    int first_requested_frame = CNR3_INVALID_FRAME_NUMBER;
+    int last_requested_frame = CNR3_INVALID_FRAME_NUMBER;
+
+    std::uint64_t monotonic_forward_count = 0;
+    std::uint64_t same_frame_or_duplicate_count = 0;
+    std::uint64_t backward_jump_count = 0;
+    std::uint64_t forward_jump_count = 0;
+    std::uint64_t out_of_order_count = 0;
+
+    int max_forward_jump = 0;
+    int max_backward_jump = 0;
+
+    std::uint64_t arrival_gap_histogram[
+        CNR3_DIAG_DSUM01_GAP_HISTOGRAM_BIN_COUNT
+    ] = {};
+};
+
+void cnr3_diag_dsum01_observe_ar_initial(
+    Cnr3DiagDsum01RequestOrderStats& stats,
+    int requested_frame
+) noexcept;
+
+void cnr3_diag_dsum01_observe_ar_all_frames_ready(
+    Cnr3DiagDsum01RequestOrderStats& stats
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum01RequestOrderSnapshot
+cnr3_diag_dsum01_snapshot_request_order(
+    const Cnr3DiagDsum01RequestOrderStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER)
+
+void cnr3_diag_dsum01_write_request_order_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum01RequestOrderStats& stats
+) noexcept;
+
+#endif

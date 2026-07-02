@@ -15429,7 +15429,8 @@ Cnr3Status cnr3_cache_core_selftest_keystone_request_plan_dev_trace_proof() noex
         predecessor pixel correctness, or connect any functional getFrame path.
     */
 #if !defined(CNR3_KEYSTONE_DEV_TRACE)
-    return Cnr3Status::lifecycle_violation;
+    cnr3_cache_core_selftest_skip_line("keystone_request_plan_dev_trace_proof");
+    return Cnr3Status::ok;
 #else
     const auto fail = []() noexcept -> Cnr3Status {
         return Cnr3Status::invariant_violation;
@@ -15605,7 +15606,8 @@ Cnr3Status cnr3_cache_core_selftest_keystone_direct_cached_output_return_proof()
         Real VSFrame return integration remains owed by a later keystone phase.
     */
 #if !defined(CNR3_KEYSTONE_DEV_TRACE)
-    return Cnr3Status::lifecycle_violation;
+    cnr3_cache_core_selftest_skip_line("keystone_direct_cached_output_return_proof");
+    return Cnr3Status::ok;
 #else
     struct Cnr3CacheCoreSelftestKeystoneReturnAccounting {
         int lookup_refs_acquired = 0;

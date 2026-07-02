@@ -558,10 +558,87 @@ void cnr3_publish_vapoursynth_frame_triplet_summary(
         destination_shape.bits_per_sample
     };
 
-    return cnr3_convert_scalar_plane_into_native_staging_bytes(
-        scalar_plane,
-        staged_plane
+    int storage_bytes = 0;
+    const Cnr3Status storage_status = cnr3_native_storage_bytes_for_bit_depth(
+        staged_plane.bits_per_sample,
+        storage_bytes
     );
+
+    if (storage_status != Cnr3Status::ok) {
+        return storage_status;
+    }
+
+    int sample_peak = 0;
+
+    if (
+        cnr3_sample_peak_for_bit_depth(staged_plane.bits_per_sample, sample_peak) !=
+            Cnr3Status::ok ||
+        !cnr3_const_plane_view_is_valid(scalar_plane) ||
+        !cnr3_mutable_native_plane_byte_view_is_valid(staged_plane, storage_bytes) ||
+        !cnr3_native_plane_dimensions_match(scalar_plane, staged_plane)
+        ) {
+        return Cnr3Status::invalid_argument;
+    }
+
+    auto* const staged_base = static_cast<std::uint8_t*>(staged_plane.data);
+    const std::size_t staged_stride_bytes =
+        static_cast<std::size_t>(staged_plane.stride_bytes);
+
+    /*
+        Staging-private fast path. The scalar samples are Tier-2 values produced
+        through the Tier-1 source gate, but the store primitive's reject-on-
+        out-of-range contract is still reproduced here before narrowing. The
+        buffer is throwaway staging: a failure can leave staged_bytes partially
+        written, but the real destination frame is not committed until all Y/U/V
+        staging has succeeded.
+    */
+    if (storage_bytes == 1) {
+        for (int y = 0; y < scalar_plane.height; ++y) {
+            const int* __restrict scalar_row =
+                scalar_plane.samples +
+                (static_cast<std::size_t>(y) *
+                    static_cast<std::size_t>(scalar_plane.stride));
+            std::uint8_t* __restrict staged_row =
+                staged_base + (static_cast<std::size_t>(y) * staged_stride_bytes);
+
+            for (int x = 0; x < scalar_plane.width; ++x) {
+                const int sample = scalar_row[x];
+
+                if (!cnr3_value_is_inclusive_range(sample, 0, sample_peak)) {
+                    return Cnr3Status::invalid_argument;
+                }
+
+                staged_row[x] = static_cast<std::uint8_t>(sample);
+            }
+        }
+    } else {
+        for (int y = 0; y < scalar_plane.height; ++y) {
+            const int* __restrict scalar_row =
+                scalar_plane.samples +
+                (static_cast<std::size_t>(y) *
+                    static_cast<std::size_t>(scalar_plane.stride));
+            std::uint8_t* __restrict staged_row =
+                staged_base + (static_cast<std::size_t>(y) * staged_stride_bytes);
+
+            for (int x = 0; x < scalar_plane.width; ++x) {
+                const int sample = scalar_row[x];
+
+                if (!cnr3_value_is_inclusive_range(sample, 0, sample_peak)) {
+                    return Cnr3Status::invalid_argument;
+                }
+
+                const std::uint16_t native_sample =
+                    static_cast<std::uint16_t>(sample);
+                std::memcpy(
+                    staged_row + (static_cast<std::size_t>(x) * sizeof(native_sample)),
+                    &native_sample,
+                    sizeof(native_sample)
+                );
+            }
+        }
+    }
+
+    return Cnr3Status::ok;
 }
 
 /*

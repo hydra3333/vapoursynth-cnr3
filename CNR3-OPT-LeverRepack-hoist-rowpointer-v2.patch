@@ -1,0 +1,43 @@
+diff --git a/src/cnr3_frame_processing.cpp b/src/cnr3_frame_processing.cpp
+index de53423..59e6272 100644
+--- a/src/cnr3_frame_processing.cpp
++++ b/src/cnr3_frame_processing.cpp
+@@ -687,23 +687,24 @@ void cnr3_commit_staged_native_active_samples(
+         return;
+     }
+ 
+-    auto* destination_bytes = static_cast<std::uint8_t*>(destination.data);
++    auto* const destination_base = static_cast<std::uint8_t*>(destination.data);
++    const auto* const staged_base = staged_bytes.data();
++    const std::size_t stride_bytes =
++        static_cast<std::size_t>(destination.stride_bytes);
++    const std::size_t active_row_bytes =
++        static_cast<std::size_t>(destination.width) *
++        static_cast<std::size_t>(storage_bytes);
+ 
++    // staged_bytes is destination-stride-pitched by construction. The staging
++    // path allocates stride_bytes * height and builds the staged view with the
++    // destination stride, so the same row offset is valid for both buffers.
+     for (int y = 0; y < destination.height; ++y) {
+-        for (int x = 0; x < destination.width; ++x) {
+-            const std::size_t offset = cnr3_native_plane_byte_offset(
+-                x,
+-                y,
+-                destination.stride_bytes,
+-                storage_bytes
+-            );
++        std::uint8_t* __restrict destination_row =
++            destination_base + (static_cast<std::size_t>(y) * stride_bytes);
++        const std::uint8_t* __restrict staged_row =
++            staged_base + (static_cast<std::size_t>(y) * stride_bytes);
+ 
+-            if (storage_bytes == 1) {
+-                destination_bytes[offset] = staged_bytes[offset];
+-            } else {
+-                std::memcpy(destination_bytes + offset, staged_bytes.data() + offset, 2U);
+-            }
+-        }
++        std::memcpy(destination_row, staged_row, active_row_bytes);
+     }
+ }
+ 

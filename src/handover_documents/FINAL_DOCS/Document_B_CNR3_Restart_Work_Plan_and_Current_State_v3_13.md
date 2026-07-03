@@ -1,5 +1,77 @@
 # Document B — CNR3 Work Plan and Current Build State (CMS07.15, RESUME)
 
+*** v3.13 UPDATE — 2026-07-04 — DIAGNOSTICS ARC ACTIVE; committed through DIAG.2a; NEXT = DIAG.2b (in flight)
+    (supersedes the v3.12 banner below; advances build state from "marshalling arc complete, NEXT=Lever-B-or-diagnostics"
+     to "diagnostics arc ACTIVE: DIAG.1 + skip-pass + DIAG.2a committed/pushed; DIAG.2b scoped v2 and in flight with the coder") ***
+This is the newest current-state record. The repository is the authority — confirm CNR3_EDIT_VERSION and the
+selftest count from committed source before acting.
+
+DIAGNOSTICS ARC (D-SUM telemetry) is underway. COMMITTED + PUSHED: (1) selftest skip-pass fix (default KDT-off config
+now honest 56/56); (2) DIAG.1 = D-SUM framework + D-SUM-01 request-order + R-PROCESS-19 observe-only proof; (3) DIAG.2a =
+D-SUM-11 hot-zone writer + D-SUM-10 prune/eviction/re-churn (ring, gap-histo, top-thrash, bounded dumps), gate-matrix and
+S-series proven. DIAG.2a finding banked as FI-11: re-churn hooks the predecessor-lookup path, but the costly evict-then-
+rebuild churn flows through the recovery/anchor path (D-SUM-12's job, DIAG.3). ACTIVE: DIAG.2b (D-SUM-04 ownership-balance +
+D-SUM-05 cache-integrity + D-SUM-08 store/duplicate), v2 scope issued (D-SUM-04 re-sited to two provable balances after the
+coder's inventory review; D-SUM-05 -> central cache_state_invariants_hold_locked(); D-SUM-08 -> wrapper summary, AS2
+promotions only). Deferrals recorded as FI-11/12/13. NEXT AFTER DIAG.2b: DIAG.3 (getFrame/recovery incl. D-SUM-12 recovery-
+rate + the plan/result plan-trace family), then DIAG.4 (memory D-SUM-02). CMS DESIGN UNCHANGED (07.15).
+
+---
+(Prior v3.12 banner retained as history:)
+# Document B — CNR3 Work Plan and Current Build State (CMS07.15, RESUME)
+
+
+*** v3.12 UPDATE — 2026-07-02 — MARSHALLING-OPTIMISATION ARC SUBSTANTIALLY COMPLETE (~-80%); NEXT = LEVER-B-OR-DIAGNOSTICS (coordinator call)
+    (supersedes the v3.11 banner below; advances build state from "tiny-scaffold committed, 56/56, NEXT=diagnostics" to
+     "marshalling arc complete at ~-80%, 56/56, NEXT = Lever B pooling OR the diagnostics arc") ***
+This is the newest current-state record. The repository is the authority — confirm CNR3_EDIT_VERSION and the
+selftest count from committed source before acting.
+
+Build state ADVANCED off the tiny-scaffold seam by a full MARSHALLING-OPTIMISATION ARC (FI-10 acted on). This was an
+implementation-only performance arc: CMS DESIGN UNCHANGED (still 07.15), every lever value-identical (56/56 four-way,
+P-series preserved), each separately profiled on the YUV420P8 production clip. Twelve committed levers reduced per-frame
+native<->scalar marshalling to ~1/5 of its original cost:
+  AVX2 (x64-only, /arch:AVX2, neutral) | 0A staged native luma passthrough -28% | 0B staging cleanup flat |
+  3a.1 typed native->scalar unpack -37% | 3b.1 inlined downsample flat | 3a.2 hoist source range-check (16-bit
+  vectorised C5001, flat-on-8bit) | A-lite 8-bit unpack row-pointer/restrict -7.4% | C1 direct native-luma downsample
+  bridge -24.5% (buffer elimination, biggest single win) | Repack row-memcpy commit -4% | F/3c blend inline+hoist -15.7%
+  | Staging scalar->native inline -17.5% | E scene-change local-accumulator -4%.
+  CUMULATIVE ~-80% (93,914 -> ~18,660 samples, 3500f -r 1).
+Key artefacts: the VALIDATION POLICY (defend-at-source Tier-1 / trust-downstream Tier-2 / bounded-by-construction
+Tier-3 / final-clamp-always) was recorded and APPLIED (F/3c removals, Staging Tier-1 reproduction, C1 pre-pass). The
+blend arithmetic was CROSS-VERIFIED by independent designer+coder derivations (product weight, convex combination,
+int64 throughout, shift1 round-half-up, weight->previous-filtered directionality) — this caught two external-suggestion
+landmines: a VPAVGB two-level average (measured +0.375-code recursion-COMPOUNDING bias) and a 32-bit blend accumulator
+(overflows at 16-bit; int64 required). Both REJECTED.
+Two candidates INVESTIGATED and DECLINED: Tier-2 chroma-unpack fusion (Path C — the ~1,874 chroma buffer is
+LOAD-BEARING for scene-change detection + reset, not a free-standing materialisation like C1's luma bridge; fusing
+either forks the code on scene_config or needs a full native scene/reset rewrite — disproportionate) and Lever D
+exact-SIMD downsample (PATH-B-only — the hot native loop's asymmetric x1 clamp blocks auto-vectorisation; the scalar
+function is bypassed in production).
+
+Committed:     CNR3-OPT-LeverE-scenechange-local-accumulator  (marshalling arc COMPLETE, on top of CMS07-DIAG-tinycache-scaffold)
+Selftests:     56/56 PASS (forced-fail 55/56 exit 1; verbose 56/56)  [unchanged by the arc — all levers value-identical]
+Build:         x64-ONLY, /arch:AVX2 HARD REQUIREMENT (both projects). NOTE: diagnostic /Qvec-report:2 flags may be
+               sitting DIRTY in vs/cnr3/*.vcxproj working tree (carried deliberately) — revert before committing
+               project files: git checkout -- vs/cnr3/cnr3.vcxproj vs/cnr3/cnr3_cache_core_selftest.vcxproj
+Controlling:   CMS07.15 (UNCHANGED — the arc is implementation-only) / companion FI v7.16 (FI-10 arc-complete) /
+               Production Spec v2.15 / Document A v3.11 / this Document B v3.12 / Role Handover v1.16 /
+               Reviewer Intro v3.9 / Coder Restart Intro v6.7 / DELTA v4.23 / PixelPath Map v0.4
+NEXT (coordinator call): EITHER (a) Lever B — allocation pooling of the per-frame scalar buffers (~587-sample
+               `cnr3_allocate_scalar_plane_storage` leaf, the only remaining marshalling headroom). NOT a hot-loop
+               change but a buffer-LIFETIME change → needs an fmUnordered thread-safety PROOF (one activation per
+               instance may make an instance pool safe, but must be PROVEN, not assumed; and must not break if
+               fmParallel ever becomes reachable). OR (b) declare the arc DONE at ~-80% and pivot to the DIAGNOSTICS
+               arc (the tiny-scaffold's original purpose): Claude-owed 2-line-per-family D-SUM menu, then DIAG.1, plus
+               the owed items (end-of-run integrity report, abort_on_error param, warn-vs-hard-fail severity, selftest
+               skip-pass fix).
+First actions: (1) confirm CNR3_EDIT_VERSION and 56/56 from the repo; (2) confirm the marshalling arc committed through
+               Lever E; (3) take the coordinator's Lever-B-vs-diagnostics decision.
+
+*** end v3.12 UPDATE ***
+
+
+
 *** v3.11 UPDATE — 2026-07-01 — TINY-100 DIAGNOSTIC CACHE SCAFFOLD COMMITTED (56/56); NEXT = DIAGNOSTICS ARC
     (supersedes the v3.10 banner below; advances build state from "W.3 done, 55/55" to "scaffold done, 56/56") ***
 This is the newest current-state record. The repository is the authority — confirm CNR3_EDIT_VERSION and the

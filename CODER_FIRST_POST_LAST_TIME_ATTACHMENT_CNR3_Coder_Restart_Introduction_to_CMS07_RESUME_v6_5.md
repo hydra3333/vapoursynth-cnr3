@@ -1,5 +1,5 @@
-# CNR3 — Development RESUME on the CMS07.15 cache + pixel + scene-change architecture
-*(Coder restart introduction (v6.6) — paste this at the start of a new memoryless chat,
+# CNR3 — Development RESUME on the CMS07.14 cache + pixel + scene-change architecture
+*(Coder restart introduction (v6.5) — paste this at the start of a new memoryless chat,
 ahead of the attached handover pack files. This is a RESUME of an in-progress, proven build
 that is past its cache-core milestone, through its entire real-frame pixel path on
 caller-supplied frames, and through the cache↔pixel / getFrame KEYSTONE — whose live dispatch
@@ -8,7 +8,7 @@ and the **branch-(d) recovery arc is COMPLETE (D.1-D.5)**, AND the **P.11C SCENE
 (.1-.5)** — scene detection is wired+proven across branch-a/c/d, committed through CMS07-P.11C.5. It is
 NOT a fresh start, it is NOT "early cache-core work," it is NOT pixel-path work, and neither the keystone
 dispatch, the recovery arc, nor the scene-change arc is un-started or partial — read the state below
-carefully. The live cache-pressure wiring arc (W.1→W.2→W.3) is COMPLETE and committed (CMS07-W.3, 55/55 + eviction-proof live harness PASS); the immediate next work is the **DIAGNOSTICS ARC** (D-SUM telemetry), sequenced before the real-footage campaign.
+carefully. The immediate live work is the **live cache-pressure WIRING IMPLEMENTATION**, starting at **W.1**.
 The prune logic + hot-zone machinery are already built and selftest-proven but have ZERO live callers in the
 committed source — so the task is wiring, NOT a new algorithm (with ONE genuinely new primitive at W.1; see
 below). The joint CMS sensibility/gap review (Step 0) that this wiring required is now CLOSED: it confirmed
@@ -22,7 +22,7 @@ ordered work is: **W.1** the §7.4 checkpoint-retention trigger as a proven cach
 (the one new piece of logic — read-first/propose/review/prove like a K/D phase; your read-first + 3a proposal
 is already produced and ACCEPTED, so resume at the patch step), then **W.2** hot-zone observation wiring at
 arInitial, then **W.3** the combined live store-and-prune helper.
-v6.6 supersedes v6.5. Build state ADVANCED: the live cache-pressure wiring arc W.1→W.2→W.3 is COMPLETE (committed CMS07-W.3, 55/55 + eviction-proof live harness PASS); controlling CMS now CMS07.15 (additive §7.5 store-status contract); the next-action is the DIAGNOSTICS arc (D-SUM), before real-footage. [Prior v6.5 note:] v6.5 supersedes v6.4. Build state unchanged (P.11C arc CLOSED .1-.5, 53/53). Two advances: (1) the STEP 0
+v6.5 supersedes v6.4. Build state unchanged (P.11C arc CLOSED .1-.5, 53/53). Two advances: (1) the STEP 0
 joint review is now CLOSED — the live cache-pressure wiring contract is SETTLED and recorded in the design
 authority as **CMS07.14** (additive over 07.13: new §7.4 independent checkpoint-retention trigger, §7.5
 combined-helper wiring contract, §7.6 arInitial observation prerequisite; provenance
@@ -96,7 +96,7 @@ KEYSTONE+RECOVERY+SCENE: LIVE DISPATCH FEATURE-COMPLETE (all four branches) WITH
                        P.11C.3 branch-c (predecessor-present) scene detection       (plugin-only; .vpy-proven)
                        P.11C.4 branch-d (recovery) per-hole+target scene detection  (plugin-only; .vpy-proven)
                        P.11C.5 scene-cut-checkpoint found as recovery anchor        (selftest; count 52 -> 53)
-Latest committed:    CMS07-W.3-combined-live-store-prune-helper  (live cache-pressure wiring arc COMPLETE: W.1+W.2+W.3; 55/55)
+Latest committed:    CMS07-P.11C.5-scene-cut-checkpoint-recovery-anchor-proof  (P.11C SCENE-CHANGE ARC CLOSED .1-.5)
 Controlling CMS:     CMS07.14 (additive over 07.13: §7.4 checkpoint-retention trigger, §7.5 live-wiring contract,
                      §7.6 arInitial observation prerequisite — Step 0 outputs; §0A charter + §9.5 materialized-floor +
                      R-LIFECYCLE carried forward unchanged)

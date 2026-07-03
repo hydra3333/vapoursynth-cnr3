@@ -155,6 +155,80 @@ namespace {
 
 #endif
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+
+    void cnr3_selftest_emit_dsum10_reference_summary() {
+        Cnr3CachePruneDiagnosticStats stats{};
+
+        cnr3_cache_prune_diagnostic_configure(
+            stats,
+            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+            CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES
+        );
+
+        stats.prune_invocations = 3;
+        stats.prune_events_triggered = 2;
+        stats.frames_evicted = 6;
+        stats.bytes_evicted = 6U * 4096U;
+        stats.checkpoint_prunes = 1;
+        stats.hot_zone_rejected = 4;
+        stats.frames_evicted_then_re_requested = 3;
+        stats.frames_re_requested_repeatedly = 1;
+        stats.total_evicted_records = 6;
+        stats.ring_live_count = 6;
+        stats.ring_head = 6U % stats.ring_capacity;
+        stats.gap_histogram[0] = 2;
+        stats.gap_histogram[1] = 1;
+        stats.top_thrasher_count = 2;
+        stats.top_thrashers[0] = Cnr3CachePruneDiagnosticTopThrashEntry{ 47, 2 };
+        stats.top_thrashers[1] = Cnr3CachePruneDiagnosticTopThrashEntry{ 82, 1 };
+
+        const int sample_frames[] = { 40, 41, 47, 82, 47, 90 };
+        for (std::size_t i = 0U; i < 6U && i < stats.recently_evicted_ring.size(); ++i) {
+            stats.recently_evicted_ring[i] =
+                Cnr3CachePruneDiagnosticRingEntry{
+                    sample_frames[i],
+                    static_cast<std::uint64_t>(i + 1U)
+                };
+        }
+
+#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+        cnr3_cache_prune_diagnostic_write_summary(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+
+    void cnr3_selftest_emit_dsum11_reference_summary() noexcept {
+        Cnr3CacheHotZoneDiagnosticStats stats{};
+
+        cnr3_cache_hot_zone_diagnostic_observe_create(stats);
+        cnr3_cache_hot_zone_diagnostic_observe_slide(stats);
+        cnr3_cache_hot_zone_diagnostic_observe_merge(stats);
+        cnr3_cache_hot_zone_diagnostic_observe_decay(stats);
+        cnr3_cache_hot_zone_diagnostic_observe_expiry(stats);
+        cnr3_cache_hot_zone_diagnostic_observe_zone_count_sample(stats, 1U);
+        cnr3_cache_hot_zone_diagnostic_observe_zone_count_sample(stats, 2U);
+        cnr3_cache_hot_zone_diagnostic_observe_protected_range_sample(stats, 61);
+        cnr3_cache_hot_zone_diagnostic_observe_protected_range_sample(stats, 80);
+        cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(stats, 4U);
+
+#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
+        cnr3_cache_hot_zone_diagnostic_write_summary(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
     bool cnr3_selftest_argument_is_present(
         int argc,
         char** argv,
@@ -203,6 +277,12 @@ int main(int argc, char** argv) {
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     cnr3_selftest_emit_dsum01_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    cnr3_selftest_emit_dsum10_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+    cnr3_selftest_emit_dsum11_reference_summary();
 #endif
 
     cnr3_selftest_print_summary_to_stderr(result);

@@ -1,0 +1,1323 @@
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 1ab37ef..ca87990 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -364,6 +364,23 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
+ #define CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION 1
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+ #   define CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION 1
++
++#   define CNR3_DIAG_DSUM10_RING_WINDOW_DUMP 1          // 3a DEFAULT ON; observe-only bounded periodic ring windows.
++#   if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
++#       define CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL  100
++#       define CNR3_DIAG_DSUM10_RING_WINDOW_SIZE      100   // == interval: tiled, no gaps.
++#       define CNR3_DIAG_DSUM10_RING_WINDOW_MAX_DUMPS 12    // Xa: first 12 firings only.
++#   endif
++
++//  #define CNR3_DIAG_DSUM10_RING_FULL_DUMP 1           // 3b DEFAULT OFF; observe-only full ring dumps on overflow.
++#   if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
++#       define CNR3_DIAG_DSUM10_RING_FULL_MAX_DUMPS   4     // Y: first 4 overflows only.
++#   endif
++
++#   define CNR3_DIAG_DSUM10_RING_FINAL_DUMP 1           // 3c DEFAULT ON; observe-only final ring tail dump.
++#   if defined(CNR3_DIAG_DSUM10_RING_FINAL_DUMP)
++#       define CNR3_DIAG_DSUM10_RING_FINAL_COUNT      100   // Z: last 100 entries, or fewer.
++#   endif
+ #endif
+ // paired safety cross-check:
+ #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) && !defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+diff --git a/src/cnr3_cache_core.cpp b/src/cnr3_cache_core.cpp
+index 452a52e..cf15c06 100644
+--- a/src/cnr3_cache_core.cpp
++++ b/src/cnr3_cache_core.cpp
+@@ -180,6 +180,16 @@ namespace {
+ 
+ } // namespace
+ 
++Cnr3OutputCacheCore::Cnr3OutputCacheCore() {
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    cnr3_cache_prune_diagnostic_configure(
++        prune_diag_stats_,
++        CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
++        CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES
++    );
++#endif
++}
++
+ 
+ void cnr3_keystone_request_plan_reset(
+     Cnr3KeystoneRequestPlan& plan
+@@ -591,6 +601,16 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats()
+     return hot_zone_diagnostic_stats_locked();
+ }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats() const {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    return prune_diagnostic_stats_locked();
++}
++
++#endif
++
+ bool Cnr3OutputCacheCore::frame_is_inside_hot_zone(
+     int frame_number
+ ) const {
+@@ -1663,6 +1683,14 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats_l
+     return hot_zone_diag_stats_;
+ }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats_locked() const {
++    return prune_diag_stats_;
++}
++
++#endif
++
+ bool Cnr3OutputCacheCore::frame_is_inside_hot_zone_locked(
+     int frame_number
+ ) const noexcept {
+@@ -1828,6 +1856,314 @@ void Cnr3OutputCacheCore::observe_hot_zone_prune_rejections_locked(
+ #endif
+ }
+ 
++
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++void Cnr3OutputCacheCore::observe_prune_execution_locked(
++    std::uint64_t frame_byte_count,
++    const std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order,
++    const std::vector<int>& selected_frame_numbers,
++    const Cnr3CachePruneExecutionSummary& prune_summary,
++    std::size_t hot_zone_prune_rejection_count
++) noexcept {
++    cnr3_cache_diag_saturating_increment(prune_diag_stats_.prune_invocations);
++
++    if (
++        prune_summary.trigger_decision.prune_is_required ||
++        prune_summary.trigger_decision.checkpoint_prune_is_required
++        ) {
++        cnr3_cache_diag_saturating_increment(prune_diag_stats_.prune_events_triggered);
++    }
++
++
++    cnr3_cache_diag_saturating_add(
++        prune_diag_stats_.hot_zone_rejected,
++        static_cast<std::uint64_t>(hot_zone_prune_rejection_count)
++    );
++
++    if (prune_summary.detached_count == 0U) {
++        return;
++    }
++
++    cnr3_cache_diag_saturating_add(
++        prune_diag_stats_.frames_evicted,
++        static_cast<std::uint64_t>(prune_summary.detached_count)
++    );
++
++    if (frame_byte_count != 0U) {
++        std::uint64_t byte_increment = UINT64_MAX;
++        if (
++            prune_summary.detached_count <=
++            (UINT64_MAX / frame_byte_count)
++            ) {
++            byte_increment =
++                frame_byte_count *
++                static_cast<std::uint64_t>(prune_summary.detached_count);
++        }
++
++        cnr3_cache_diag_saturating_add(
++            prune_diag_stats_.bytes_evicted,
++            byte_increment
++        );
++    }
++
++    const std::size_t evicted_count = std::min(
++        prune_summary.detached_count,
++        selected_frame_numbers.size()
++    );
++
++    for (std::size_t selected_index = 0U;
++        selected_index < evicted_count;
++        ++selected_index) {
++        const int evicted_frame = selected_frame_numbers[selected_index];
++
++        for (const Cnr3PruneCandidateDistanceOrderEntry& candidate : candidate_order) {
++            if (candidate.frame_number != evicted_frame) {
++                continue;
++            }
++
++            if (candidate.is_checkpoint) {
++                cnr3_cache_diag_saturating_increment(prune_diag_stats_.checkpoint_prunes);
++            }
++
++            break;
++        }
++
++        if (
++            prune_diag_stats_.ring_capacity == 0U ||
++            prune_diag_stats_.recently_evicted_ring.empty()
++            ) {
++            continue;
++        }
++
++        if (prune_diag_stats_.ring_live_count >= prune_diag_stats_.ring_capacity) {
++            cnr3_cache_diag_saturating_increment(prune_diag_stats_.ring_wrap_count);
++            prune_diag_stats_.ring_saturated = true;
++        }
++
++        cnr3_cache_diag_saturating_increment(prune_diag_stats_.total_evicted_records);
++
++        prune_diag_stats_.recently_evicted_ring[prune_diag_stats_.ring_head] =
++            Cnr3CachePruneDiagnosticRingEntry{
++                evicted_frame,
++                prune_diag_stats_.total_evicted_records
++            };
++
++        prune_diag_stats_.ring_head =
++            (prune_diag_stats_.ring_head + 1U) % prune_diag_stats_.ring_capacity;
++
++        if (prune_diag_stats_.ring_live_count < prune_diag_stats_.ring_capacity) {
++            ++prune_diag_stats_.ring_live_count;
++        }
++
++#if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
++        if (
++            CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL != 0 &&
++            prune_diag_stats_.total_evicted_records %
++                static_cast<std::uint64_t>(CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL) == 0U &&
++            prune_diag_stats_.window_dumps_emitted <
++                static_cast<std::uint64_t>(CNR3_DIAG_DSUM10_RING_WINDOW_MAX_DUMPS)
++            ) {
++            const std::size_t dump_size = std::min(
++                static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_WINDOW_SIZE),
++                prune_diag_stats_.ring_live_count
++            );
++            const std::size_t dump_start =
++                prune_diag_stats_.ring_live_count - dump_size;
++            const std::size_t oldest_index =
++                (prune_diag_stats_.ring_live_count < prune_diag_stats_.ring_capacity)
++                ? 0U
++                : prune_diag_stats_.ring_head;
++
++            for (std::size_t dump_index = 0U; dump_index < dump_size; ++dump_index) {
++                const std::size_t source_index =
++                    (oldest_index + dump_start + dump_index) %
++                    prune_diag_stats_.ring_capacity;
++                const std::size_t target_index =
++                    prune_diag_stats_.ring_window_dump_entry_count + dump_index;
++
++                if (target_index >= prune_diag_stats_.ring_window_dump_entries.size()) {
++                    break;
++                }
++
++                prune_diag_stats_.ring_window_dump_entries[target_index] =
++                    prune_diag_stats_.recently_evicted_ring[source_index].frame_number;
++            }
++
++            prune_diag_stats_.ring_window_dump_entry_count = std::min(
++                prune_diag_stats_.ring_window_dump_entry_count + dump_size,
++                prune_diag_stats_.ring_window_dump_entries.size()
++            );
++            cnr3_cache_diag_saturating_increment(prune_diag_stats_.window_dumps_emitted);
++        }
++#endif
++
++#if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
++        if (
++            prune_diag_stats_.ring_saturated &&
++            prune_diag_stats_.full_dumps_emitted <
++                static_cast<std::uint64_t>(CNR3_DIAG_DSUM10_RING_FULL_MAX_DUMPS)
++            ) {
++            const std::size_t oldest_index = prune_diag_stats_.ring_head;
++            const std::size_t target_base =
++                static_cast<std::size_t>(prune_diag_stats_.full_dumps_emitted) *
++                prune_diag_stats_.ring_capacity;
++
++            for (std::size_t dump_index = 0U;
++                dump_index < prune_diag_stats_.ring_capacity;
++                ++dump_index) {
++                const std::size_t target_index = target_base + dump_index;
++
++                if (target_index >= prune_diag_stats_.ring_full_dump_entries.size()) {
++                    break;
++                }
++
++                const std::size_t source_index =
++                    (oldest_index + dump_index) % prune_diag_stats_.ring_capacity;
++                prune_diag_stats_.ring_full_dump_entries[target_index] =
++                    prune_diag_stats_.recently_evicted_ring[source_index].frame_number;
++            }
++
++            prune_diag_stats_.ring_full_dump_entry_count = std::min(
++                prune_diag_stats_.ring_full_dump_entry_count + prune_diag_stats_.ring_capacity,
++                prune_diag_stats_.ring_full_dump_entries.size()
++            );
++            cnr3_cache_diag_saturating_increment(prune_diag_stats_.full_dumps_emitted);
++        }
++#endif
++    }
++}
++
++void Cnr3OutputCacheCore::observe_lookup_miss_rechurn_locked(
++    int frame_number
++) const noexcept {
++    if (
++        !cnr3_frame_number_is_valid(frame_number) ||
++        prune_diag_stats_.ring_capacity == 0U ||
++        prune_diag_stats_.recently_evicted_ring.empty()
++        ) {
++        return;
++    }
++
++    const std::size_t live_count = std::min(
++        prune_diag_stats_.ring_live_count,
++        prune_diag_stats_.recently_evicted_ring.size()
++    );
++
++    if (live_count == 0U) {
++        return;
++    }
++
++    const std::size_t oldest_index =
++        (prune_diag_stats_.ring_live_count < prune_diag_stats_.ring_capacity)
++        ? 0U
++        : prune_diag_stats_.ring_head;
++
++    bool found = false;
++    std::uint64_t newest_eviction_sequence = 0U;
++
++    for (std::size_t i = 0U; i < live_count; ++i) {
++        const std::size_t index =
++            (oldest_index + i) % prune_diag_stats_.ring_capacity;
++        const Cnr3CachePruneDiagnosticRingEntry& entry =
++            prune_diag_stats_.recently_evicted_ring[index];
++
++        if (entry.frame_number != frame_number) {
++            continue;
++        }
++
++        if (!found || entry.eviction_sequence > newest_eviction_sequence) {
++            found = true;
++            newest_eviction_sequence = entry.eviction_sequence;
++        }
++    }
++
++    if (!found) {
++        return;
++    }
++
++    cnr3_cache_diag_saturating_increment(
++        prune_diag_stats_.frames_evicted_then_re_requested
++    );
++
++    std::size_t top_index = prune_diag_stats_.top_thrasher_count;
++    for (std::size_t i = 0U; i < prune_diag_stats_.top_thrasher_count; ++i) {
++        if (prune_diag_stats_.top_thrashers[i].frame_number == frame_number) {
++            top_index = i;
++            break;
++        }
++    }
++
++    if (top_index < prune_diag_stats_.top_thrasher_count) {
++        if (prune_diag_stats_.top_thrashers[top_index].re_churn_count > 0U) {
++            cnr3_cache_diag_saturating_increment(
++                prune_diag_stats_.frames_re_requested_repeatedly
++            );
++        }
++
++        cnr3_cache_diag_saturating_increment(
++            prune_diag_stats_.top_thrashers[top_index].re_churn_count
++        );
++    }
++    else if (prune_diag_stats_.top_thrasher_count < prune_diag_stats_.top_thrashers.size()) {
++        prune_diag_stats_.top_thrashers[prune_diag_stats_.top_thrasher_count] =
++            Cnr3CachePruneDiagnosticTopThrashEntry{ frame_number, 1U };
++        ++prune_diag_stats_.top_thrasher_count;
++    }
++    else {
++        std::size_t lowest_index = 0U;
++        for (std::size_t i = 1U; i < prune_diag_stats_.top_thrashers.size(); ++i) {
++            if (
++                prune_diag_stats_.top_thrashers[i].re_churn_count <
++                prune_diag_stats_.top_thrashers[lowest_index].re_churn_count
++                ) {
++                lowest_index = i;
++            }
++        }
++
++        if (prune_diag_stats_.top_thrashers[lowest_index].re_churn_count <= 1U) {
++            prune_diag_stats_.top_thrashers[lowest_index] =
++                Cnr3CachePruneDiagnosticTopThrashEntry{ frame_number, 1U };
++        }
++    }
++
++    std::uint64_t eviction_gap =
++        prune_diag_stats_.total_evicted_records >= newest_eviction_sequence
++        ? prune_diag_stats_.total_evicted_records - newest_eviction_sequence
++        : 0U;
++
++    if (eviction_gap == 0U) {
++        eviction_gap = 1U;
++    }
++
++    std::size_t gap_bin = 6U;
++    if (eviction_gap <= 10U) {
++        gap_bin = 0U;
++    }
++    else if (eviction_gap <= 50U) {
++        gap_bin = 1U;
++    }
++    else if (eviction_gap <= 100U) {
++        gap_bin = 2U;
++    }
++    else if (eviction_gap <= 500U) {
++        gap_bin = 3U;
++    }
++    else if (eviction_gap <= 1000U) {
++        gap_bin = 4U;
++    }
++    else if (eviction_gap <= 5000U) {
++        gap_bin = 5U;
++    }
++
++    cnr3_cache_diag_saturating_increment(
++        prune_diag_stats_.gap_histogram[gap_bin]
++    );
++}
++
++#endif
++
+ std::size_t Cnr3OutputCacheCore::count_prune_candidates_rejected_by_hot_zone_locked(
+     bool noncheckpoint_capacity_permits,
+     std::size_t retain_checkpoint_count
+@@ -2871,6 +3207,15 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
+          !out_summary.trigger_decision.checkpoint_prune_is_required) ||
+         max_remove_count == 0U
+         ) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++        observe_prune_execution_locked(
++            frame_byte_count,
++            candidate_order,
++            selected_frame_numbers,
++            out_summary,
++            0U
++        );
++#endif
+         return Cnr3Status::ok;
+     }
+ 
+@@ -2886,13 +3231,22 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
+     out_summary.bounded_remove_limit = remove_limit;
+ 
+     if (remove_limit == 0U) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++        observe_prune_execution_locked(
++            frame_byte_count,
++            candidate_order,
++            selected_frame_numbers,
++            out_summary,
++            0U
++        );
++#endif
+         return Cnr3Status::ok;
+     }
+ 
+     const bool noncheckpoint_capacity_permits =
+         out_summary.trigger_decision.prune_is_required;
+ 
+-#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION) || defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+     const std::size_t hot_zone_prune_rejection_count =
+         count_prune_candidates_rejected_by_hot_zone_locked(
+             noncheckpoint_capacity_permits,
+@@ -2945,6 +3299,16 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
+     observe_hot_zone_prune_rejections_locked(hot_zone_prune_rejection_count);
+ #endif
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    observe_prune_execution_locked(
++        frame_byte_count,
++        candidate_order,
++        selected_frame_numbers,
++        out_summary,
++        hot_zone_prune_rejection_count
++    );
++#endif
++
+     return Cnr3Status::ok;
+ }
+ 
+@@ -3181,6 +3545,9 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+     const auto frame_index_it = frame_index_.find(frame_number);
+ 
+     if (frame_index_it == frame_index_.end()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++        observe_lookup_miss_rechurn_locked(frame_number);
++#endif
+         return Cnr3Status::not_found;
+     }
+ 
+@@ -3264,6 +3631,9 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     const auto frame_index_it = frame_index_.find(frame_number);
+ 
+     if (frame_index_it == frame_index_.end()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++        observe_lookup_miss_rechurn_locked(frame_number);
++#endif
+         return Cnr3Status::not_found;
+     }
+ 
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 04091a4..9b97172 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -742,7 +742,7 @@ class Cnr3CachePinList;
+ */
+ class Cnr3OutputCacheCore {
+ public:
+-    Cnr3OutputCacheCore() = default;
++    Cnr3OutputCacheCore();
+     ~Cnr3OutputCacheCore() = default;
+ 
+     Cnr3OutputCacheCore(const Cnr3OutputCacheCore&) = delete;
+@@ -764,6 +764,9 @@ public:
+     [[nodiscard]] std::size_t checkpoint_count() const;
+     [[nodiscard]] std::size_t hot_zone_count() const;
+     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats() const;
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats() const;
++#endif
+ 
+     /*
+         Lock-owning observer for hot-zone membership.
+@@ -1277,6 +1280,9 @@ private:
+     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
+     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
+     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats_locked() const noexcept;
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats_locked() const;
++#endif
+     [[nodiscard]] bool frame_is_inside_hot_zone_locked(
+         int frame_number
+     ) const noexcept;
+@@ -1338,6 +1344,18 @@ private:
+     void observe_hot_zone_prune_rejections_locked(
+         std::size_t rejected_frame_count
+     ) noexcept;
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    void observe_prune_execution_locked(
++        std::uint64_t frame_byte_count,
++        const std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order,
++        const std::vector<int>& selected_frame_numbers,
++        const Cnr3CachePruneExecutionSummary& prune_summary,
++        std::size_t hot_zone_prune_rejection_count
++    ) noexcept;
++    void observe_lookup_miss_rechurn_locked(
++        int frame_number
++    ) const noexcept;
++#endif
+ 
+     [[nodiscard]] std::size_t count_prune_candidates_rejected_by_hot_zone_locked(
+         bool noncheckpoint_capacity_permits,
+@@ -1691,6 +1709,9 @@ private:
+     std::vector<std::size_t> checkpoint_slot_positions_{};
+     std::vector<Cnr3CacheHotZone> hot_zones_{};
+     Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    mutable Cnr3CachePruneDiagnosticStats prune_diag_stats_{};
++#endif
+     Cnr3CacheSlotIdSource slot_id_source_{};
+ };
+ 
+diff --git a/src/cnr3_cache_core_selftest_main.cpp b/src/cnr3_cache_core_selftest_main.cpp
+index 32eab7a..877ffe4 100644
+--- a/src/cnr3_cache_core_selftest_main.cpp
++++ b/src/cnr3_cache_core_selftest_main.cpp
+@@ -153,6 +153,80 @@ namespace {
+ #endif
+     }
+ 
++#endif
++
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++    void cnr3_selftest_emit_dsum10_reference_summary() {
++        Cnr3CachePruneDiagnosticStats stats{};
++
++        cnr3_cache_prune_diagnostic_configure(
++            stats,
++            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
++            CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES
++        );
++
++        stats.prune_invocations = 3;
++        stats.prune_events_triggered = 2;
++        stats.frames_evicted = 6;
++        stats.bytes_evicted = 6U * 4096U;
++        stats.checkpoint_prunes = 1;
++        stats.hot_zone_rejected = 4;
++        stats.frames_evicted_then_re_requested = 3;
++        stats.frames_re_requested_repeatedly = 1;
++        stats.total_evicted_records = 6;
++        stats.ring_live_count = 6;
++        stats.ring_head = 6U % stats.ring_capacity;
++        stats.gap_histogram[0] = 2;
++        stats.gap_histogram[1] = 1;
++        stats.top_thrasher_count = 2;
++        stats.top_thrashers[0] = Cnr3CachePruneDiagnosticTopThrashEntry{ 47, 2 };
++        stats.top_thrashers[1] = Cnr3CachePruneDiagnosticTopThrashEntry{ 82, 1 };
++
++        const int sample_frames[] = { 40, 41, 47, 82, 47, 90 };
++        for (std::size_t i = 0U; i < 6U && i < stats.recently_evicted_ring.size(); ++i) {
++            stats.recently_evicted_ring[i] =
++                Cnr3CachePruneDiagnosticRingEntry{
++                    sample_frames[i],
++                    static_cast<std::uint64_t>(i + 1U)
++                };
++        }
++
++#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
++        cnr3_cache_prune_diagnostic_write_summary(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
++
++    void cnr3_selftest_emit_dsum11_reference_summary() noexcept {
++        Cnr3CacheHotZoneDiagnosticStats stats{};
++
++        cnr3_cache_hot_zone_diagnostic_observe_create(stats);
++        cnr3_cache_hot_zone_diagnostic_observe_slide(stats);
++        cnr3_cache_hot_zone_diagnostic_observe_merge(stats);
++        cnr3_cache_hot_zone_diagnostic_observe_decay(stats);
++        cnr3_cache_hot_zone_diagnostic_observe_expiry(stats);
++        cnr3_cache_hot_zone_diagnostic_observe_zone_count_sample(stats, 1U);
++        cnr3_cache_hot_zone_diagnostic_observe_zone_count_sample(stats, 2U);
++        cnr3_cache_hot_zone_diagnostic_observe_protected_range_sample(stats, 61);
++        cnr3_cache_hot_zone_diagnostic_observe_protected_range_sample(stats, 80);
++        cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(stats, 4U);
++
++#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
++        cnr3_cache_hot_zone_diagnostic_write_summary(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
+ #endif
+ 
+     bool cnr3_selftest_argument_is_present(
+@@ -204,6 +278,12 @@ int main(int argc, char** argv) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+     cnr3_selftest_emit_dsum01_reference_summary();
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++    cnr3_selftest_emit_dsum10_reference_summary();
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
++    cnr3_selftest_emit_dsum11_reference_summary();
++#endif
+ 
+     cnr3_selftest_print_summary_to_stderr(result);
+ 
+diff --git a/src/cnr3_cache_diagnostics.cpp b/src/cnr3_cache_diagnostics.cpp
+index 9b45c82..7370ccb 100644
+--- a/src/cnr3_cache_diagnostics.cpp
++++ b/src/cnr3_cache_diagnostics.cpp
+@@ -1,10 +1,536 @@
+ #include "cnr3_cache_diagnostics.h"
+ 
+-/*
+-    CMS07-G.6A cache diagnostics counter-model translation unit.
++#include "cnr3_diagnostics.h"
++
++#include <algorithm>
++#include <cstdio>
++#include <limits>
+ 
+-    The current D-SUM-11 hot-zone counter helpers are inline in the header so
+-    cache-core observation points can remain cheap and allocation-free. This
+-    file remains reserved for later cache-specific summary formatting and
+-    stderr emission, which must occur outside all cache locks.
++/*
++    Cache-specific D-SUM formatting lives here. Callers must hand this module a
++    by-value snapshot or call only after taking a snapshot outside any stderr
++    write path. No function in this file may inspect or mutate cache policy.
+ */
++
++namespace {
++
++    void cnr3_cache_diag_write_uint64_row(
++        Cnr3InstanceId instance_id,
++        const char* component,
++        const char* dsum_name,
++        const char* label,
++        std::uint64_t value
++    ) noexcept {
++        char message[224] = {};
++
++        const int written = std::snprintf(
++            message,
++            sizeof(message),
++            "[DSUM-SUMMARY] %s %-44s %llu",
++            dsum_name != nullptr ? dsum_name : "D-SUM-??",
++            label != nullptr ? label : "(null)",
++            static_cast<unsigned long long>(value)
++        );
++
++        if (written < 0) {
++            cnr3_diag_write_line(
++                instance_id,
++                Cnr3DiagnosticLevel::error,
++                component,
++                "[DSUM-SUMMARY] formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        message[sizeof(message) - 1U] = '\0';
++
++        cnr3_diag_write_line(
++            instance_id,
++            Cnr3DiagnosticLevel::info,
++            component,
++            message,
++            Cnr3StderrFlushPolicy::no_flush
++        );
++    }
++
++    void cnr3_cache_diag_write_size_row(
++        Cnr3InstanceId instance_id,
++        const char* component,
++        const char* dsum_name,
++        const char* label,
++        std::size_t value
++    ) noexcept {
++        cnr3_cache_diag_write_uint64_row(
++            instance_id,
++            component,
++            dsum_name,
++            label,
++            static_cast<std::uint64_t>(value)
++        );
++    }
++
++    void cnr3_cache_diag_write_int_row(
++        Cnr3InstanceId instance_id,
++        const char* component,
++        const char* dsum_name,
++        const char* label,
++        int value
++    ) noexcept {
++        char message[224] = {};
++
++        const int written = std::snprintf(
++            message,
++            sizeof(message),
++            "[DSUM-SUMMARY] %s %-44s %d",
++            dsum_name != nullptr ? dsum_name : "D-SUM-??",
++            label != nullptr ? label : "(null)",
++            value
++        );
++
++        if (written < 0) {
++            cnr3_diag_write_line(
++                instance_id,
++                Cnr3DiagnosticLevel::error,
++                component,
++                "[DSUM-SUMMARY] formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        message[sizeof(message) - 1U] = '\0';
++
++        cnr3_diag_write_line(
++            instance_id,
++            Cnr3DiagnosticLevel::info,
++            component,
++            message,
++            Cnr3StderrFlushPolicy::no_flush
++        );
++    }
++
++    void cnr3_cache_diag_write_text_line(
++        Cnr3InstanceId instance_id,
++        const char* component,
++        const char* message
++    ) noexcept {
++        cnr3_diag_write_line(
++            instance_id,
++            Cnr3DiagnosticLevel::info,
++            component,
++            message,
++            Cnr3StderrFlushPolicy::no_flush
++        );
++    }
++
++    void cnr3_cache_diag_write_int_series_line(
++        Cnr3InstanceId instance_id,
++        const char* component,
++        const char* tag,
++        const char* label,
++        const std::vector<int>& values,
++        std::size_t start,
++        std::size_t count
++    ) noexcept {
++        char message[768] = {};
++        std::size_t used = 0U;
++
++        int written = std::snprintf(
++            message,
++            sizeof(message),
++            "%s %s [%llu..%llu):",
++            tag != nullptr ? tag : "[DSUM10-RING]",
++            label != nullptr ? label : "entries",
++            static_cast<unsigned long long>(start),
++            static_cast<unsigned long long>(start + count)
++        );
++
++        if (written < 0) {
++            cnr3_diag_write_line(
++                instance_id,
++                Cnr3DiagnosticLevel::error,
++                component,
++                "[DSUM-SUMMARY] formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        used = static_cast<std::size_t>(written);
++        if (used >= sizeof(message)) {
++            used = sizeof(message) - 1U;
++        }
++
++        for (std::size_t i = 0U; i < count && (start + i) < values.size(); ++i) {
++            written = std::snprintf(
++                message + used,
++                sizeof(message) - used,
++                " %d",
++                values[start + i]
++            );
++
++            if (written < 0) {
++                break;
++            }
++
++            const std::size_t add = static_cast<std::size_t>(written);
++            if (add >= (sizeof(message) - used)) {
++                used = sizeof(message) - 1U;
++                break;
++            }
++
++            used += add;
++        }
++
++        message[sizeof(message) - 1U] = '\0';
++
++        cnr3_diag_write_line(
++            instance_id,
++            Cnr3DiagnosticLevel::info,
++            component,
++            message,
++            Cnr3StderrFlushPolicy::no_flush
++        );
++    }
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++    [[nodiscard]] std::size_t cnr3_cache_diag_dsum10_safe_capacity(
++        int checkpoint_search_bound_B,
++        std::size_t active_ceiling
++    ) noexcept {
++        const std::size_t positive_B =
++            checkpoint_search_bound_B > 0
++            ? static_cast<std::size_t>(checkpoint_search_bound_B)
++            : 0U;
++        const std::size_t base = std::max(positive_B, active_ceiling);
++        const std::size_t k = CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_MULTIPLIER;
++
++        std::size_t derived = CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_FLOOR;
++
++        if (base != 0U) {
++            if (base > (std::numeric_limits<std::size_t>::max() / k)) {
++                derived = std::numeric_limits<std::size_t>::max();
++            }
++            else {
++                derived = base * k;
++            }
++        }
++
++        return std::max(derived, CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_FLOOR);
++    }
++
++#endif
++
++} // namespace
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++void cnr3_cache_prune_diagnostic_configure(
++    Cnr3CachePruneDiagnosticStats& stats,
++    int checkpoint_search_bound_B,
++    std::size_t active_ceiling
++) {
++    const std::size_t ring_capacity = cnr3_cache_diag_dsum10_safe_capacity(
++        checkpoint_search_bound_B,
++        active_ceiling
++    );
++    // const std::size_t ring_capacity = 65536U; // MANUAL OVERRIDE: uncomment to force a fixed D-SUM-10 ring size.
++
++    stats = Cnr3CachePruneDiagnosticStats{};
++    stats.checkpoint_search_bound_B = checkpoint_search_bound_B;
++    stats.active_ceiling = active_ceiling;
++    stats.capacity_multiplier_k = CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_MULTIPLIER;
++    stats.ring_capacity = ring_capacity;
++    stats.recently_evicted_ring.assign(ring_capacity, Cnr3CachePruneDiagnosticRingEntry{});
++
++#if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
++    stats.ring_window_dump_entries.assign(
++        static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_WINDOW_SIZE) *
++            static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_WINDOW_MAX_DUMPS),
++        CNR3_INVALID_FRAME_NUMBER
++    );
++#endif
++
++#if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
++    stats.ring_full_dump_entries.assign(
++        ring_capacity * static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_FULL_MAX_DUMPS),
++        CNR3_INVALID_FRAME_NUMBER
++    );
++#endif
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
++
++void cnr3_cache_prune_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CachePruneDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-10",
++        "[DSUM-SUMMARY] D-SUM-10 prune/eviction and re-churn summary"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-10",
++        "[DSUM-SUMMARY] D-SUM-10 interpretation: small-gap re-churn suggests tunable over-eviction; broad large-gap churn suggests arrival disorder"
++    );
++
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "prune_invocations", stats.prune_invocations);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "prune_events_triggered", stats.prune_events_triggered);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "frames_evicted", stats.frames_evicted);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "bytes_evicted", stats.bytes_evicted);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "checkpoint_prunes", stats.checkpoint_prunes);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "hot_zone_rejected", stats.hot_zone_rejected);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "frames_evicted_then_re_requested", stats.frames_evicted_then_re_requested);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "frames_re_requested_repeatedly", stats.frames_re_requested_repeatedly);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-10", "D-SUM-10", "ring_capacity", stats.ring_capacity);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-10", "D-SUM-10", "checkpoint_search_bound_B", stats.checkpoint_search_bound_B);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-10", "D-SUM-10", "active_ceiling", stats.active_ceiling);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-10", "D-SUM-10", "capacity_multiplier_k", stats.capacity_multiplier_k);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "ring_wrap_count", stats.ring_wrap_count);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "total_evicted_records", stats.total_evicted_records);
++
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-10",
++        stats.ring_saturated
++            ? "[DSUM-SUMMARY] D-SUM-10 re-churn >= reported value; ring saturated, count is a lower bound; consider larger capacity"
++            : "[DSUM-SUMMARY] D-SUM-10 ring_saturated false; re-churn count is not saturation-limited"
++    );
++
++    char message[384] = {};
++    std::snprintf(
++        message,
++        sizeof(message),
++        "[DSUM10-GAP-HISTO] 1-10=%llu 11-50=%llu 51-100=%llu 101-500=%llu 501-1000=%llu 1001-5000=%llu 5000+=%llu",
++        static_cast<unsigned long long>(stats.gap_histogram[0]),
++        static_cast<unsigned long long>(stats.gap_histogram[1]),
++        static_cast<unsigned long long>(stats.gap_histogram[2]),
++        static_cast<unsigned long long>(stats.gap_histogram[3]),
++        static_cast<unsigned long long>(stats.gap_histogram[4]),
++        static_cast<unsigned long long>(stats.gap_histogram[5]),
++        static_cast<unsigned long long>(stats.gap_histogram[6])
++    );
++    message[sizeof(message) - 1U] = '\0';
++    cnr3_cache_diag_write_text_line(instance_id, "D-SUM-10", message);
++
++    char top_message[512] = {};
++    std::size_t used = 0U;
++    int written = std::snprintf(
++        top_message,
++        sizeof(top_message),
++        "[DSUM10-TOP-THRASH] count=%llu",
++        static_cast<unsigned long long>(stats.top_thrasher_count)
++    );
++    if (written > 0) {
++        used = static_cast<std::size_t>(written);
++        if (used >= sizeof(top_message)) {
++            used = sizeof(top_message) - 1U;
++        }
++
++        for (std::size_t i = 0U; i < stats.top_thrasher_count && i < stats.top_thrashers.size(); ++i) {
++            const Cnr3CachePruneDiagnosticTopThrashEntry& entry = stats.top_thrashers[i];
++            if (!cnr3_frame_number_is_valid(entry.frame_number) || entry.re_churn_count == 0U) {
++                continue;
++            }
++
++            written = std::snprintf(
++                top_message + used,
++                sizeof(top_message) - used,
++                " frame=%d:%llux",
++                entry.frame_number,
++                static_cast<unsigned long long>(entry.re_churn_count)
++            );
++
++            if (written < 0) {
++                break;
++            }
++
++            const std::size_t add = static_cast<std::size_t>(written);
++            if (add >= (sizeof(top_message) - used)) {
++                used = sizeof(top_message) - 1U;
++                break;
++            }
++            used += add;
++        }
++    }
++    top_message[sizeof(top_message) - 1U] = '\0';
++    cnr3_cache_diag_write_text_line(instance_id, "D-SUM-10", top_message);
++
++#if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
++    if (stats.ring_window_dump_entry_count == 0U) {
++        cnr3_cache_diag_write_text_line(
++            instance_id,
++            "D-SUM-10",
++            "[DSUM10-RING-WINDOW] entries=0 fired=0"
++        );
++    }
++    else {
++        const std::size_t chunk_size = static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_WINDOW_SIZE);
++        const std::size_t entry_count = std::min(
++            stats.ring_window_dump_entry_count,
++            stats.ring_window_dump_entries.size()
++        );
++        for (std::size_t start = 0U; start < entry_count; start += chunk_size) {
++            const std::size_t count = std::min(chunk_size, entry_count - start);
++            cnr3_cache_diag_write_int_series_line(
++                instance_id,
++                "D-SUM-10",
++                "[DSUM10-RING-WINDOW]",
++                "entries",
++                stats.ring_window_dump_entries,
++                start,
++                count
++            );
++        }
++    }
++#endif
++
++#if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
++    if (stats.ring_full_dump_entry_count > 0U) {
++        const std::size_t chunk_size = 100U;
++        const std::size_t entry_count = std::min(
++            stats.ring_full_dump_entry_count,
++            stats.ring_full_dump_entries.size()
++        );
++        for (std::size_t start = 0U; start < entry_count; start += chunk_size) {
++            const std::size_t count = std::min(chunk_size, entry_count - start);
++            cnr3_cache_diag_write_int_series_line(
++                instance_id,
++                "D-SUM-10",
++                "[DSUM10-RING-FULL]",
++                "entries",
++                stats.ring_full_dump_entries,
++                start,
++                count
++            );
++        }
++    }
++#endif
++
++#if defined(CNR3_DIAG_DSUM10_RING_FINAL_DUMP)
++    const std::size_t final_limit = static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_FINAL_COUNT);
++    const std::size_t live_count = std::min(stats.ring_live_count, stats.recently_evicted_ring.size());
++    const std::size_t final_count = std::min(final_limit, live_count);
++    const std::size_t oldest_index =
++        (stats.ring_live_count < stats.ring_capacity) ? 0U : stats.ring_head;
++    const std::size_t skip_count = live_count - final_count;
++
++    char final_header[256] = {};
++    std::snprintf(
++        final_header,
++        sizeof(final_header),
++        "[DSUM10-RING-FINAL] entries=%llu saturated=%s (showing last %llu of total_evicted=%llu)",
++        static_cast<unsigned long long>(final_count),
++        stats.ring_saturated ? "yes" : "no",
++        static_cast<unsigned long long>(final_count),
++        static_cast<unsigned long long>(stats.total_evicted_records)
++    );
++    final_header[sizeof(final_header) - 1U] = '\0';
++    cnr3_cache_diag_write_text_line(instance_id, "D-SUM-10", final_header);
++
++    constexpr std::size_t final_chunk_size = 50U;
++    for (std::size_t chunk_start = 0U; chunk_start < final_count; chunk_start += final_chunk_size) {
++        const std::size_t chunk_count = std::min(final_chunk_size, final_count - chunk_start);
++        char final_line[768] = {};
++        std::size_t used = 0U;
++
++        int written = std::snprintf(
++            final_line,
++            sizeof(final_line),
++            "[DSUM10-RING-FINAL] entries [%llu..%llu):",
++            static_cast<unsigned long long>(chunk_start),
++            static_cast<unsigned long long>(chunk_start + chunk_count)
++        );
++
++        if (written < 0) {
++            continue;
++        }
++
++        used = static_cast<std::size_t>(written);
++        if (used >= sizeof(final_line)) {
++            used = sizeof(final_line) - 1U;
++        }
++
++        for (std::size_t i = 0U; i < chunk_count; ++i) {
++            const std::size_t logical_index = skip_count + chunk_start + i;
++            const std::size_t ring_index =
++                stats.ring_capacity != 0U
++                ? ((oldest_index + logical_index) % stats.ring_capacity)
++                : 0U;
++            const int frame_number =
++                ring_index < stats.recently_evicted_ring.size()
++                ? stats.recently_evicted_ring[ring_index].frame_number
++                : CNR3_INVALID_FRAME_NUMBER;
++
++            written = std::snprintf(
++                final_line + used,
++                sizeof(final_line) - used,
++                " %d",
++                frame_number
++            );
++
++            if (written < 0) {
++                break;
++            }
++
++            const std::size_t add = static_cast<std::size_t>(written);
++            if (add >= (sizeof(final_line) - used)) {
++                used = sizeof(final_line) - 1U;
++                break;
++            }
++
++            used += add;
++        }
++
++        final_line[sizeof(final_line) - 1U] = '\0';
++        cnr3_cache_diag_write_text_line(instance_id, "D-SUM-10", final_line);
++    }
++#endif
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
++
++void cnr3_cache_hot_zone_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheHotZoneDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-11",
++        "[DSUM-SUMMARY] D-SUM-11 hot-zone operation summary"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-11",
++        "[DSUM-SUMMARY] D-SUM-11 interpretation: hot zones are prune-policy hints only; pins prove active liveness"
++    );
++
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "hot_zone_updates", stats.hot_zone_updates);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zones_created", stats.zones_created);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zones_slid", stats.zones_slid);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zones_merged", stats.zones_merged);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zones_decayed", stats.zones_decayed);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zones_expired", stats.zones_expired);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-11", "D-SUM-11", "zone_count_min", stats.have_zone_count_sample ? stats.zone_count_min : 0U);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zone_count_sum", stats.zone_count_sum);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "zone_count_samples", stats.zone_count_samples);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-11", "D-SUM-11", "zone_count_mean", stats.zone_count_samples != 0U ? static_cast<std::size_t>(stats.zone_count_sum / stats.zone_count_samples) : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-11", "D-SUM-11", "zone_count_max", stats.have_zone_count_sample ? stats.zone_count_max : 0U);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-11", "D-SUM-11", "protected_range_min", stats.have_protected_range_sample ? stats.protected_range_min : CNR3_INVALID_FRAME_NUMBER);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-11", "D-SUM-11", "protected_range_max", stats.have_protected_range_sample ? stats.protected_range_max : CNR3_INVALID_FRAME_NUMBER);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-11", "D-SUM-11", "frames_rejected_from_prune_due_to_hot_zone", stats.frames_rejected_from_prune_due_to_hot_zone);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
+diff --git a/src/cnr3_cache_diagnostics.h b/src/cnr3_cache_diagnostics.h
+index 5da712e..8521c7b 100644
+--- a/src/cnr3_cache_diagnostics.h
++++ b/src/cnr3_cache_diagnostics.h
+@@ -1,7 +1,9 @@
+ #pragma once
+ 
++#include <array>
+ #include <cstddef>
+ #include <cstdint>
++#include <vector>
+ 
+ #include "cnr3_common.h"
+ 
+@@ -60,6 +62,83 @@ struct Cnr3CacheHotZoneDiagnosticStats {
+     std::uint64_t frames_rejected_from_prune_due_to_hot_zone = 0;
+ };
+ 
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
++
++inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_GAP_HISTOGRAM_BIN_COUNT = 7U;
++inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_TOP_THRASH_CAPACITY = 16U;
++inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_MULTIPLIER = 16U;
++inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_FLOOR = 1024U;
++
++struct Cnr3CachePruneDiagnosticRingEntry {
++    int frame_number = CNR3_INVALID_FRAME_NUMBER;
++    std::uint64_t eviction_sequence = 0;
++};
++
++struct Cnr3CachePruneDiagnosticTopThrashEntry {
++    int frame_number = CNR3_INVALID_FRAME_NUMBER;
++    std::uint64_t re_churn_count = 0;
++};
++
++/*
++    D-SUM-10 prune/eviction diagnostic state.
++
++    This is observe-only telemetry. It may be updated while the cache mutex is
++    already held, but it must not decide prune candidates, pinning, lookup
++    results, or return behaviour. Formatting and stderr output must use a
++    by-value snapshot outside the cache lock.
++*/
++struct Cnr3CachePruneDiagnosticStats {
++    std::uint64_t prune_invocations = 0;
++    std::uint64_t prune_events_triggered = 0;
++    std::uint64_t frames_evicted = 0;
++    std::uint64_t bytes_evicted = 0;
++    std::uint64_t checkpoint_prunes = 0;
++    std::uint64_t hot_zone_rejected = 0;
++
++    std::uint64_t frames_evicted_then_re_requested = 0;
++    std::uint64_t frames_re_requested_repeatedly = 0;
++
++    std::vector<Cnr3CachePruneDiagnosticRingEntry> recently_evicted_ring{};
++    std::size_t ring_head = 0;
++    std::size_t ring_live_count = 0;
++    std::size_t ring_capacity = 0;
++    int checkpoint_search_bound_B = 0;
++    std::size_t active_ceiling = 0;
++    std::size_t capacity_multiplier_k = CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_MULTIPLIER;
++    std::uint64_t ring_wrap_count = 0;
++    bool ring_saturated = false;
++    std::uint64_t total_evicted_records = 0;
++
++    std::uint64_t gap_histogram[CNR3_CACHE_DIAG_DSUM10_GAP_HISTOGRAM_BIN_COUNT] = {};
++    std::array<
++        Cnr3CachePruneDiagnosticTopThrashEntry,
++        CNR3_CACHE_DIAG_DSUM10_TOP_THRASH_CAPACITY
++    > top_thrashers{};
++    std::size_t top_thrasher_count = 0;
++
++    std::uint64_t window_dumps_emitted = 0;
++    std::uint64_t full_dumps_emitted = 0;
++
++#if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
++    std::vector<int> ring_window_dump_entries{};
++    std::size_t ring_window_dump_entry_count = 0;
++#endif
++
++#if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
++    std::vector<int> ring_full_dump_entries{};
++    std::size_t ring_full_dump_entry_count = 0;
++#endif
++};
++
++void cnr3_cache_prune_diagnostic_configure(
++    Cnr3CachePruneDiagnosticStats& stats,
++    int checkpoint_search_bound_B,
++    std::size_t active_ceiling
++);
++
++#endif
++
+ inline void cnr3_cache_diag_saturating_increment(
+     std::uint64_t& value
+ ) noexcept {
+@@ -181,3 +260,21 @@ inline void cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(
+         rejected_frame_count
+     );
+ }
++
++#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
++
++void cnr3_cache_prune_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CachePruneDiagnosticStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
++
++void cnr3_cache_hot_zone_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheHotZoneDiagnosticStats& stats
++) noexcept;
++
++#endif
+diff --git a/src/vapoursynth-Cnr3.cpp b/src/vapoursynth-Cnr3.cpp
+index 87483f0..dbbfa9f 100644
+--- a/src/vapoursynth-Cnr3.cpp
++++ b/src/vapoursynth-Cnr3.cpp
+@@ -305,6 +305,18 @@ void VS_CC cnr3_free_filter(
+         data->dsum01_request_order
+     );
+ #endif
++#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
++    cnr3_cache_prune_diagnostic_write_summary(
++        data->config.instance_id,
++        data->output_cache.prune_diagnostic_stats()
++    );
++#endif
++#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
++    cnr3_cache_hot_zone_diagnostic_write_summary(
++        data->config.instance_id,
++        data->output_cache.hot_zone_diagnostic_stats()
++    );
++#endif
+ 
+     if (data->source != nullptr && vsapi != nullptr) {
+         vsapi->freeNode(data->source);

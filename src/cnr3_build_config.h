@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CNR3-OPT-LeverE-scenechange-local-accumulator";
+inline constexpr const char* CNR3_EDIT_VERSION = "CNR3-DIAG2a-hotzone-prune-rechurn-v3";
 
 /*
     CMS07-P.11C.2 live scene-change default.
@@ -364,6 +364,23 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
 #define CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
 #   define CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION 1
+
+#   define CNR3_DIAG_DSUM10_RING_WINDOW_DUMP 1          // 3a DEFAULT ON; observe-only bounded periodic ring windows.
+#   if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
+#       define CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL  100
+#       define CNR3_DIAG_DSUM10_RING_WINDOW_SIZE      100   // == interval: tiled, no gaps.
+#       define CNR3_DIAG_DSUM10_RING_WINDOW_MAX_DUMPS 12    // Xa: first 12 firings only.
+#   endif
+
+//  #define CNR3_DIAG_DSUM10_RING_FULL_DUMP 1           // 3b DEFAULT OFF; observe-only full ring dumps on overflow.
+#   if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
+#       define CNR3_DIAG_DSUM10_RING_FULL_MAX_DUMPS   4     // Y: first 4 overflows only.
+#   endif
+
+#   define CNR3_DIAG_DSUM10_RING_FINAL_DUMP 1           // 3c DEFAULT ON; observe-only final ring tail dump.
+#   if defined(CNR3_DIAG_DSUM10_RING_FINAL_DUMP)
+#       define CNR3_DIAG_DSUM10_RING_FINAL_COUNT      100   // Z: last 100 entries, or fewer.
+#   endif
 #endif
 // paired safety cross-check:
 #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) && !defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)

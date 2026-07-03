@@ -1,7 +1,9 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "cnr3_common.h"
 
@@ -59,6 +61,83 @@ struct Cnr3CacheHotZoneDiagnosticStats {
 
     std::uint64_t frames_rejected_from_prune_due_to_hot_zone = 0;
 };
+
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+
+inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_GAP_HISTOGRAM_BIN_COUNT = 7U;
+inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_TOP_THRASH_CAPACITY = 16U;
+inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_MULTIPLIER = 16U;
+inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_FLOOR = 1024U;
+
+struct Cnr3CachePruneDiagnosticRingEntry {
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    std::uint64_t eviction_sequence = 0;
+};
+
+struct Cnr3CachePruneDiagnosticTopThrashEntry {
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    std::uint64_t re_churn_count = 0;
+};
+
+/*
+    D-SUM-10 prune/eviction diagnostic state.
+
+    This is observe-only telemetry. It may be updated while the cache mutex is
+    already held, but it must not decide prune candidates, pinning, lookup
+    results, or return behaviour. Formatting and stderr output must use a
+    by-value snapshot outside the cache lock.
+*/
+struct Cnr3CachePruneDiagnosticStats {
+    std::uint64_t prune_invocations = 0;
+    std::uint64_t prune_events_triggered = 0;
+    std::uint64_t frames_evicted = 0;
+    std::uint64_t bytes_evicted = 0;
+    std::uint64_t checkpoint_prunes = 0;
+    std::uint64_t hot_zone_rejected = 0;
+
+    std::uint64_t frames_evicted_then_re_requested = 0;
+    std::uint64_t frames_re_requested_repeatedly = 0;
+
+    std::vector<Cnr3CachePruneDiagnosticRingEntry> recently_evicted_ring{};
+    std::size_t ring_head = 0;
+    std::size_t ring_live_count = 0;
+    std::size_t ring_capacity = 0;
+    int checkpoint_search_bound_B = 0;
+    std::size_t active_ceiling = 0;
+    std::size_t capacity_multiplier_k = CNR3_CACHE_DIAG_DSUM10_RING_CAPACITY_MULTIPLIER;
+    std::uint64_t ring_wrap_count = 0;
+    bool ring_saturated = false;
+    std::uint64_t total_evicted_records = 0;
+
+    std::uint64_t gap_histogram[CNR3_CACHE_DIAG_DSUM10_GAP_HISTOGRAM_BIN_COUNT] = {};
+    std::array<
+        Cnr3CachePruneDiagnosticTopThrashEntry,
+        CNR3_CACHE_DIAG_DSUM10_TOP_THRASH_CAPACITY
+    > top_thrashers{};
+    std::size_t top_thrasher_count = 0;
+
+    std::uint64_t window_dumps_emitted = 0;
+    std::uint64_t full_dumps_emitted = 0;
+
+#if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
+    std::vector<int> ring_window_dump_entries{};
+    std::size_t ring_window_dump_entry_count = 0;
+#endif
+
+#if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
+    std::vector<int> ring_full_dump_entries{};
+    std::size_t ring_full_dump_entry_count = 0;
+#endif
+};
+
+void cnr3_cache_prune_diagnostic_configure(
+    Cnr3CachePruneDiagnosticStats& stats,
+    int checkpoint_search_bound_B,
+    std::size_t active_ceiling
+);
+
+#endif
 
 inline void cnr3_cache_diag_saturating_increment(
     std::uint64_t& value
@@ -181,3 +260,21 @@ inline void cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(
         rejected_frame_count
     );
 }
+
+#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+
+void cnr3_cache_prune_diagnostic_write_summary(
+    Cnr3InstanceId instance_id,
+    const Cnr3CachePruneDiagnosticStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
+
+void cnr3_cache_hot_zone_diagnostic_write_summary(
+    Cnr3InstanceId instance_id,
+    const Cnr3CacheHotZoneDiagnosticStats& stats
+) noexcept;
+
+#endif

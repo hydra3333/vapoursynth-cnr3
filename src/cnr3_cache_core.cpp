@@ -180,6 +180,16 @@ namespace {
 
 } // namespace
 
+Cnr3OutputCacheCore::Cnr3OutputCacheCore() {
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    cnr3_cache_prune_diagnostic_configure(
+        prune_diag_stats_,
+        CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+        CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES
+    );
+#endif
+}
+
 
 void cnr3_keystone_request_plan_reset(
     Cnr3KeystoneRequestPlan& plan
@@ -590,6 +600,16 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats()
 
     return hot_zone_diagnostic_stats_locked();
 }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+
+Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return prune_diagnostic_stats_locked();
+}
+
+#endif
 
 bool Cnr3OutputCacheCore::frame_is_inside_hot_zone(
     int frame_number
@@ -1663,6 +1683,14 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats_l
     return hot_zone_diag_stats_;
 }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+
+Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats_locked() const {
+    return prune_diag_stats_;
+}
+
+#endif
+
 bool Cnr3OutputCacheCore::frame_is_inside_hot_zone_locked(
     int frame_number
 ) const noexcept {
@@ -1827,6 +1855,314 @@ void Cnr3OutputCacheCore::observe_hot_zone_prune_rejections_locked(
     (void)rejected_frame_count;
 #endif
 }
+
+
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+
+void Cnr3OutputCacheCore::observe_prune_execution_locked(
+    std::uint64_t frame_byte_count,
+    const std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order,
+    const std::vector<int>& selected_frame_numbers,
+    const Cnr3CachePruneExecutionSummary& prune_summary,
+    std::size_t hot_zone_prune_rejection_count
+) noexcept {
+    cnr3_cache_diag_saturating_increment(prune_diag_stats_.prune_invocations);
+
+    if (
+        prune_summary.trigger_decision.prune_is_required ||
+        prune_summary.trigger_decision.checkpoint_prune_is_required
+        ) {
+        cnr3_cache_diag_saturating_increment(prune_diag_stats_.prune_events_triggered);
+    }
+
+
+    cnr3_cache_diag_saturating_add(
+        prune_diag_stats_.hot_zone_rejected,
+        static_cast<std::uint64_t>(hot_zone_prune_rejection_count)
+    );
+
+    if (prune_summary.detached_count == 0U) {
+        return;
+    }
+
+    cnr3_cache_diag_saturating_add(
+        prune_diag_stats_.frames_evicted,
+        static_cast<std::uint64_t>(prune_summary.detached_count)
+    );
+
+    if (frame_byte_count != 0U) {
+        std::uint64_t byte_increment = UINT64_MAX;
+        if (
+            prune_summary.detached_count <=
+            (UINT64_MAX / frame_byte_count)
+            ) {
+            byte_increment =
+                frame_byte_count *
+                static_cast<std::uint64_t>(prune_summary.detached_count);
+        }
+
+        cnr3_cache_diag_saturating_add(
+            prune_diag_stats_.bytes_evicted,
+            byte_increment
+        );
+    }
+
+    const std::size_t evicted_count = std::min(
+        prune_summary.detached_count,
+        selected_frame_numbers.size()
+    );
+
+    for (std::size_t selected_index = 0U;
+        selected_index < evicted_count;
+        ++selected_index) {
+        const int evicted_frame = selected_frame_numbers[selected_index];
+
+        for (const Cnr3PruneCandidateDistanceOrderEntry& candidate : candidate_order) {
+            if (candidate.frame_number != evicted_frame) {
+                continue;
+            }
+
+            if (candidate.is_checkpoint) {
+                cnr3_cache_diag_saturating_increment(prune_diag_stats_.checkpoint_prunes);
+            }
+
+            break;
+        }
+
+        if (
+            prune_diag_stats_.ring_capacity == 0U ||
+            prune_diag_stats_.recently_evicted_ring.empty()
+            ) {
+            continue;
+        }
+
+        if (prune_diag_stats_.ring_live_count >= prune_diag_stats_.ring_capacity) {
+            cnr3_cache_diag_saturating_increment(prune_diag_stats_.ring_wrap_count);
+            prune_diag_stats_.ring_saturated = true;
+        }
+
+        cnr3_cache_diag_saturating_increment(prune_diag_stats_.total_evicted_records);
+
+        prune_diag_stats_.recently_evicted_ring[prune_diag_stats_.ring_head] =
+            Cnr3CachePruneDiagnosticRingEntry{
+                evicted_frame,
+                prune_diag_stats_.total_evicted_records
+            };
+
+        prune_diag_stats_.ring_head =
+            (prune_diag_stats_.ring_head + 1U) % prune_diag_stats_.ring_capacity;
+
+        if (prune_diag_stats_.ring_live_count < prune_diag_stats_.ring_capacity) {
+            ++prune_diag_stats_.ring_live_count;
+        }
+
+#if defined(CNR3_DIAG_DSUM10_RING_WINDOW_DUMP)
+        if (
+            CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL != 0 &&
+            prune_diag_stats_.total_evicted_records %
+                static_cast<std::uint64_t>(CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL) == 0U &&
+            prune_diag_stats_.window_dumps_emitted <
+                static_cast<std::uint64_t>(CNR3_DIAG_DSUM10_RING_WINDOW_MAX_DUMPS)
+            ) {
+            const std::size_t dump_size = std::min(
+                static_cast<std::size_t>(CNR3_DIAG_DSUM10_RING_WINDOW_SIZE),
+                prune_diag_stats_.ring_live_count
+            );
+            const std::size_t dump_start =
+                prune_diag_stats_.ring_live_count - dump_size;
+            const std::size_t oldest_index =
+                (prune_diag_stats_.ring_live_count < prune_diag_stats_.ring_capacity)
+                ? 0U
+                : prune_diag_stats_.ring_head;
+
+            for (std::size_t dump_index = 0U; dump_index < dump_size; ++dump_index) {
+                const std::size_t source_index =
+                    (oldest_index + dump_start + dump_index) %
+                    prune_diag_stats_.ring_capacity;
+                const std::size_t target_index =
+                    prune_diag_stats_.ring_window_dump_entry_count + dump_index;
+
+                if (target_index >= prune_diag_stats_.ring_window_dump_entries.size()) {
+                    break;
+                }
+
+                prune_diag_stats_.ring_window_dump_entries[target_index] =
+                    prune_diag_stats_.recently_evicted_ring[source_index].frame_number;
+            }
+
+            prune_diag_stats_.ring_window_dump_entry_count = std::min(
+                prune_diag_stats_.ring_window_dump_entry_count + dump_size,
+                prune_diag_stats_.ring_window_dump_entries.size()
+            );
+            cnr3_cache_diag_saturating_increment(prune_diag_stats_.window_dumps_emitted);
+        }
+#endif
+
+#if defined(CNR3_DIAG_DSUM10_RING_FULL_DUMP)
+        if (
+            prune_diag_stats_.ring_saturated &&
+            prune_diag_stats_.full_dumps_emitted <
+                static_cast<std::uint64_t>(CNR3_DIAG_DSUM10_RING_FULL_MAX_DUMPS)
+            ) {
+            const std::size_t oldest_index = prune_diag_stats_.ring_head;
+            const std::size_t target_base =
+                static_cast<std::size_t>(prune_diag_stats_.full_dumps_emitted) *
+                prune_diag_stats_.ring_capacity;
+
+            for (std::size_t dump_index = 0U;
+                dump_index < prune_diag_stats_.ring_capacity;
+                ++dump_index) {
+                const std::size_t target_index = target_base + dump_index;
+
+                if (target_index >= prune_diag_stats_.ring_full_dump_entries.size()) {
+                    break;
+                }
+
+                const std::size_t source_index =
+                    (oldest_index + dump_index) % prune_diag_stats_.ring_capacity;
+                prune_diag_stats_.ring_full_dump_entries[target_index] =
+                    prune_diag_stats_.recently_evicted_ring[source_index].frame_number;
+            }
+
+            prune_diag_stats_.ring_full_dump_entry_count = std::min(
+                prune_diag_stats_.ring_full_dump_entry_count + prune_diag_stats_.ring_capacity,
+                prune_diag_stats_.ring_full_dump_entries.size()
+            );
+            cnr3_cache_diag_saturating_increment(prune_diag_stats_.full_dumps_emitted);
+        }
+#endif
+    }
+}
+
+void Cnr3OutputCacheCore::observe_lookup_miss_rechurn_locked(
+    int frame_number
+) const noexcept {
+    if (
+        !cnr3_frame_number_is_valid(frame_number) ||
+        prune_diag_stats_.ring_capacity == 0U ||
+        prune_diag_stats_.recently_evicted_ring.empty()
+        ) {
+        return;
+    }
+
+    const std::size_t live_count = std::min(
+        prune_diag_stats_.ring_live_count,
+        prune_diag_stats_.recently_evicted_ring.size()
+    );
+
+    if (live_count == 0U) {
+        return;
+    }
+
+    const std::size_t oldest_index =
+        (prune_diag_stats_.ring_live_count < prune_diag_stats_.ring_capacity)
+        ? 0U
+        : prune_diag_stats_.ring_head;
+
+    bool found = false;
+    std::uint64_t newest_eviction_sequence = 0U;
+
+    for (std::size_t i = 0U; i < live_count; ++i) {
+        const std::size_t index =
+            (oldest_index + i) % prune_diag_stats_.ring_capacity;
+        const Cnr3CachePruneDiagnosticRingEntry& entry =
+            prune_diag_stats_.recently_evicted_ring[index];
+
+        if (entry.frame_number != frame_number) {
+            continue;
+        }
+
+        if (!found || entry.eviction_sequence > newest_eviction_sequence) {
+            found = true;
+            newest_eviction_sequence = entry.eviction_sequence;
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    cnr3_cache_diag_saturating_increment(
+        prune_diag_stats_.frames_evicted_then_re_requested
+    );
+
+    std::size_t top_index = prune_diag_stats_.top_thrasher_count;
+    for (std::size_t i = 0U; i < prune_diag_stats_.top_thrasher_count; ++i) {
+        if (prune_diag_stats_.top_thrashers[i].frame_number == frame_number) {
+            top_index = i;
+            break;
+        }
+    }
+
+    if (top_index < prune_diag_stats_.top_thrasher_count) {
+        if (prune_diag_stats_.top_thrashers[top_index].re_churn_count > 0U) {
+            cnr3_cache_diag_saturating_increment(
+                prune_diag_stats_.frames_re_requested_repeatedly
+            );
+        }
+
+        cnr3_cache_diag_saturating_increment(
+            prune_diag_stats_.top_thrashers[top_index].re_churn_count
+        );
+    }
+    else if (prune_diag_stats_.top_thrasher_count < prune_diag_stats_.top_thrashers.size()) {
+        prune_diag_stats_.top_thrashers[prune_diag_stats_.top_thrasher_count] =
+            Cnr3CachePruneDiagnosticTopThrashEntry{ frame_number, 1U };
+        ++prune_diag_stats_.top_thrasher_count;
+    }
+    else {
+        std::size_t lowest_index = 0U;
+        for (std::size_t i = 1U; i < prune_diag_stats_.top_thrashers.size(); ++i) {
+            if (
+                prune_diag_stats_.top_thrashers[i].re_churn_count <
+                prune_diag_stats_.top_thrashers[lowest_index].re_churn_count
+                ) {
+                lowest_index = i;
+            }
+        }
+
+        if (prune_diag_stats_.top_thrashers[lowest_index].re_churn_count <= 1U) {
+            prune_diag_stats_.top_thrashers[lowest_index] =
+                Cnr3CachePruneDiagnosticTopThrashEntry{ frame_number, 1U };
+        }
+    }
+
+    std::uint64_t eviction_gap =
+        prune_diag_stats_.total_evicted_records >= newest_eviction_sequence
+        ? prune_diag_stats_.total_evicted_records - newest_eviction_sequence
+        : 0U;
+
+    if (eviction_gap == 0U) {
+        eviction_gap = 1U;
+    }
+
+    std::size_t gap_bin = 6U;
+    if (eviction_gap <= 10U) {
+        gap_bin = 0U;
+    }
+    else if (eviction_gap <= 50U) {
+        gap_bin = 1U;
+    }
+    else if (eviction_gap <= 100U) {
+        gap_bin = 2U;
+    }
+    else if (eviction_gap <= 500U) {
+        gap_bin = 3U;
+    }
+    else if (eviction_gap <= 1000U) {
+        gap_bin = 4U;
+    }
+    else if (eviction_gap <= 5000U) {
+        gap_bin = 5U;
+    }
+
+    cnr3_cache_diag_saturating_increment(
+        prune_diag_stats_.gap_histogram[gap_bin]
+    );
+}
+
+#endif
 
 std::size_t Cnr3OutputCacheCore::count_prune_candidates_rejected_by_hot_zone_locked(
     bool noncheckpoint_capacity_permits,
@@ -2871,6 +3207,15 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
          !out_summary.trigger_decision.checkpoint_prune_is_required) ||
         max_remove_count == 0U
         ) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+        observe_prune_execution_locked(
+            frame_byte_count,
+            candidate_order,
+            selected_frame_numbers,
+            out_summary,
+            0U
+        );
+#endif
         return Cnr3Status::ok;
     }
 
@@ -2886,13 +3231,22 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
     out_summary.bounded_remove_limit = remove_limit;
 
     if (remove_limit == 0U) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+        observe_prune_execution_locked(
+            frame_byte_count,
+            candidate_order,
+            selected_frame_numbers,
+            out_summary,
+            0U
+        );
+#endif
         return Cnr3Status::ok;
     }
 
     const bool noncheckpoint_capacity_permits =
         out_summary.trigger_decision.prune_is_required;
 
-#if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION) || defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
     const std::size_t hot_zone_prune_rejection_count =
         count_prune_candidates_rejected_by_hot_zone_locked(
             noncheckpoint_capacity_permits,
@@ -2943,6 +3297,16 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
     observe_hot_zone_prune_rejections_locked(hot_zone_prune_rejection_count);
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    observe_prune_execution_locked(
+        frame_byte_count,
+        candidate_order,
+        selected_frame_numbers,
+        out_summary,
+        hot_zone_prune_rejection_count
+    );
 #endif
 
     return Cnr3Status::ok;
@@ -3181,6 +3545,9 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     const auto frame_index_it = frame_index_.find(frame_number);
 
     if (frame_index_it == frame_index_.end()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+        observe_lookup_miss_rechurn_locked(frame_number);
+#endif
         return Cnr3Status::not_found;
     }
 
@@ -3264,6 +3631,9 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     const auto frame_index_it = frame_index_.find(frame_number);
 
     if (frame_index_it == frame_index_.end()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+        observe_lookup_miss_rechurn_locked(frame_number);
+#endif
         return Cnr3Status::not_found;
     }
 

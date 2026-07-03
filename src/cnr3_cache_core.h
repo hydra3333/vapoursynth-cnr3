@@ -742,7 +742,7 @@ class Cnr3CachePinList;
 */
 class Cnr3OutputCacheCore {
 public:
-    Cnr3OutputCacheCore() = default;
+    Cnr3OutputCacheCore();
     ~Cnr3OutputCacheCore() = default;
 
     Cnr3OutputCacheCore(const Cnr3OutputCacheCore&) = delete;
@@ -764,6 +764,9 @@ public:
     [[nodiscard]] std::size_t checkpoint_count() const;
     [[nodiscard]] std::size_t hot_zone_count() const;
     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats() const;
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats() const;
+#endif
 
     /*
         Lock-owning observer for hot-zone membership.
@@ -1277,6 +1280,9 @@ private:
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats_locked() const noexcept;
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats_locked() const;
+#endif
     [[nodiscard]] bool frame_is_inside_hot_zone_locked(
         int frame_number
     ) const noexcept;
@@ -1338,6 +1344,18 @@ private:
     void observe_hot_zone_prune_rejections_locked(
         std::size_t rejected_frame_count
     ) noexcept;
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    void observe_prune_execution_locked(
+        std::uint64_t frame_byte_count,
+        const std::vector<Cnr3PruneCandidateDistanceOrderEntry>& candidate_order,
+        const std::vector<int>& selected_frame_numbers,
+        const Cnr3CachePruneExecutionSummary& prune_summary,
+        std::size_t hot_zone_prune_rejection_count
+    ) noexcept;
+    void observe_lookup_miss_rechurn_locked(
+        int frame_number
+    ) const noexcept;
+#endif
 
     [[nodiscard]] std::size_t count_prune_candidates_rejected_by_hot_zone_locked(
         bool noncheckpoint_capacity_permits,
@@ -1691,6 +1709,9 @@ private:
     std::vector<std::size_t> checkpoint_slot_positions_{};
     std::vector<Cnr3CacheHotZone> hot_zones_{};
     Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    mutable Cnr3CachePruneDiagnosticStats prune_diag_stats_{};
+#endif
     Cnr3CacheSlotIdSource slot_id_source_{};
 };
 

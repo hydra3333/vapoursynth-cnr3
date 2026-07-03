@@ -32,6 +32,9 @@
     <ClCompile Include="..\..\src\cnr3_frame_processing.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\cnr3_cache_diagnostics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\cnr3_build_config.h">
@@ -65,6 +68,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\cnr3_plugin_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cnr3_cache_diagnostics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

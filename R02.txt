@@ -1,0 +1,142 @@
+Received. **DIAG.2a v2 materially enlarges the scope** compared with v1.
+
+The core DIAG.2a target is still the same: **D-SUM-11 writer + D-SUM-10 prune/eviction/re-churn**, and still excludes D-SUM-04/05/08 and DIAG.3 recovery families. 
+
+## Main changes from v1 to v2
+
+### 1. D-SUM-10 is now more than “ring + counter + writer”
+
+v2 adds three readout tiers on top of the basic re-churn counter:
+
+```text
+Tier 1:
+  [DSUM10-GAP-HISTO]
+  fixed re-request gap histogram
+
+Tier 2:
+  [DSUM10-TOP-THRASH]
+  bounded top-N map of frame_number -> re_churn_count, cap 16
+
+Tier 3:
+  bounded raw ring dumps:
+    [DSUM10-RING-WINDOW]
+    [DSUM10-RING-FULL]
+    [DSUM10-RING-FINAL]
+```
+
+These are now part of the required D-SUM-10 design, not optional extras. 
+
+### 2. `build_config.h` is now partly in scope
+
+This is the biggest procedural change.
+
+v1 said **do not modify `build_config.h`**.
+
+v2 says: **do not alter the existing DSUM01-14 compute/print/#error gate lines**, but **do add new D-SUM-10 ring-dump sub-feature flags inside the existing `CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION` block**. 
+
+So the new sanctioned `build_config.h` additions are:
+
+```cpp
+CNR3_DIAG_DSUM10_RING_WINDOW_DUMP
+CNR3_DIAG_DSUM10_RING_WINDOW_INTERVAL
+CNR3_DIAG_DSUM10_RING_WINDOW_SIZE
+CNR3_DIAG_DSUM10_RING_WINDOW_MAX_DUMPS
+
+CNR3_DIAG_DSUM10_RING_FULL_DUMP
+CNR3_DIAG_DSUM10_RING_FULL_MAX_DUMPS
+
+CNR3_DIAG_DSUM10_RING_FINAL_DUMP
+CNR3_DIAG_DSUM10_RING_FINAL_COUNT
+```
+
+Important: this is an **exception only for new sub-flags**. Existing gates must remain unchanged. 
+
+### 3. Ring capacity multiplier changed
+
+v1 used `k = 8`.
+
+v2 says `k = 16`, bumped from 8 at review, with expected sizes:
+
+```text
+normal: approximately 16000
+tiny:   1024
+```
+
+The summary must print resolved capacity, derivation inputs, wrap count, and saturation status. 
+
+One minor wording inconsistency remains in v2: it says `k = 16` but the rationale sentence still says “k=8x that bound.” I would implement **k = 16**, because that is clearly the reviewed/bumped instruction.
+
+### 4. The proof gate is enlarged
+
+Macro-on now must confirm not only D-SUM-10 and D-SUM-11 `[DSUM-SUMMARY]` blocks, but also the new grep-tagged artifacts:
+
+```text
+[DSUM10-GAP-HISTO]
+[DSUM10-TOP-THRASH]
+[DSUM10-RING-WINDOW]
+[DSUM10-RING-FINAL]
+[DSUM10-RING-FULL] only if its flag is enabled
+```
+
+The independent macro proof remains required:
+
+```text
+both off
+10 off / 11 on
+11 off / 10 on
+```
+
+and S-series `-r 1` sanity/ring-size review remains required. 
+
+## Implementation impact
+
+Expected patch file set now likely becomes:
+
+```text
+src/cnr3_build_config.h
+src/cnr3_cache_diagnostics.h
+src/cnr3_cache_diagnostics.cpp
+src/cnr3_cache_core.h
+src/cnr3_cache_core.cpp
+src/cnr3_cache_core_selftest_main.cpp
+src/vapoursynth-Cnr3.cpp
+```
+
+The added `build_config.h` touch is justified only for the new nested D-SUM-10 dump sub-flags.
+
+## Potential conflict to note
+
+Section 8 still lists `build_config.h` under “out of scope,” but section 3.5.1 and section 5 explicitly create a **specific exception** for the new D-SUM-10 ring-dump sub-flags.   
+
+I would treat the specific exception as controlling:
+
+```text
+Allowed:
+  add nested D-SUM-10 ring-dump sub-flags inside existing DSUM10 block
+
+Not allowed:
+  alter existing DSUM01-14 compute/print/#error gate lines
+  alter unrelated build_config.h content
+```
+
+## Bottom line
+
+v2 is no longer just “D-SUM-11 writer + D-SUM-10 re-churn counter.” It is now:
+
+```text
+D-SUM-11:
+  writer only
+
+D-SUM-10:
+  prune/eviction counters
+  re-churn counter
+  recent-eviction ring
+  gap histogram
+  top-N thrashers
+  bounded raw ring window dumps
+  bounded final ring dump
+  optional bounded full-at-overflow dump
+  new nested build_config.h sub-flags
+```
+
+I can generate the DIAG.2a v2 patch against `src(14).zip` with this enlarged scope.

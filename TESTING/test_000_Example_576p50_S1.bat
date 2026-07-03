@@ -19,10 +19,16 @@ set "findstr_cmd=findstr /C:"[DSUM10-" /C:"[DSUM-SUMMARY]" /C:"[DSUM11" "%log%""
 
 call :vspipe_only
 REM call :vspipe_encode
+
+echo.
+echo Finished %test%
+echo.
+pause
 goto :eof
 
 :vspipe_only
 del "%log%" >NUL 2>&1
+del "%findstr_log%" >NUL 2>&1
 echo. 2>>"%log%" 1>&2
 echo ========================================== 2>>"%log%" 1>&2
 echo vspipe info 2>>"%log%" 1>&2
@@ -40,14 +46,22 @@ echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %rrr
 @echo off
 echo. 2>>"%log%" 1>&2
 echo. 2>>"%log%" 1>&2
-echo %findstr_cmd% 2>>"%log%" 1>&2
+echo Running %findstr_cmd% 2>>"%findstr_log%" 1>&2
+echo Running %findstr_cmd%
+echo. 2>>"%findstr_log%" 1>&2
 %findstr_cmd% 2>>"%findstr_log%" 1>&2
 echo. 2>>"%log%" 1>&2
-echo. 2>>"%log%" 1>&2
+echo.
+echo type "%findstr_log%"
+type "%findstr_log%"
+echo.
 goto :eof
+
+
 
 :vspipe_encode
 del "%log%" >NUL 2>&1
+del "%findstr_log%" >NUL 2>&1
 echo. 2>>"%log%" 1>&2
 echo ========================================== 2>>"%log%" 1>&2
 echo vspipe info 2>>"%log%" 1>&2
@@ -66,7 +80,11 @@ echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %rrr
 echo. 2>>"%log%" 1>&2
 echo. 2>>"%log%" 1>&2
 echo %findstr_cmd% 2>>"%log%" 1>&2
+echo. 2>>"%log%" 1>&2
 %findstr_cmd% 2>>"%findstr_log%" 1>&2
 echo. 2>>"%log%" 1>&2
 echo. 2>>"%log%" 1>&2
+echo type "%findstr_log%"
+type "%findstr_log%"
+echo "%findstr_log%"
 goto :eof

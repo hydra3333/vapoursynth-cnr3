@@ -305,6 +305,18 @@ void VS_CC cnr3_free_filter(
         data->dsum01_request_order
     );
 #endif
+#if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+    cnr3_cache_prune_diagnostic_write_summary(
+        data->config.instance_id,
+        data->output_cache.prune_diagnostic_stats()
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM11_HOT_ZONE)
+    cnr3_cache_hot_zone_diagnostic_write_summary(
+        data->config.instance_id,
+        data->output_cache.hot_zone_diagnostic_stats()
+    );
+#endif
 
     if (data->source != nullptr && vsapi != nullptr) {
         vsapi->freeNode(data->source);

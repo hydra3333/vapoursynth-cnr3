@@ -1,0 +1,204 @@
+
+CODER_FIRST_POST_LAST_TIME_ATTACHMENT_CNR3_Coder_Restart_Introduction_to_CMS07_RESUME_v6_5.md
+File
+
+CNR3_Coder_Restart_Introduction_to_CMS07_RESUME_v6_8.md
+File
+5. CNR3 Plugin Development chatGPT chat 5
+
+Hello. This chat is continuing from a prior coder chat which hit a hard limit. We had been, and will
+continue here from where that chat left off, developing a VapourSynth DLL plugin (vapoursynth-cnr3)
+according to a specification, where the choices in each step get validated against the intent of the
+specs and sensibility.
+
+I have Visual Studio 2026 with latest updates (we call vs2026) installed on my PC, with a local git
+repository (dev branch dev_cache_manager) connected to the GitHub repository having the same dev
+branch — https://github.com/hydra3333/vapoursynth-cnr3/tree/dev_cache_manager — where local VS2026
+commits are pushed at the end of every agreed successful phase/subphase (sometimes called steps).
+
+The prior chat worked with a rolling set of handover documents and specifications to bring you 'up to
+speed' with your role as **coder**, which also encompasses responding to a designer/reviewer
+— assessing, drafting proposals, and responding to designer/reviewer feedback — i.e. conversing
+about the current status of this project, with the coordinator (me, W3X) relaying between chats and
+running the builds/commits.
+
+The full scope and context may not be totally clear until you have read all of the documents. Note:
+this is a MID-TASK resume — we are partway through a specific change (DIAG.2b) — so the first
+attachment is a handoff preamble that orients you to exactly where we are before the standing document
+set. Attached over the next few posts is that preamble, the intro, and the other documents. Do not
+comment until you have read them all and I have prompted you to ask whether you understand them.
+
+Read **CNR3_Coder_MidDIAG2b_Handoff_Preamble.md** first, then
+**CNR3_Coder_Restart_Introduction_to_CMS07_RESUME_v6_8.md**, then the rest.
+
+Attachments (latest versions), in read order:
+  1. CNR3_Coder_MidDIAG2b_Handoff_Preamble.md                          (read first — where we are right now)
+  2. CNR3_Coder_Restart_Introduction_to_CMS07_RESUME_v6_8.md           (read second)
+  3. Document_A_CNR3_Project_Context_and_Standing_Rules_v3_12.md
+  4. Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_13.md
+  5. CNR3_THIS_CHAT_DELTA_current_state_SLIMMED_v4_24.md
+  6. cnr3_cache_manager_design_v7_15.md
+  7. CNR3_Diagnostics_Arc_Condensed_Plan_v1_5.txt
+  8. cnr3_diagnostics_specification_v1_5.md
+  9. CNR3_CMS_Future_Investigations_and_Open_Questions_v7_17.md
+ 10. z_CNR3_Diagnostics_Arc_Findings_Decisions_Provenance_v1_2.md
+ 11. CNR3_Patch_Scope_DIAG2b_ownership_integrity_store_v2.md           (the live task)
+ 12. CNR3_DIAG2b_pre_patch_inventory_review.md                        (your predecessor session's own review — read after the v2 scope)
+ 13. src.zip                                                          (current post-DIAG.2a source baseline)
+
+After you have read all of them and I prompt you, confirm your understanding. Then your immediate task
+is the v2 scope's §8 TARGETED CONFIRM (not a fresh broad investigation — the big questions are already
+resolved), reported back to the designer, after which you generate the DIAG.2b patch against src.zip.
+
+---
+
+## Maintainer notes (NOT part of the pasted block)
+
+VERSION POINTERS current as of this blurb (2026-07-04) — bump on each future handover:
+  intro v6.8 | Document A v3.12 | Document B v3.13 | DELTA v4.24 | design v7.15 | condensed plan v1.5 |
+  diag spec v1.5 | Future Investigations v7.17 | provenance v1.2 | DIAG.2b scope v2.
+
+DELIBERATELY OMITTED from the primary read order (available on request, not core onboarding for a
+resuming coder): the Step-0-era findings registers (x_CNR3_Step0_Findings_Register_*,
+x_CNR3_Step0_Joint_Review_PROCESS_*) and provenance v1.0 — Step 0 is CLOSED and the marshalling arc is
+complete; the live Provenance v1.2 and FI v7.17 carry forward anything still relevant. A resuming coder
+should read CURRENT STATE + LIVE TASK deeply and CLOSED HISTORY only on demand.
+
+WHEN THIS BLURB IS REUSED AT A CLEAN PHASE BOUNDARY (not mid-task): drop item 1 (the mid-DIAG2b
+preamble), change "MID-TASK resume" wording back to a normal resume, and point the read-first at the
+intro. The preamble pattern is specifically for a coder session dying PARTWAY through a scoped patch.
+
+Thought for 8s
+Understood. I’ll wait for the remaining attachments and your prompt before commenting or confirming understanding.
+
+
+
+FINAL_DOCS.zip
+Zip Archive
+
+src(16).zip
+Zip Archive
+the documents mentioned above are in the zip file FINAL_DOCS.zip, and the latest source code directly from the github dev branch zip download is in stc.zip
+
+I’ll ingest the document zip in the requested order, inspect the source baseline enough to identify the DIAG.2b starting point, and hold substantive comments until your prompt.
+
+Thought for 3m 46s
+Received. The docs zip is FINAL_DOCS.zip, and the source zip arrived as src(16).zip. I’ll hold substantive comments until your prompt, per the handoff protocol.
+
+
+i especially hope you have read the rules sections in the CMS and in document A ? it is also good to read the CMS carefully too since the designer will expect you to assess matters in light of its guidance and where unsure or the cms has a gap or an error or an inconsistency or an issue then you must prompt the designer when a design/assessment matter arises.
+
+Agreed. I’m going to treat Document A and the CMS as controlling rule sources, not background reading, and I’ll verify the exact rule sections rather than relying on memory or older handovers.
+
+Thought for 33s
+Yes — and I agree this is essential.
+
+I will treat the CMS v7.15 and Document A v3.12 as rule-bearing authorities, not merely orientation notes. In particular, I have checked that the active restart intro identifies the current task as DIAG.2b within an already-underway diagnostics arc, with DIAG.1 and DIAG.2a already committed/pushed, and names the standing rules that matter here: R-PROCESS-19, R-PROCESS-21, snapshot-outside-lock, [DSUM-SUMMARY], no stash, read real source, review the diff, and propose before commit. 
+
+
+For ongoing work I will apply this discipline:
+
+CMS first. If source, handover prose, memory, or convenience conflicts with the current CMS, the CMS controls unless a surfaced RULE-DEVIATION is agreed.
+
+Document A governs process. Especially authority/precedence, no guessing on CMS ambiguity, minimal unrelated-change discipline, additive-only proven-code discipline, R-PROCESS-19 observe-only proof, and PDAP patch delivery.
+
+Escalate design issues. If the DIAG.2b scope reveals a CMS gap, inconsistency, missing lifecycle/ownership rule, unsafe ambiguity, or mismatch between the scope and real source, I will stop that affected change and report it as either:
+
+RULE-DEVIATION: a named CMS rule appears wrong/unsafe/inconsistent if followed; or
+
+CMS-GAP: the CMS is silent or under-specified on something that matters.
+
+No quiet “coder fixups.” I will not route around a design problem by inventing an implementation detail, changing proven internals, or broadening scope without explicitly raising it.
+
+DIAG.2b is targeted confirmation, not a fresh broad investigation. I will use the v2 scope and the predecessor inventory review as the live task frame, then inspect the real src.zip/src(16).zip source against that frame.
+
+I’ll continue reading the remaining docs and source in that mode.
+
+
+Not fully enough to claim it as absorbed. I’ll read that DIAG.2b scope file now and answer from the actual text.
+
+Thought for 13s
+Yes — now I have read CNR3_Patch_Scope_DIAG2b_ownership_integrity_store_v2.md in full.
+
+I had not previously read it closely enough to claim absorption. After your question, I read the actual 165-line file from /mnt/data/cnr3_docs/.
+
+My understanding of that scope is:
+
+DIAG.2b bundles D-SUM-04, D-SUM-05, and D-SUM-08 against the current post-DIAG.2a baseline.
+
+The immediate task is not to generate the patch yet. It is first the scope’s §8 targeted confirm, specifically:
+
+Confirm the two narrow D-SUM-04 balances:
+
+slot pin balance via pin_frame_locked() / unpin_frame_locked();
+
+lookup-ref handoff balance via lookup_frame_and_add_ref_locked() acquisition, cache-core release paths, and transfer/adoption into Cnr3OwnedFrameRef.
+The critical risk is a missed lookup-ref release/transfer path causing a false non-zero balance.
+
+Confirm D-SUM-05 should hook the central cache_state_invariants_hold_locked() surface only, observe-only, without changing return values or caller behaviour.
+
+Confirm D-SUM-08 belongs at the combined store/prune wrapper after store outcome is known, using Cnr3CombinedStoreAndPruneSummary, and that as2_summary.checkpoint_promoted is only an AS2 checkpoint-promotion signal.
+
+Confirm all three families compile out independently and cleanly under their COMPUTE macros, satisfying R-PROCESS-19.
+
+I also understand the hard boundaries: no build_config.h change, no behavioural change, no restructuring proven code to host diagnostics, no DIAG.2a rewrite, no global VSFrame ref-balance claim, and snapshot-under-lock / format-write-outside-lock discipline applies.
+
+Next, I should read CNR3_DIAG2b_pre_patch_inventory_review.md and inspect the current src(16).zip source specifically against those four §8 confirmation questions.
+
+
+it would be good for you to also read the DELTA doc and the future investigations doc well, since some of that may overlap and/or arise in this step and you will need to assess in light of it.
+
+Yes. I’ll read the DELTA and Future Investigations as active constraint documents before touching DIAG.2b, because they may contain deferred diagnostics, ownership, or integrity decisions that affect scope boundaries.
+
+Thought for 57s
+Yes. I have now read the DELTA v4.24 and Future Investigations v7.17 with DIAG.2b specifically in mind.
+
+Key carry-forward points I will apply:
+
+DELTA v4.24 confirms DIAG.2b is active, after DIAG.1 and DIAG.2a are committed/pushed. The live scope is:
+
+D-SUM-04 ownership-balance,
+
+D-SUM-05 cache-integrity,
+
+D-SUM-08 store/duplicate telemetry.
+
+DIAG.2b must not become a broad diagnostic redesign. The DELTA and FI register both reinforce that the original broad D-SUM-04 idea — global VSFrame ref balance — was rejected as unprovable by call-site hooks. The accepted DIAG.2b direction is the two narrow balances:
+
+slot pin balance;
+
+lookup-ref handoff invariant.
+
+FI-11 is out of DIAG.2b scope. Recovery-path re-churn is real and important, but it belongs to D-SUM-12 / DIAG.3, not to D-SUM-10 or DIAG.2b.
+
+FI-12 is directly relevant. It records why DIAG.2b must not attempt global Cnr3OwnedFrameRef / all-plugin VSFrame ownership balance. Any such broader detector would require primitive-level instrumentation of Cnr3OwnedFrameRef acquire/reset/transfer paths and is deferred.
+
+FI-13 is directly relevant. DIAG.2b’s D-SUM-08 may count AS2 checkpoint promotions via as2_summary.checkpoint_promoted, but production duplicate checkpoint promotion is not currently exposed in Cnr3CombinedStoreAndPruneSummary. Surfacing that would be a separate observe-only summary-surface extension, not something to smuggle into DIAG.2b.
+
+The Future Investigations document is non-normative. I will use it as context for scope boundaries and likely designer concerns, not as implementation authority. If an FI item needs to become real, that must go through the CMS/design-change path.
+
+So for DIAG.2b, the immediate posture is: implement only the settled narrow telemetry surfaces, respect the deferrals, and raise anything that would require broad ownership instrumentation, recovery-path re-churn telemetry, or production-duplicate promotion surfacing as a separate design/scope question.
+
+
+
+CNR3_Patch_Scope_DIAG2b_ownership_integrity_store_v2(1).md
+File
+from time to time the docs and/or I may refer to version numbered documents which may be slightly behind the latest version - always consider and use the latest version, please make that a rule.  Relevant to the current task are cnr3_memory_diagnostics_spec_v2.md and cnr3_diagnostics_specification_v1_5.md so please read those as we are about to start soon.  Attached is the latest scope from the designer for you to investigate in detail and assess and provide a report in downloadable .md format for me to review and provide to the designer. Are you ready  to continue (do not do so until prompted) ?
+
+Thought for 34s
+Yes, I’m ready to continue when you prompt me.
+
+I have noted the new standing rule: when a document reference names an older version, I will look for and use the latest available version unless you explicitly instruct otherwise.
+
+I have also read the two diagnostics references you flagged:
+
+cnr3_memory_diagnostics_spec_v2.md
+
+cnr3_diagnostics_specification_v1_5.md
+
+And I have received the latest attached designer scope, CNR3_Patch_Scope_DIAG2b_ownership_integrity_store_v2(1).md. It confirms DIAG.2b is a formal observe-only/additive patch scope, bundling D-SUM-04, D-SUM-05, and D-SUM-08, with the v2 corrections that D-SUM-04 is two narrow provable balances, D-SUM-05 hooks the central invariant surface, and D-SUM-08 observes the combined store/prune wrapper rather than DIAG.2a’s prune observer. 
+
+
+I will not start the investigation or report generation until you explicitly prompt me.
+
+

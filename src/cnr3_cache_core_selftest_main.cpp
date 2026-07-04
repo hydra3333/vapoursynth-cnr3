@@ -156,6 +156,70 @@ namespace {
 #endif
 
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+
+    void cnr3_selftest_emit_dsum04_reference_summary() noexcept {
+        Cnr3CacheOwnershipDiagnosticStats stats{};
+
+        cnr3_cache_ownership_diagnostic_observe_pin_acquired(stats);
+        cnr3_cache_ownership_diagnostic_observe_pin_acquired(stats);
+        cnr3_cache_ownership_diagnostic_observe_pin_released(stats);
+        cnr3_cache_ownership_diagnostic_observe_pin_released(stats);
+        cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(stats);
+        cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(stats);
+        cnr3_cache_ownership_diagnostic_observe_lookup_ref_transferred(stats);
+        cnr3_cache_ownership_diagnostic_observe_lookup_ref_released_by_cache_core(stats);
+        stats.total_pin_count_crosscheck = 0;
+
+#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+        cnr3_cache_ownership_diagnostic_write_summary(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+
+    void cnr3_selftest_emit_dsum05_reference_summary() noexcept {
+        Cnr3CacheIntegrityDiagnosticStats stats{};
+
+        cnr3_cache_integrity_diagnostic_observe_check(stats, 3U, 1U, 47U, 0);
+        cnr3_cache_integrity_diagnostic_observe_check(stats, 5U, 2U, 46U, 1);
+        cnr3_cache_integrity_diagnostic_set_summary_sample(stats, 5U, 2U, 46U, 0);
+
+#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
+        cnr3_cache_integrity_diagnostic_write_summary(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+
+    void cnr3_selftest_emit_dsum08_reference_summary() noexcept {
+        Cnr3CacheStoreDiagnosticStats stats{};
+
+        cnr3_cache_store_diagnostic_observe_store(stats, 0U, false, false, false, false);
+        cnr3_cache_store_diagnostic_observe_store(stats, 1U, true, true, false, false);
+        cnr3_cache_store_diagnostic_observe_store(stats, 2U, false, false, true, false);
+        cnr3_cache_store_diagnostic_observe_store(stats, 3U, false, false, false, false);
+
+#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
+        cnr3_cache_store_diagnostic_write_summary(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
 
     void cnr3_selftest_emit_dsum10_reference_summary() {
@@ -277,6 +341,15 @@ int main(int argc, char** argv) {
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     cnr3_selftest_emit_dsum01_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    cnr3_selftest_emit_dsum04_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+    cnr3_selftest_emit_dsum05_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    cnr3_selftest_emit_dsum08_reference_summary();
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     cnr3_selftest_emit_dsum10_reference_summary();

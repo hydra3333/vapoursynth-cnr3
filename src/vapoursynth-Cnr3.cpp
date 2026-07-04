@@ -305,6 +305,24 @@ void VS_CC cnr3_free_filter(
         data->dsum01_request_order
     );
 #endif
+#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+    cnr3_cache_ownership_diagnostic_write_summary(
+        data->config.instance_id,
+        data->output_cache.ownership_diagnostic_stats()
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
+    cnr3_cache_integrity_diagnostic_write_summary(
+        data->config.instance_id,
+        data->output_cache.cache_integrity_diagnostic_stats()
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
+    cnr3_cache_store_diagnostic_write_summary(
+        data->config.instance_id,
+        data->output_cache.cache_store_diagnostic_stats()
+    );
+#endif
 #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
     cnr3_cache_prune_diagnostic_write_summary(
         data->config.instance_id,

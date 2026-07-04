@@ -1,0 +1,1194 @@
+diff --git a/src/cnr3_cache_core.cpp b/src/cnr3_cache_core.cpp
+index cf15c06..aa77de6 100644
+--- a/src/cnr3_cache_core.cpp
++++ b/src/cnr3_cache_core.cpp
+@@ -180,6 +180,12 @@ namespace {
+ 
+ } // namespace
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++#   define CNR3_DSUM05_FAIL(tag) return observe_cache_invariant_failure_locked((tag))
++#else
++#   define CNR3_DSUM05_FAIL(tag) return false
++#endif
++
+ Cnr3OutputCacheCore::Cnr3OutputCacheCore() {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     cnr3_cache_prune_diagnostic_configure(
+@@ -601,6 +607,36 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats()
+     return hot_zone_diagnostic_stats_locked();
+ }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++
++Cnr3CacheOwnershipDiagnosticStats Cnr3OutputCacheCore::ownership_diagnostic_stats() const {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    return ownership_diagnostic_stats_locked();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++
++Cnr3CacheIntegrityDiagnosticStats Cnr3OutputCacheCore::cache_integrity_diagnostic_stats() const {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    return cache_integrity_diagnostic_stats_locked();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++
++Cnr3CacheStoreDiagnosticStats Cnr3OutputCacheCore::cache_store_diagnostic_stats() const {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    return cache_store_diagnostic_stats_locked();
++}
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+ 
+ Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats() const {
+@@ -1017,6 +1053,9 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+     }
+ 
+     Cnr3Status status = Cnr3Status::invariant_violation;
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++    bool store_outcome_observed = false;
++#endif
+ 
+     {
+         const std::lock_guard<std::mutex> lock(cache_mutex_);
+@@ -1036,11 +1075,19 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+ 
+             if (!cnr3_status_is_ok(as2_status)) {
+                 out_summary.store_status = as2_status;
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++                observe_store_outcome_locked(out_summary);
++                store_outcome_observed = true;
++#endif
+                 return as2_status;
+             }
+ 
+             if (!as2_summary.pin_recorded) {
+                 out_summary.store_status = Cnr3Status::invariant_violation;
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++                observe_store_outcome_locked(out_summary);
++                store_outcome_observed = true;
++#endif
+                 return Cnr3Status::invariant_violation;
+             }
+ 
+@@ -1052,6 +1099,10 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+             }
+             else {
+                 out_summary.store_status = Cnr3Status::invariant_violation;
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++                observe_store_outcome_locked(out_summary);
++                store_outcome_observed = true;
++#endif
+                 return Cnr3Status::invariant_violation;
+             }
+         }
+@@ -1066,6 +1117,10 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+                 out_summary.store_status != Cnr3Status::ok &&
+                 out_summary.store_status != Cnr3Status::duplicate
+                 ) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++                observe_store_outcome_locked(out_summary);
++                store_outcome_observed = true;
++#endif
+                 return out_summary.store_status;
+             }
+         }
+@@ -1074,6 +1129,12 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+             retire_decay_eligible_hot_zones_locked(activation_target_frame);
+ 
+         if (!cnr3_status_is_ok(out_summary.retire_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++            if (!store_outcome_observed) {
++                observe_store_outcome_locked(out_summary);
++                store_outcome_observed = true;
++            }
++#endif
+             return out_summary.retire_status;
+         }
+ 
+@@ -1089,9 +1150,22 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+         );
+ 
+         if (!cnr3_status_is_ok(out_summary.prune_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++            if (!store_outcome_observed) {
++                observe_store_outcome_locked(out_summary);
++                store_outcome_observed = true;
++            }
++#endif
+             return out_summary.prune_status;
+         }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++        if (!store_outcome_observed) {
++            observe_store_outcome_locked(out_summary);
++            store_outcome_observed = true;
++        }
++#endif
++
+         status = Cnr3Status::ok;
+     }
+ 
+@@ -1559,11 +1633,19 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+             lookup. If it ever happens, rebalance the acquired lookup reference
+             outside cache_mutex_ before reporting the ownership error.
+         */
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        observe_lookup_ref_released_by_cache_core();
++        observe_ownership_error();
++#endif
+         vsapi->freeFrame(acquired_frame);
+ 
+         return adopt_status;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    observe_lookup_ref_transferred();
++#endif
++
+     return Cnr3Status::ok;
+ }
+ 
+@@ -1683,6 +1765,46 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats_l
+     return hot_zone_diag_stats_;
+ }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++
++Cnr3CacheOwnershipDiagnosticStats Cnr3OutputCacheCore::ownership_diagnostic_stats_locked() const noexcept {
++    Cnr3CacheOwnershipDiagnosticStats snapshot = ownership_diag_stats_;
++    snapshot.total_pin_count_crosscheck = total_pin_count_locked();
++    return snapshot;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++
++Cnr3CacheIntegrityDiagnosticStats Cnr3OutputCacheCore::cache_integrity_diagnostic_stats_locked() const noexcept {
++    Cnr3CacheIntegrityDiagnosticStats snapshot = cache_integrity_diag_stats_;
++    const std::size_t checkpoint_count = checkpoint_count_locked();
++    const std::size_t checkpoint_retain_headroom =
++        checkpoint_count <= CNR3_CACHE_CHECKPOINT_MAX_RETAIN
++        ? CNR3_CACHE_CHECKPOINT_MAX_RETAIN - checkpoint_count
++        : 0U;
++
++    cnr3_cache_integrity_diagnostic_set_summary_sample(
++        snapshot,
++        slot_count_locked(),
++        checkpoint_count,
++        checkpoint_retain_headroom,
++        total_pin_count_locked()
++    );
++    return snapshot;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++
++Cnr3CacheStoreDiagnosticStats Cnr3OutputCacheCore::cache_store_diagnostic_stats_locked() const noexcept {
++    return cache_store_diag_stats_;
++}
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+ 
+ Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats_locked() const {
+@@ -1784,6 +1906,117 @@ int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
+     return total_pin_count;
+ }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++
++void Cnr3OutputCacheCore::observe_pin_acquired_locked() noexcept {
++    cnr3_cache_ownership_diagnostic_observe_pin_acquired(ownership_diag_stats_);
++}
++
++void Cnr3OutputCacheCore::observe_pin_released_locked() noexcept {
++    cnr3_cache_ownership_diagnostic_observe_pin_released(ownership_diag_stats_);
++}
++
++void Cnr3OutputCacheCore::observe_lookup_ref_acquired_locked() const noexcept {
++    cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(ownership_diag_stats_);
++}
++
++void Cnr3OutputCacheCore::observe_lookup_ref_released_by_cache_core() const noexcept {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    cnr3_cache_ownership_diagnostic_observe_lookup_ref_released_by_cache_core(ownership_diag_stats_);
++}
++
++void Cnr3OutputCacheCore::observe_lookup_ref_transferred() const noexcept {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    cnr3_cache_ownership_diagnostic_observe_lookup_ref_transferred(ownership_diag_stats_);
++}
++
++void Cnr3OutputCacheCore::observe_ownership_error() const noexcept {
++    const std::lock_guard<std::mutex> lock(cache_mutex_);
++
++    cnr3_cache_ownership_diagnostic_observe_ownership_error(ownership_diag_stats_);
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++
++void Cnr3OutputCacheCore::observe_cache_invariant_check_started_locked() const noexcept {
++    const std::size_t checkpoint_count = checkpoint_count_locked();
++    const std::size_t checkpoint_retain_headroom =
++        checkpoint_count <= CNR3_CACHE_CHECKPOINT_MAX_RETAIN
++        ? CNR3_CACHE_CHECKPOINT_MAX_RETAIN - checkpoint_count
++        : 0U;
++
++    cnr3_cache_integrity_diagnostic_observe_check(
++        cache_integrity_diag_stats_,
++        slot_count_locked(),
++        checkpoint_count,
++        checkpoint_retain_headroom,
++        total_pin_count_locked()
++    );
++}
++
++bool Cnr3OutputCacheCore::observe_cache_invariant_failure_locked(
++    const char* site
++) const noexcept {
++    cnr3_cache_integrity_diagnostic_observe_failure(
++        cache_integrity_diag_stats_,
++        site
++    );
++
++    return false;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++
++void Cnr3OutputCacheCore::observe_store_outcome_locked(
++    const Cnr3CombinedStoreAndPruneSummary& summary
++) noexcept {
++    std::size_t store_kind_index = CNR3_CACHE_DIAG_DSUM08_STORE_KIND_COUNT;
++
++    switch (summary.store_kind) {
++    case Cnr3CacheStoreKind::ProductionCheckpoint:
++        store_kind_index = 0U;
++        break;
++    case Cnr3CacheStoreKind::ProductionNonCheckpoint:
++        store_kind_index = 1U;
++        break;
++    case Cnr3CacheStoreKind::As2ConsumerCheckpoint:
++        store_kind_index = 2U;
++        break;
++    case Cnr3CacheStoreKind::As2ConsumerNonCheckpoint:
++        store_kind_index = 3U;
++        break;
++    case Cnr3CacheStoreKind::Invalid:
++        break;
++    }
++
++    const bool duplicate_seen =
++        summary.store_status == Cnr3Status::duplicate ||
++        summary.as2_summary.duplicate_existing_slot;
++    const bool incoming_rejected =
++        summary.as2_summary.incoming_frame_rejected ||
++        summary.store_status == Cnr3Status::duplicate;
++    const bool store_failed =
++        summary.store_status != Cnr3Status::ok &&
++        summary.store_status != Cnr3Status::duplicate;
++
++    cnr3_cache_store_diagnostic_observe_store(
++        cache_store_diag_stats_,
++        store_kind_index,
++        duplicate_seen,
++        incoming_rejected,
++        summary.as2_summary.checkpoint_promoted,
++        store_failed
++    );
++}
++
++#endif
++
+ void Cnr3OutputCacheCore::observe_hot_zone_create_locked() noexcept {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
+     cnr3_cache_hot_zone_diagnostic_observe_create(hot_zone_diag_stats_);
+@@ -3579,6 +3812,10 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+         return Cnr3Status::vapoursynth_error;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    observe_lookup_ref_acquired_locked();
++#endif
++
+     *out_acquired_frame = acquired_frame;
+ 
+     return Cnr3Status::ok;
+@@ -3658,6 +3895,9 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     }
+ 
+     ++slot.pin_count;
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    observe_pin_acquired_locked();
++#endif
+ 
+     out_pin_token.slot_id = slot.slot_id;
+     out_pin_token.frame_number = slot.frame_number;
+@@ -3711,6 +3951,9 @@ Cnr3Status Cnr3OutputCacheCore::unpin_frame_locked(
+     }
+ 
+     --slot.pin_count;
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    observe_pin_released_locked();
++#endif
+     cnr3_cache_slot_pin_token_reset(pin_token);
+ 
+     if (!cache_state_invariants_hold_locked()) {
+@@ -3750,8 +3993,12 @@ Cnr3Status Cnr3OutputCacheCore::clear_locked(
+ }
+ 
+ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++    observe_cache_invariant_check_started_locked();
++#endif
++
+     if (!cnr3_cache_hot_zone_model_invariants_hold(hot_zones_)) {
+-        return false;
++        CNR3_DSUM05_FAIL("hot_zone_model");
+     }
+ 
+     for (const auto& frame_index_entry : frame_index_) {
+@@ -3759,17 +4006,17 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+         const std::size_t slot_position = frame_index_entry.second;
+ 
+         if (slot_position >= slots_.size()) {
+-            return false;
++            CNR3_DSUM05_FAIL("frame_index_slot_range");
+         }
+ 
+         const Cnr3CacheSlot& slot = slots_[slot_position];
+ 
+         if (!cnr3_cache_slot_is_indexable(slot)) {
+-            return false;
++            CNR3_DSUM05_FAIL("frame_index_slot_state");
+         }
+ 
+         if (slot.frame_number != frame_number) {
+-            return false;
++            CNR3_DSUM05_FAIL("frame_index_number_mismatch");
+         }
+     }
+ 
+@@ -3777,45 +4024,45 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+         const Cnr3CacheSlot& slot = slots_[slot_position];
+ 
+         if (slot.pin_count < 0) {
+-            return false;
++            CNR3_DSUM05_FAIL("slot_negative_pin");
+         }
+ 
+         if (!cnr3_cache_slot_has_frame(slot)) {
+             if (cnr3_cache_slot_id_is_valid(slot.slot_id)) {
+-                return false;
++                CNR3_DSUM05_FAIL("empty_slot_has_id");
+             }
+ 
+             if (cnr3_frame_number_is_valid(slot.frame_number)) {
+-                return false;
++                CNR3_DSUM05_FAIL("empty_slot_has_frame_number");
+             }
+ 
+             if (slot.is_checkpoint) {
+-                return false;
++                CNR3_DSUM05_FAIL("empty_slot_checkpoint");
+             }
+ 
+             if (slot.pin_count != 0) {
+-                return false;
++                CNR3_DSUM05_FAIL("empty_slot_pin");
+             }
+ 
+             continue;
+         }
+ 
+         if (!cnr3_cache_slot_id_is_valid(slot.slot_id)) {
+-            return false;
++            CNR3_DSUM05_FAIL("live_slot_missing_id");
+         }
+ 
+         if (!cnr3_frame_number_is_valid(slot.frame_number)) {
+-            return false;
++            CNR3_DSUM05_FAIL("live_slot_invalid_frame_number");
+         }
+ 
+         const auto frame_index_it = frame_index_.find(slot.frame_number);
+ 
+         if (frame_index_it == frame_index_.end()) {
+-            return false;
++            CNR3_DSUM05_FAIL("live_slot_missing_index");
+         }
+ 
+         if (frame_index_it->second != slot_position) {
+-            return false;
++            CNR3_DSUM05_FAIL("live_slot_index_mismatch");
+         }
+     }
+ 
+@@ -3828,7 +4075,7 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+     }
+ 
+     if (checkpoint_slot_count != checkpoint_slot_positions_.size()) {
+-        return false;
++        CNR3_DSUM05_FAIL("checkpoint_count");
+     }
+ 
+     for (std::size_t checkpoint_index = 0;
+@@ -3839,7 +4086,7 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+             checkpoint_slot_positions_[checkpoint_index];
+ 
+         if (checkpoint_slot_position >= slots_.size()) {
+-            return false;
++            CNR3_DSUM05_FAIL("checkpoint_position_range");
+         }
+ 
+         for (std::size_t compare_index = checkpoint_index + 1U;
+@@ -3847,24 +4094,26 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+             ++compare_index
+             ) {
+             if (checkpoint_slot_positions_[compare_index] == checkpoint_slot_position) {
+-                return false;
++                CNR3_DSUM05_FAIL("checkpoint_position_duplicate");
+             }
+         }
+ 
+         const Cnr3CacheSlot& slot = slots_[checkpoint_slot_position];
+ 
+         if (!slot.is_checkpoint) {
+-            return false;
++            CNR3_DSUM05_FAIL("checkpoint_slot_class");
+         }
+ 
+         if (!cnr3_cache_slot_is_indexable(slot)) {
+-            return false;
++            CNR3_DSUM05_FAIL("checkpoint_slot_indexable");
+         }
+     }
+ 
+     return true;
+ }
+ 
++#undef CNR3_DSUM05_FAIL
++
+ bool Cnr3CachePinList::empty() const noexcept {
+     return pin_count() == 0U;
+ }
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 9b97172..1016203 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -764,6 +764,15 @@ public:
+     [[nodiscard]] std::size_t checkpoint_count() const;
+     [[nodiscard]] std::size_t hot_zone_count() const;
+     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats() const;
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    [[nodiscard]] Cnr3CacheOwnershipDiagnosticStats ownership_diagnostic_stats() const;
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++    [[nodiscard]] Cnr3CacheIntegrityDiagnosticStats cache_integrity_diagnostic_stats() const;
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++    [[nodiscard]] Cnr3CacheStoreDiagnosticStats cache_store_diagnostic_stats() const;
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats() const;
+ #endif
+@@ -1280,6 +1289,15 @@ private:
+     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
+     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
+     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats_locked() const noexcept;
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    [[nodiscard]] Cnr3CacheOwnershipDiagnosticStats ownership_diagnostic_stats_locked() const noexcept;
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++    [[nodiscard]] Cnr3CacheIntegrityDiagnosticStats cache_integrity_diagnostic_stats_locked() const noexcept;
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++    [[nodiscard]] Cnr3CacheStoreDiagnosticStats cache_store_diagnostic_stats_locked() const noexcept;
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats_locked() const;
+ #endif
+@@ -1344,6 +1362,28 @@ private:
+     void observe_hot_zone_prune_rejections_locked(
+         std::size_t rejected_frame_count
+     ) noexcept;
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    void observe_pin_acquired_locked() noexcept;
++    void observe_pin_released_locked() noexcept;
++    void observe_lookup_ref_acquired_locked() const noexcept;
++    void observe_lookup_ref_released_by_cache_core() const noexcept;
++    void observe_lookup_ref_transferred() const noexcept;
++    void observe_ownership_error() const noexcept;
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++    void observe_cache_invariant_check_started_locked() const noexcept;
++    [[nodiscard]] bool observe_cache_invariant_failure_locked(
++        const char* site
++    ) const noexcept;
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++    void observe_store_outcome_locked(
++        const Cnr3CombinedStoreAndPruneSummary& summary
++    ) noexcept;
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     void observe_prune_execution_locked(
+         std::uint64_t frame_byte_count,
+@@ -1709,6 +1749,15 @@ private:
+     std::vector<std::size_t> checkpoint_slot_positions_{};
+     std::vector<Cnr3CacheHotZone> hot_zones_{};
+     Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    mutable Cnr3CacheOwnershipDiagnosticStats ownership_diag_stats_{};
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++    mutable Cnr3CacheIntegrityDiagnosticStats cache_integrity_diag_stats_{};
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++    mutable Cnr3CacheStoreDiagnosticStats cache_store_diag_stats_{};
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     mutable Cnr3CachePruneDiagnosticStats prune_diag_stats_{};
+ #endif
+diff --git a/src/cnr3_cache_core_selftest_main.cpp b/src/cnr3_cache_core_selftest_main.cpp
+index 877ffe4..edcfefe 100644
+--- a/src/cnr3_cache_core_selftest_main.cpp
++++ b/src/cnr3_cache_core_selftest_main.cpp
+@@ -156,6 +156,70 @@ namespace {
+ #endif
+ 
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++
++    void cnr3_selftest_emit_dsum04_reference_summary() noexcept {
++        Cnr3CacheOwnershipDiagnosticStats stats{};
++
++        cnr3_cache_ownership_diagnostic_observe_pin_acquired(stats);
++        cnr3_cache_ownership_diagnostic_observe_pin_acquired(stats);
++        cnr3_cache_ownership_diagnostic_observe_pin_released(stats);
++        cnr3_cache_ownership_diagnostic_observe_pin_released(stats);
++        cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(stats);
++        cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(stats);
++        cnr3_cache_ownership_diagnostic_observe_lookup_ref_transferred(stats);
++        cnr3_cache_ownership_diagnostic_observe_lookup_ref_released_by_cache_core(stats);
++        stats.total_pin_count_crosscheck = 0;
++
++#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
++        cnr3_cache_ownership_diagnostic_write_summary(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++
++    void cnr3_selftest_emit_dsum05_reference_summary() noexcept {
++        Cnr3CacheIntegrityDiagnosticStats stats{};
++
++        cnr3_cache_integrity_diagnostic_observe_check(stats, 3U, 1U, 47U, 0);
++        cnr3_cache_integrity_diagnostic_observe_check(stats, 5U, 2U, 46U, 1);
++        cnr3_cache_integrity_diagnostic_set_summary_sample(stats, 5U, 2U, 46U, 0);
++
++#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
++        cnr3_cache_integrity_diagnostic_write_summary(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++
++    void cnr3_selftest_emit_dsum08_reference_summary() noexcept {
++        Cnr3CacheStoreDiagnosticStats stats{};
++
++        cnr3_cache_store_diagnostic_observe_store(stats, 0U, false, false, false, false);
++        cnr3_cache_store_diagnostic_observe_store(stats, 1U, true, true, false, false);
++        cnr3_cache_store_diagnostic_observe_store(stats, 2U, false, false, true, false);
++        cnr3_cache_store_diagnostic_observe_store(stats, 3U, false, false, false, false);
++
++#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
++        cnr3_cache_store_diagnostic_write_summary(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+ 
+     void cnr3_selftest_emit_dsum10_reference_summary() {
+@@ -278,6 +342,15 @@ int main(int argc, char** argv) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
+     cnr3_selftest_emit_dsum01_reference_summary();
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    cnr3_selftest_emit_dsum04_reference_summary();
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++    cnr3_selftest_emit_dsum05_reference_summary();
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++    cnr3_selftest_emit_dsum08_reference_summary();
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     cnr3_selftest_emit_dsum10_reference_summary();
+ #endif
+diff --git a/src/cnr3_cache_diagnostics.cpp b/src/cnr3_cache_diagnostics.cpp
+index 7370ccb..d16cb3e 100644
+--- a/src/cnr3_cache_diagnostics.cpp
++++ b/src/cnr3_cache_diagnostics.cpp
+@@ -110,6 +110,46 @@ namespace {
+         );
+     }
+ 
++    void cnr3_cache_diag_write_int64_row(
++        Cnr3InstanceId instance_id,
++        const char* component,
++        const char* dsum_name,
++        const char* label,
++        std::int64_t value
++    ) noexcept {
++        char message[224] = {};
++
++        const int written = std::snprintf(
++            message,
++            sizeof(message),
++            "[DSUM-SUMMARY] %s %-44s %lld",
++            dsum_name != nullptr ? dsum_name : "D-SUM-??",
++            label != nullptr ? label : "(null)",
++            static_cast<long long>(value)
++        );
++
++        if (written < 0) {
++            cnr3_diag_write_line(
++                instance_id,
++                Cnr3DiagnosticLevel::error,
++                component,
++                "[DSUM-SUMMARY] formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        message[sizeof(message) - 1U] = '\0';
++
++        cnr3_diag_write_line(
++            instance_id,
++            Cnr3DiagnosticLevel::info,
++            component,
++            message,
++            Cnr3StderrFlushPolicy::no_flush
++        );
++    }
++
+     void cnr3_cache_diag_write_text_line(
+         Cnr3InstanceId instance_id,
+         const char* component,
+@@ -225,6 +265,138 @@ namespace {
+ 
+ } // namespace
+ 
++#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
++
++void cnr3_cache_ownership_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    const std::uint64_t lookup_refs_released_or_transferred =
++        stats.lookup_refs_released_by_cache_core + stats.lookup_refs_transferred;
++    const std::int64_t pin_balance =
++        stats.pins_acquired >= stats.pins_released
++        ? static_cast<std::int64_t>(stats.pins_acquired - stats.pins_released)
++        : -static_cast<std::int64_t>(stats.pins_released - stats.pins_acquired);
++    const std::int64_t lookup_ref_balance =
++        stats.lookup_refs_acquired >= lookup_refs_released_or_transferred
++        ? static_cast<std::int64_t>(stats.lookup_refs_acquired - lookup_refs_released_or_transferred)
++        : -static_cast<std::int64_t>(lookup_refs_released_or_transferred - stats.lookup_refs_acquired);
++
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04 ownership-balance summary"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04 interpretation: pin_balance and lookup_ref_balance must be 0 after drain; non-zero = leak or missed handoff"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04 note: pin-list record/discharge fields are consciously narrowed out in DIAG.2b"
++    );
++
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_acquired", stats.pins_acquired);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_released", stats.pins_released);
++    cnr3_cache_diag_write_int64_row(instance_id, "D-SUM-04", "D-SUM-04", "pin_balance", pin_balance);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-04", "D-SUM-04", "total_pin_count_crosscheck", stats.total_pin_count_crosscheck);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);
++    cnr3_cache_diag_write_int64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_ref_balance", lookup_ref_balance);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "ownership_errors", stats.ownership_errors);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
++
++void cnr3_cache_integrity_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheIntegrityDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-05",
++        "[DSUM-SUMMARY] D-SUM-05 cache-integrity summary"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-05",
++        "[DSUM-SUMMARY] D-SUM-05 interpretation: violations should be 0; non-zero = structural-invariant breach"
++    );
++
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-05", "D-SUM-05", "invariant_checks_performed", stats.invariant_checks_performed);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-05", "D-SUM-05", "invariant_violations_detected", stats.invariant_violations_detected);
++
++    char site_message[256] = {};
++    std::snprintf(
++        site_message,
++        sizeof(site_message),
++        "[DSUM-SUMMARY] D-SUM-05 %-44s %s",
++        "first_violation_site",
++        stats.first_violation_site != nullptr ? stats.first_violation_site : "<none>"
++    );
++    site_message[sizeof(site_message) - 1U] = '\0';
++    cnr3_cache_diag_write_text_line(instance_id, "D-SUM-05", site_message);
++
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "slot_count_min", stats.have_structural_sample ? stats.slot_count_min : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "slot_count_max", stats.have_structural_sample ? stats.slot_count_max : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "checkpoint_count_min", stats.have_structural_sample ? stats.checkpoint_count_min : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "checkpoint_count_max", stats.have_structural_sample ? stats.checkpoint_count_max : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "non_checkpoint_count_min", stats.have_structural_sample ? stats.non_checkpoint_count_min : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "non_checkpoint_count_max", stats.have_structural_sample ? stats.non_checkpoint_count_max : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "checkpoint_retain_headroom_min", stats.have_structural_sample ? stats.checkpoint_retain_headroom_min : 0U);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-05", "D-SUM-05", "total_pin_count_min", stats.have_structural_sample ? stats.total_pin_count_min : 0);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-05", "D-SUM-05", "total_pin_count_max", stats.have_structural_sample ? stats.total_pin_count_max : 0);
++
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_slot_count", stats.have_summary_sample ? stats.summary_slot_count : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_checkpoint_count", stats.have_summary_sample ? stats.summary_checkpoint_count : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_non_checkpoint_count", stats.have_summary_sample ? stats.summary_non_checkpoint_count : 0U);
++    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_checkpoint_retain_headroom", stats.have_summary_sample ? stats.summary_checkpoint_retain_headroom : 0U);
++    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_total_pin_count", stats.have_summary_sample ? stats.summary_total_pin_count : 0);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
++
++void cnr3_cache_store_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheStoreDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-08",
++        "[DSUM-SUMMARY] D-SUM-08 cache-store summary"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-08",
++        "[DSUM-SUMMARY] D-SUM-08 interpretation: duplicates + rejected count first-in-best-dressed races; as2_checkpoint_promotions are monotonic AS2 upgrades; store_failures should be 0"
++    );
++
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_total", stats.stores_total);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_production_checkpoint", stats.stores_by_kind[0]);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_production_noncheckpoint", stats.stores_by_kind[1]);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_as2_consumer_checkpoint", stats.stores_by_kind[2]);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_as2_consumer_noncheckpoint", stats.stores_by_kind[3]);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "duplicates_seen", stats.duplicates_seen);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "incoming_rejected", stats.incoming_rejected);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "as2_checkpoint_promotions", stats.as2_checkpoint_promotions);
++    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "store_failures", stats.store_failures);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+ 
+ void cnr3_cache_prune_diagnostic_configure(
+diff --git a/src/cnr3_cache_diagnostics.h b/src/cnr3_cache_diagnostics.h
+index 8521c7b..444d5fa 100644
+--- a/src/cnr3_cache_diagnostics.h
++++ b/src/cnr3_cache_diagnostics.h
+@@ -62,6 +62,86 @@ struct Cnr3CacheHotZoneDiagnosticStats {
+     std::uint64_t frames_rejected_from_prune_due_to_hot_zone = 0;
+ };
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++
++/*
++    D-SUM-04 ownership-balance diagnostic state.
++
++    DIAG.2b deliberately observes two narrow cache-core balances only:
++    slot pins and lookup-ref handoff. It does not claim a global VSFrame
++    ownership balance; pin-list record/discharge fields are consciously
++    narrowed out to avoid double-counting AS4 discharge paths.
++*/
++struct Cnr3CacheOwnershipDiagnosticStats {
++    std::uint64_t pins_acquired = 0;
++    std::uint64_t pins_released = 0;
++    int total_pin_count_crosscheck = 0;
++
++    std::uint64_t lookup_refs_acquired = 0;
++    std::uint64_t lookup_refs_released_by_cache_core = 0;
++    std::uint64_t lookup_refs_transferred = 0;
++    std::uint64_t ownership_errors = 0;
++};
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++
++/*
++    D-SUM-05 cache-integrity diagnostic state.
++
++    This observes the existing central cache-state invariant predicate. It
++    must not add guards, change predicate results, or acquire locks from the
++    predicate's lock-protected context.
++*/
++struct Cnr3CacheIntegrityDiagnosticStats {
++    std::uint64_t invariant_checks_performed = 0;
++    std::uint64_t invariant_violations_detected = 0;
++    const char* first_violation_site = nullptr;
++
++    bool have_structural_sample = false;
++    std::size_t slot_count_min = 0;
++    std::size_t slot_count_max = 0;
++    std::size_t checkpoint_count_min = 0;
++    std::size_t checkpoint_count_max = 0;
++    std::size_t non_checkpoint_count_min = 0;
++    std::size_t non_checkpoint_count_max = 0;
++    std::size_t checkpoint_retain_headroom_min = 0;
++    int total_pin_count_min = 0;
++    int total_pin_count_max = 0;
++
++    bool have_summary_sample = false;
++    std::size_t summary_slot_count = 0;
++    std::size_t summary_checkpoint_count = 0;
++    std::size_t summary_non_checkpoint_count = 0;
++    std::size_t summary_checkpoint_retain_headroom = 0;
++    int summary_total_pin_count = 0;
++};
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++
++inline constexpr std::size_t CNR3_CACHE_DIAG_DSUM08_STORE_KIND_COUNT = 4U;
++
++/*
++    D-SUM-08 cache-store diagnostic state.
++
++    This is wrapper-level store outcome telemetry. Duplicate is a healthy
++    first-in-best-dressed outcome and is not counted as store failure.
++*/
++struct Cnr3CacheStoreDiagnosticStats {
++    std::uint64_t stores_total = 0;
++    std::uint64_t stores_by_kind[CNR3_CACHE_DIAG_DSUM08_STORE_KIND_COUNT] = {};
++    std::uint64_t duplicates_seen = 0;
++    std::uint64_t incoming_rejected = 0;
++    std::uint64_t as2_checkpoint_promotions = 0;
++    std::uint64_t store_failures = 0;
++};
++
++#endif
++
++
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+ 
+@@ -261,6 +341,215 @@ inline void cnr3_cache_hot_zone_diagnostic_observe_prune_rejections(
+     );
+ }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++
++inline void cnr3_cache_ownership_diagnostic_observe_pin_acquired(
++    Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.pins_acquired);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_pin_released(
++    Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.pins_released);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(
++    Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.lookup_refs_acquired);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_released_by_cache_core(
++    Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.lookup_refs_released_by_cache_core);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_transferred(
++    Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.lookup_refs_transferred);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_ownership_error(
++    Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.ownership_errors);
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
++
++inline void cnr3_cache_integrity_diagnostic_observe_structural_sample(
++    Cnr3CacheIntegrityDiagnosticStats& stats,
++    std::size_t slot_count,
++    std::size_t checkpoint_count,
++    std::size_t checkpoint_retain_headroom,
++    int total_pin_count
++) noexcept {
++    const std::size_t non_checkpoint_count =
++        slot_count >= checkpoint_count ? slot_count - checkpoint_count : 0U;
++
++    if (!stats.have_structural_sample) {
++        stats.have_structural_sample = true;
++        stats.slot_count_min = slot_count;
++        stats.slot_count_max = slot_count;
++        stats.checkpoint_count_min = checkpoint_count;
++        stats.checkpoint_count_max = checkpoint_count;
++        stats.non_checkpoint_count_min = non_checkpoint_count;
++        stats.non_checkpoint_count_max = non_checkpoint_count;
++        stats.checkpoint_retain_headroom_min = checkpoint_retain_headroom;
++        stats.total_pin_count_min = total_pin_count;
++        stats.total_pin_count_max = total_pin_count;
++        return;
++    }
++
++    if (slot_count < stats.slot_count_min) {
++        stats.slot_count_min = slot_count;
++    }
++    if (slot_count > stats.slot_count_max) {
++        stats.slot_count_max = slot_count;
++    }
++
++    if (checkpoint_count < stats.checkpoint_count_min) {
++        stats.checkpoint_count_min = checkpoint_count;
++    }
++    if (checkpoint_count > stats.checkpoint_count_max) {
++        stats.checkpoint_count_max = checkpoint_count;
++    }
++
++    if (non_checkpoint_count < stats.non_checkpoint_count_min) {
++        stats.non_checkpoint_count_min = non_checkpoint_count;
++    }
++    if (non_checkpoint_count > stats.non_checkpoint_count_max) {
++        stats.non_checkpoint_count_max = non_checkpoint_count;
++    }
++
++    if (checkpoint_retain_headroom < stats.checkpoint_retain_headroom_min) {
++        stats.checkpoint_retain_headroom_min = checkpoint_retain_headroom;
++    }
++
++    if (total_pin_count < stats.total_pin_count_min) {
++        stats.total_pin_count_min = total_pin_count;
++    }
++    if (total_pin_count > stats.total_pin_count_max) {
++        stats.total_pin_count_max = total_pin_count;
++    }
++}
++
++inline void cnr3_cache_integrity_diagnostic_set_summary_sample(
++    Cnr3CacheIntegrityDiagnosticStats& stats,
++    std::size_t slot_count,
++    std::size_t checkpoint_count,
++    std::size_t checkpoint_retain_headroom,
++    int total_pin_count
++) noexcept {
++    stats.have_summary_sample = true;
++    stats.summary_slot_count = slot_count;
++    stats.summary_checkpoint_count = checkpoint_count;
++    stats.summary_non_checkpoint_count =
++        slot_count >= checkpoint_count ? slot_count - checkpoint_count : 0U;
++    stats.summary_checkpoint_retain_headroom = checkpoint_retain_headroom;
++    stats.summary_total_pin_count = total_pin_count;
++}
++
++inline void cnr3_cache_integrity_diagnostic_observe_check(
++    Cnr3CacheIntegrityDiagnosticStats& stats,
++    std::size_t slot_count,
++    std::size_t checkpoint_count,
++    std::size_t checkpoint_retain_headroom,
++    int total_pin_count
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.invariant_checks_performed);
++    cnr3_cache_integrity_diagnostic_observe_structural_sample(
++        stats,
++        slot_count,
++        checkpoint_count,
++        checkpoint_retain_headroom,
++        total_pin_count
++    );
++}
++
++inline void cnr3_cache_integrity_diagnostic_observe_failure(
++    Cnr3CacheIntegrityDiagnosticStats& stats,
++    const char* site
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.invariant_violations_detected);
++
++    if (stats.first_violation_site == nullptr) {
++        stats.first_violation_site = site;
++    }
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
++
++inline void cnr3_cache_store_diagnostic_observe_store(
++    Cnr3CacheStoreDiagnosticStats& stats,
++    std::size_t store_kind_index,
++    bool duplicate_seen,
++    bool incoming_rejected,
++    bool as2_checkpoint_promoted,
++    bool store_failed
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.stores_total);
++
++    if (store_kind_index < CNR3_CACHE_DIAG_DSUM08_STORE_KIND_COUNT) {
++        cnr3_cache_diag_saturating_increment(stats.stores_by_kind[store_kind_index]);
++    }
++
++    if (duplicate_seen) {
++        cnr3_cache_diag_saturating_increment(stats.duplicates_seen);
++    }
++
++    if (incoming_rejected) {
++        cnr3_cache_diag_saturating_increment(stats.incoming_rejected);
++    }
++
++    if (as2_checkpoint_promoted) {
++        cnr3_cache_diag_saturating_increment(stats.as2_checkpoint_promotions);
++    }
++
++    if (store_failed) {
++        cnr3_cache_diag_saturating_increment(stats.store_failures);
++    }
++}
++
++#endif
++
++
++#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
++
++void cnr3_cache_ownership_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheOwnershipDiagnosticStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
++
++void cnr3_cache_integrity_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheIntegrityDiagnosticStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
++
++void cnr3_cache_store_diagnostic_write_summary(
++    Cnr3InstanceId instance_id,
++    const Cnr3CacheStoreDiagnosticStats& stats
++) noexcept;
++
++#endif
++
++
+ #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+ 
+ void cnr3_cache_prune_diagnostic_write_summary(
+diff --git a/src/vapoursynth-Cnr3.cpp b/src/vapoursynth-Cnr3.cpp
+index dbbfa9f..3351492 100644
+--- a/src/vapoursynth-Cnr3.cpp
++++ b/src/vapoursynth-Cnr3.cpp
+@@ -305,6 +305,24 @@ void VS_CC cnr3_free_filter(
+         data->dsum01_request_order
+     );
+ #endif
++#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
++    cnr3_cache_ownership_diagnostic_write_summary(
++        data->config.instance_id,
++        data->output_cache.ownership_diagnostic_stats()
++    );
++#endif
++#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
++    cnr3_cache_integrity_diagnostic_write_summary(
++        data->config.instance_id,
++        data->output_cache.cache_integrity_diagnostic_stats()
++    );
++#endif
++#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
++    cnr3_cache_store_diagnostic_write_summary(
++        data->config.instance_id,
++        data->output_cache.cache_store_diagnostic_stats()
++    );
++#endif
+ #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+     cnr3_cache_prune_diagnostic_write_summary(
+         data->config.instance_id,

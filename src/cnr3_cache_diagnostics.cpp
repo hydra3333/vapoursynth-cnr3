@@ -110,6 +110,46 @@ namespace {
         );
     }
 
+    void cnr3_cache_diag_write_int64_row(
+        Cnr3InstanceId instance_id,
+        const char* component,
+        const char* dsum_name,
+        const char* label,
+        std::int64_t value
+    ) noexcept {
+        char message[224] = {};
+
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-SUMMARY] %s %-44s %lld",
+            dsum_name != nullptr ? dsum_name : "D-SUM-??",
+            label != nullptr ? label : "(null)",
+            static_cast<long long>(value)
+        );
+
+        if (written < 0) {
+            cnr3_diag_write_line(
+                instance_id,
+                Cnr3DiagnosticLevel::error,
+                component,
+                "[DSUM-SUMMARY] formatting_error",
+                Cnr3StderrFlushPolicy::no_flush
+            );
+            return;
+        }
+
+        message[sizeof(message) - 1U] = '\0';
+
+        cnr3_diag_write_line(
+            instance_id,
+            Cnr3DiagnosticLevel::info,
+            component,
+            message,
+            Cnr3StderrFlushPolicy::no_flush
+        );
+    }
+
     void cnr3_cache_diag_write_text_line(
         Cnr3InstanceId instance_id,
         const char* component,
@@ -224,6 +264,138 @@ namespace {
 #endif
 
 } // namespace
+
+#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+
+void cnr3_cache_ownership_diagnostic_write_summary(
+    Cnr3InstanceId instance_id,
+    const Cnr3CacheOwnershipDiagnosticStats& stats
+) noexcept {
+    const std::uint64_t lookup_refs_released_or_transferred =
+        stats.lookup_refs_released_by_cache_core + stats.lookup_refs_transferred;
+    const std::int64_t pin_balance =
+        stats.pins_acquired >= stats.pins_released
+        ? static_cast<std::int64_t>(stats.pins_acquired - stats.pins_released)
+        : -static_cast<std::int64_t>(stats.pins_released - stats.pins_acquired);
+    const std::int64_t lookup_ref_balance =
+        stats.lookup_refs_acquired >= lookup_refs_released_or_transferred
+        ? static_cast<std::int64_t>(stats.lookup_refs_acquired - lookup_refs_released_or_transferred)
+        : -static_cast<std::int64_t>(lookup_refs_released_or_transferred - stats.lookup_refs_acquired);
+
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04 ownership-balance summary"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04 interpretation: pin_balance and lookup_ref_balance must be 0 after drain; non-zero = leak or missed handoff"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04 note: pin-list record/discharge fields are consciously narrowed out in DIAG.2b"
+    );
+
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_acquired", stats.pins_acquired);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_released", stats.pins_released);
+    cnr3_cache_diag_write_int64_row(instance_id, "D-SUM-04", "D-SUM-04", "pin_balance", pin_balance);
+    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-04", "D-SUM-04", "total_pin_count_crosscheck", stats.total_pin_count_crosscheck);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);
+    cnr3_cache_diag_write_int64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_ref_balance", lookup_ref_balance);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "ownership_errors", stats.ownership_errors);
+
+    cnr3_diag_flush_stderr();
+}
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)
+
+void cnr3_cache_integrity_diagnostic_write_summary(
+    Cnr3InstanceId instance_id,
+    const Cnr3CacheIntegrityDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-05",
+        "[DSUM-SUMMARY] D-SUM-05 cache-integrity summary"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-05",
+        "[DSUM-SUMMARY] D-SUM-05 interpretation: violations should be 0; non-zero = structural-invariant breach"
+    );
+
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-05", "D-SUM-05", "invariant_checks_performed", stats.invariant_checks_performed);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-05", "D-SUM-05", "invariant_violations_detected", stats.invariant_violations_detected);
+
+    char site_message[256] = {};
+    std::snprintf(
+        site_message,
+        sizeof(site_message),
+        "[DSUM-SUMMARY] D-SUM-05 %-44s %s",
+        "first_violation_site",
+        stats.first_violation_site != nullptr ? stats.first_violation_site : "<none>"
+    );
+    site_message[sizeof(site_message) - 1U] = '\0';
+    cnr3_cache_diag_write_text_line(instance_id, "D-SUM-05", site_message);
+
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "slot_count_min", stats.have_structural_sample ? stats.slot_count_min : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "slot_count_max", stats.have_structural_sample ? stats.slot_count_max : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "checkpoint_count_min", stats.have_structural_sample ? stats.checkpoint_count_min : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "checkpoint_count_max", stats.have_structural_sample ? stats.checkpoint_count_max : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "non_checkpoint_count_min", stats.have_structural_sample ? stats.non_checkpoint_count_min : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "non_checkpoint_count_max", stats.have_structural_sample ? stats.non_checkpoint_count_max : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "checkpoint_retain_headroom_min", stats.have_structural_sample ? stats.checkpoint_retain_headroom_min : 0U);
+    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-05", "D-SUM-05", "total_pin_count_min", stats.have_structural_sample ? stats.total_pin_count_min : 0);
+    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-05", "D-SUM-05", "total_pin_count_max", stats.have_structural_sample ? stats.total_pin_count_max : 0);
+
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_slot_count", stats.have_summary_sample ? stats.summary_slot_count : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_checkpoint_count", stats.have_summary_sample ? stats.summary_checkpoint_count : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_non_checkpoint_count", stats.have_summary_sample ? stats.summary_non_checkpoint_count : 0U);
+    cnr3_cache_diag_write_size_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_checkpoint_retain_headroom", stats.have_summary_sample ? stats.summary_checkpoint_retain_headroom : 0U);
+    cnr3_cache_diag_write_int_row(instance_id, "D-SUM-05", "D-SUM-05", "summary_total_pin_count", stats.have_summary_sample ? stats.summary_total_pin_count : 0);
+
+    cnr3_diag_flush_stderr();
+}
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM08_CACHE_STORE)
+
+void cnr3_cache_store_diagnostic_write_summary(
+    Cnr3InstanceId instance_id,
+    const Cnr3CacheStoreDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-08",
+        "[DSUM-SUMMARY] D-SUM-08 cache-store summary"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-08",
+        "[DSUM-SUMMARY] D-SUM-08 interpretation: duplicates + rejected count first-in-best-dressed races; as2_checkpoint_promotions are monotonic AS2 upgrades; store_failures should be 0"
+    );
+
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_total", stats.stores_total);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_production_checkpoint", stats.stores_by_kind[0]);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_production_noncheckpoint", stats.stores_by_kind[1]);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_as2_consumer_checkpoint", stats.stores_by_kind[2]);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "stores_as2_consumer_noncheckpoint", stats.stores_by_kind[3]);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "duplicates_seen", stats.duplicates_seen);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "incoming_rejected", stats.incoming_rejected);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "as2_checkpoint_promotions", stats.as2_checkpoint_promotions);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-08", "D-SUM-08", "store_failures", stats.store_failures);
+
+    cnr3_diag_flush_stderr();
+}
+
+#endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
 

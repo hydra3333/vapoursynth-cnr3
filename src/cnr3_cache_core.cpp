@@ -180,6 +180,12 @@ namespace {
 
 } // namespace
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+#   define CNR3_DSUM05_FAIL(tag) return observe_cache_invariant_failure_locked((tag))
+#else
+#   define CNR3_DSUM05_FAIL(tag) return false
+#endif
+
 Cnr3OutputCacheCore::Cnr3OutputCacheCore() {
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     cnr3_cache_prune_diagnostic_configure(
@@ -601,6 +607,36 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats()
     return hot_zone_diagnostic_stats_locked();
 }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+
+Cnr3CacheOwnershipDiagnosticStats Cnr3OutputCacheCore::ownership_diagnostic_stats() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return ownership_diagnostic_stats_locked();
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+
+Cnr3CacheIntegrityDiagnosticStats Cnr3OutputCacheCore::cache_integrity_diagnostic_stats() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return cache_integrity_diagnostic_stats_locked();
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+
+Cnr3CacheStoreDiagnosticStats Cnr3OutputCacheCore::cache_store_diagnostic_stats() const {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    return cache_store_diagnostic_stats_locked();
+}
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
 
 Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats() const {
@@ -1017,6 +1053,9 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
     }
 
     Cnr3Status status = Cnr3Status::invariant_violation;
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    bool store_outcome_observed = false;
+#endif
 
     {
         const std::lock_guard<std::mutex> lock(cache_mutex_);
@@ -1036,11 +1075,19 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
 
             if (!cnr3_status_is_ok(as2_status)) {
                 out_summary.store_status = as2_status;
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+                observe_store_outcome_locked(out_summary);
+                store_outcome_observed = true;
+#endif
                 return as2_status;
             }
 
             if (!as2_summary.pin_recorded) {
                 out_summary.store_status = Cnr3Status::invariant_violation;
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+                observe_store_outcome_locked(out_summary);
+                store_outcome_observed = true;
+#endif
                 return Cnr3Status::invariant_violation;
             }
 
@@ -1052,6 +1099,10 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
             }
             else {
                 out_summary.store_status = Cnr3Status::invariant_violation;
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+                observe_store_outcome_locked(out_summary);
+                store_outcome_observed = true;
+#endif
                 return Cnr3Status::invariant_violation;
             }
         }
@@ -1066,6 +1117,10 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
                 out_summary.store_status != Cnr3Status::ok &&
                 out_summary.store_status != Cnr3Status::duplicate
                 ) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+                observe_store_outcome_locked(out_summary);
+                store_outcome_observed = true;
+#endif
                 return out_summary.store_status;
             }
         }
@@ -1074,6 +1129,12 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
             retire_decay_eligible_hot_zones_locked(activation_target_frame);
 
         if (!cnr3_status_is_ok(out_summary.retire_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+            if (!store_outcome_observed) {
+                observe_store_outcome_locked(out_summary);
+                store_outcome_observed = true;
+            }
+#endif
             return out_summary.retire_status;
         }
 
@@ -1089,8 +1150,21 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
         );
 
         if (!cnr3_status_is_ok(out_summary.prune_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+            if (!store_outcome_observed) {
+                observe_store_outcome_locked(out_summary);
+                store_outcome_observed = true;
+            }
+#endif
             return out_summary.prune_status;
         }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+        if (!store_outcome_observed) {
+            observe_store_outcome_locked(out_summary);
+            store_outcome_observed = true;
+        }
+#endif
 
         status = Cnr3Status::ok;
     }
@@ -1559,10 +1633,18 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
             lookup. If it ever happens, rebalance the acquired lookup reference
             outside cache_mutex_ before reporting the ownership error.
         */
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        observe_lookup_ref_released_by_cache_core();
+        observe_ownership_error();
+#endif
         vsapi->freeFrame(acquired_frame);
 
         return adopt_status;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_lookup_ref_transferred();
+#endif
 
     return Cnr3Status::ok;
 }
@@ -1683,6 +1765,46 @@ Cnr3CacheHotZoneDiagnosticStats Cnr3OutputCacheCore::hot_zone_diagnostic_stats_l
     return hot_zone_diag_stats_;
 }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+
+Cnr3CacheOwnershipDiagnosticStats Cnr3OutputCacheCore::ownership_diagnostic_stats_locked() const noexcept {
+    Cnr3CacheOwnershipDiagnosticStats snapshot = ownership_diag_stats_;
+    snapshot.total_pin_count_crosscheck = total_pin_count_locked();
+    return snapshot;
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+
+Cnr3CacheIntegrityDiagnosticStats Cnr3OutputCacheCore::cache_integrity_diagnostic_stats_locked() const noexcept {
+    Cnr3CacheIntegrityDiagnosticStats snapshot = cache_integrity_diag_stats_;
+    const std::size_t checkpoint_count = checkpoint_count_locked();
+    const std::size_t checkpoint_retain_headroom =
+        checkpoint_count <= CNR3_CACHE_CHECKPOINT_MAX_RETAIN
+        ? CNR3_CACHE_CHECKPOINT_MAX_RETAIN - checkpoint_count
+        : 0U;
+
+    cnr3_cache_integrity_diagnostic_set_summary_sample(
+        snapshot,
+        slot_count_locked(),
+        checkpoint_count,
+        checkpoint_retain_headroom,
+        total_pin_count_locked()
+    );
+    return snapshot;
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+
+Cnr3CacheStoreDiagnosticStats Cnr3OutputCacheCore::cache_store_diagnostic_stats_locked() const noexcept {
+    return cache_store_diag_stats_;
+}
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
 
 Cnr3CachePruneDiagnosticStats Cnr3OutputCacheCore::prune_diagnostic_stats_locked() const {
@@ -1783,6 +1905,117 @@ int Cnr3OutputCacheCore::total_pin_count_locked() const noexcept {
 
     return total_pin_count;
 }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+
+void Cnr3OutputCacheCore::observe_pin_acquired_locked() noexcept {
+    cnr3_cache_ownership_diagnostic_observe_pin_acquired(ownership_diag_stats_);
+}
+
+void Cnr3OutputCacheCore::observe_pin_released_locked() noexcept {
+    cnr3_cache_ownership_diagnostic_observe_pin_released(ownership_diag_stats_);
+}
+
+void Cnr3OutputCacheCore::observe_lookup_ref_acquired_locked() const noexcept {
+    cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(ownership_diag_stats_);
+}
+
+void Cnr3OutputCacheCore::observe_lookup_ref_released_by_cache_core() const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    cnr3_cache_ownership_diagnostic_observe_lookup_ref_released_by_cache_core(ownership_diag_stats_);
+}
+
+void Cnr3OutputCacheCore::observe_lookup_ref_transferred() const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    cnr3_cache_ownership_diagnostic_observe_lookup_ref_transferred(ownership_diag_stats_);
+}
+
+void Cnr3OutputCacheCore::observe_ownership_error() const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    cnr3_cache_ownership_diagnostic_observe_ownership_error(ownership_diag_stats_);
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+
+void Cnr3OutputCacheCore::observe_cache_invariant_check_started_locked() const noexcept {
+    const std::size_t checkpoint_count = checkpoint_count_locked();
+    const std::size_t checkpoint_retain_headroom =
+        checkpoint_count <= CNR3_CACHE_CHECKPOINT_MAX_RETAIN
+        ? CNR3_CACHE_CHECKPOINT_MAX_RETAIN - checkpoint_count
+        : 0U;
+
+    cnr3_cache_integrity_diagnostic_observe_check(
+        cache_integrity_diag_stats_,
+        slot_count_locked(),
+        checkpoint_count,
+        checkpoint_retain_headroom,
+        total_pin_count_locked()
+    );
+}
+
+bool Cnr3OutputCacheCore::observe_cache_invariant_failure_locked(
+    const char* site
+) const noexcept {
+    cnr3_cache_integrity_diagnostic_observe_failure(
+        cache_integrity_diag_stats_,
+        site
+    );
+
+    return false;
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+
+void Cnr3OutputCacheCore::observe_store_outcome_locked(
+    const Cnr3CombinedStoreAndPruneSummary& summary
+) noexcept {
+    std::size_t store_kind_index = CNR3_CACHE_DIAG_DSUM08_STORE_KIND_COUNT;
+
+    switch (summary.store_kind) {
+    case Cnr3CacheStoreKind::ProductionCheckpoint:
+        store_kind_index = 0U;
+        break;
+    case Cnr3CacheStoreKind::ProductionNonCheckpoint:
+        store_kind_index = 1U;
+        break;
+    case Cnr3CacheStoreKind::As2ConsumerCheckpoint:
+        store_kind_index = 2U;
+        break;
+    case Cnr3CacheStoreKind::As2ConsumerNonCheckpoint:
+        store_kind_index = 3U;
+        break;
+    case Cnr3CacheStoreKind::Invalid:
+        break;
+    }
+
+    const bool duplicate_seen =
+        summary.store_status == Cnr3Status::duplicate ||
+        summary.as2_summary.duplicate_existing_slot;
+    const bool incoming_rejected =
+        summary.as2_summary.incoming_frame_rejected ||
+        summary.store_status == Cnr3Status::duplicate;
+    const bool store_failed =
+        summary.store_status != Cnr3Status::ok &&
+        summary.store_status != Cnr3Status::duplicate;
+
+    cnr3_cache_store_diagnostic_observe_store(
+        cache_store_diag_stats_,
+        store_kind_index,
+        duplicate_seen,
+        incoming_rejected,
+        summary.as2_summary.checkpoint_promoted,
+        store_failed
+    );
+}
+
+#endif
 
 void Cnr3OutputCacheCore::observe_hot_zone_create_locked() noexcept {
 #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
@@ -3579,6 +3812,10 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
         return Cnr3Status::vapoursynth_error;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_lookup_ref_acquired_locked();
+#endif
+
     *out_acquired_frame = acquired_frame;
 
     return Cnr3Status::ok;
@@ -3658,6 +3895,9 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     }
 
     ++slot.pin_count;
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_pin_acquired_locked();
+#endif
 
     out_pin_token.slot_id = slot.slot_id;
     out_pin_token.frame_number = slot.frame_number;
@@ -3711,6 +3951,9 @@ Cnr3Status Cnr3OutputCacheCore::unpin_frame_locked(
     }
 
     --slot.pin_count;
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_pin_released_locked();
+#endif
     cnr3_cache_slot_pin_token_reset(pin_token);
 
     if (!cache_state_invariants_hold_locked()) {
@@ -3750,8 +3993,12 @@ Cnr3Status Cnr3OutputCacheCore::clear_locked(
 }
 
 bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+    observe_cache_invariant_check_started_locked();
+#endif
+
     if (!cnr3_cache_hot_zone_model_invariants_hold(hot_zones_)) {
-        return false;
+        CNR3_DSUM05_FAIL("hot_zone_model");
     }
 
     for (const auto& frame_index_entry : frame_index_) {
@@ -3759,17 +4006,17 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
         const std::size_t slot_position = frame_index_entry.second;
 
         if (slot_position >= slots_.size()) {
-            return false;
+            CNR3_DSUM05_FAIL("frame_index_slot_range");
         }
 
         const Cnr3CacheSlot& slot = slots_[slot_position];
 
         if (!cnr3_cache_slot_is_indexable(slot)) {
-            return false;
+            CNR3_DSUM05_FAIL("frame_index_slot_state");
         }
 
         if (slot.frame_number != frame_number) {
-            return false;
+            CNR3_DSUM05_FAIL("frame_index_number_mismatch");
         }
     }
 
@@ -3777,45 +4024,45 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
         const Cnr3CacheSlot& slot = slots_[slot_position];
 
         if (slot.pin_count < 0) {
-            return false;
+            CNR3_DSUM05_FAIL("slot_negative_pin");
         }
 
         if (!cnr3_cache_slot_has_frame(slot)) {
             if (cnr3_cache_slot_id_is_valid(slot.slot_id)) {
-                return false;
+                CNR3_DSUM05_FAIL("empty_slot_has_id");
             }
 
             if (cnr3_frame_number_is_valid(slot.frame_number)) {
-                return false;
+                CNR3_DSUM05_FAIL("empty_slot_has_frame_number");
             }
 
             if (slot.is_checkpoint) {
-                return false;
+                CNR3_DSUM05_FAIL("empty_slot_checkpoint");
             }
 
             if (slot.pin_count != 0) {
-                return false;
+                CNR3_DSUM05_FAIL("empty_slot_pin");
             }
 
             continue;
         }
 
         if (!cnr3_cache_slot_id_is_valid(slot.slot_id)) {
-            return false;
+            CNR3_DSUM05_FAIL("live_slot_missing_id");
         }
 
         if (!cnr3_frame_number_is_valid(slot.frame_number)) {
-            return false;
+            CNR3_DSUM05_FAIL("live_slot_invalid_frame_number");
         }
 
         const auto frame_index_it = frame_index_.find(slot.frame_number);
 
         if (frame_index_it == frame_index_.end()) {
-            return false;
+            CNR3_DSUM05_FAIL("live_slot_missing_index");
         }
 
         if (frame_index_it->second != slot_position) {
-            return false;
+            CNR3_DSUM05_FAIL("live_slot_index_mismatch");
         }
     }
 
@@ -3828,7 +4075,7 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
     }
 
     if (checkpoint_slot_count != checkpoint_slot_positions_.size()) {
-        return false;
+        CNR3_DSUM05_FAIL("checkpoint_count");
     }
 
     for (std::size_t checkpoint_index = 0;
@@ -3839,7 +4086,7 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
             checkpoint_slot_positions_[checkpoint_index];
 
         if (checkpoint_slot_position >= slots_.size()) {
-            return false;
+            CNR3_DSUM05_FAIL("checkpoint_position_range");
         }
 
         for (std::size_t compare_index = checkpoint_index + 1U;
@@ -3847,23 +4094,25 @@ bool Cnr3OutputCacheCore::cache_state_invariants_hold_locked() const noexcept {
             ++compare_index
             ) {
             if (checkpoint_slot_positions_[compare_index] == checkpoint_slot_position) {
-                return false;
+                CNR3_DSUM05_FAIL("checkpoint_position_duplicate");
             }
         }
 
         const Cnr3CacheSlot& slot = slots_[checkpoint_slot_position];
 
         if (!slot.is_checkpoint) {
-            return false;
+            CNR3_DSUM05_FAIL("checkpoint_slot_class");
         }
 
         if (!cnr3_cache_slot_is_indexable(slot)) {
-            return false;
+            CNR3_DSUM05_FAIL("checkpoint_slot_indexable");
         }
     }
 
     return true;
 }
+
+#undef CNR3_DSUM05_FAIL
 
 bool Cnr3CachePinList::empty() const noexcept {
     return pin_count() == 0U;

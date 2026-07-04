@@ -764,6 +764,15 @@ public:
     [[nodiscard]] std::size_t checkpoint_count() const;
     [[nodiscard]] std::size_t hot_zone_count() const;
     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats() const;
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    [[nodiscard]] Cnr3CacheOwnershipDiagnosticStats ownership_diagnostic_stats() const;
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+    [[nodiscard]] Cnr3CacheIntegrityDiagnosticStats cache_integrity_diagnostic_stats() const;
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    [[nodiscard]] Cnr3CacheStoreDiagnosticStats cache_store_diagnostic_stats() const;
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats() const;
 #endif
@@ -1280,6 +1289,15 @@ private:
     [[nodiscard]] std::size_t checkpoint_count_locked() const noexcept;
     [[nodiscard]] std::size_t hot_zone_count_locked() const noexcept;
     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats_locked() const noexcept;
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    [[nodiscard]] Cnr3CacheOwnershipDiagnosticStats ownership_diagnostic_stats_locked() const noexcept;
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+    [[nodiscard]] Cnr3CacheIntegrityDiagnosticStats cache_integrity_diagnostic_stats_locked() const noexcept;
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    [[nodiscard]] Cnr3CacheStoreDiagnosticStats cache_store_diagnostic_stats_locked() const noexcept;
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     [[nodiscard]] Cnr3CachePruneDiagnosticStats prune_diagnostic_stats_locked() const;
 #endif
@@ -1344,6 +1362,28 @@ private:
     void observe_hot_zone_prune_rejections_locked(
         std::size_t rejected_frame_count
     ) noexcept;
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    void observe_pin_acquired_locked() noexcept;
+    void observe_pin_released_locked() noexcept;
+    void observe_lookup_ref_acquired_locked() const noexcept;
+    void observe_lookup_ref_released_by_cache_core() const noexcept;
+    void observe_lookup_ref_transferred() const noexcept;
+    void observe_ownership_error() const noexcept;
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+    void observe_cache_invariant_check_started_locked() const noexcept;
+    [[nodiscard]] bool observe_cache_invariant_failure_locked(
+        const char* site
+    ) const noexcept;
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    void observe_store_outcome_locked(
+        const Cnr3CombinedStoreAndPruneSummary& summary
+    ) noexcept;
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     void observe_prune_execution_locked(
         std::uint64_t frame_byte_count,
@@ -1709,6 +1749,15 @@ private:
     std::vector<std::size_t> checkpoint_slot_positions_{};
     std::vector<Cnr3CacheHotZone> hot_zones_{};
     Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    mutable Cnr3CacheOwnershipDiagnosticStats ownership_diag_stats_{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+    mutable Cnr3CacheIntegrityDiagnosticStats cache_integrity_diag_stats_{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    mutable Cnr3CacheStoreDiagnosticStats cache_store_diag_stats_{};
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     mutable Cnr3CachePruneDiagnosticStats prune_diag_stats_{};
 #endif

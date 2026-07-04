@@ -1,3 +1,4 @@
+import sys
 from typing import Callable, Optional, Tuple, List
 from enum import Enum
 import random  # for the in-zone request shuffle
@@ -408,3 +409,9 @@ clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jum
 
 # Output the selected scenario clip (TEST_CLIP_LENGTH frames).
 clip_denoised.set_output()
+
+# Print info to stderr
+sys.stderr.write(f"\n--- vpy Clip Information ---\n")
+sys.stderr.write(f"--- vpy Original source frames: {SOURCE_FRAME_COUNT}\n")
+sys.stderr.write(f"--- vpy Final output frames:    {TEST_CLIP_LENGTH}\n")
+sys.stderr.write(f"--- vpy ------------------------\n\n")

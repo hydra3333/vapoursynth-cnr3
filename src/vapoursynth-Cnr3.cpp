@@ -305,6 +305,12 @@ void VS_CC cnr3_free_filter(
         data->dsum01_request_order
     );
 #endif
+#if defined(CNR3_DIAG_PRINT_DSUM03_RECOVERY_SEARCH)
+    cnr3_diag_dsum03_write_recovery_search_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum03_recovery_search
+    );
+#endif
 #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
     cnr3_cache_ownership_diagnostic_write_summary(
         data->config.instance_id,
@@ -333,6 +339,18 @@ void VS_CC cnr3_free_filter(
     cnr3_cache_hot_zone_diagnostic_write_summary(
         data->config.instance_id,
         data->output_cache.hot_zone_diagnostic_stats()
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    cnr3_diag_dsum12_write_recovery_plan_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum12_recovery_plan
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+    cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum13_recalculation
     );
 #endif
 

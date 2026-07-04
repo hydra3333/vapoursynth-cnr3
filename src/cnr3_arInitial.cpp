@@ -54,6 +54,9 @@ const VSFrame* cnr3_publish_live_cache_hit_return(
     request_data->requested_frame = n;
     request_data->cache_hit_pin_taken = true;
     request_data->source_requested = true;
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    cnr3_diag_dsum12_observe_branch_cache_hit(data.dsum12_recovery_plan);
+#endif
     *frame_data = request_data;
 
     /*
@@ -91,6 +94,9 @@ const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predece
     request_data->branch = Cnr3LiveGetFrameBranch::predecessor_present_compute;
     request_data->requested_frame = n;
     request_data->source_requested = true;
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    cnr3_diag_dsum12_observe_branch_pred_present(data.dsum12_recovery_plan);
+#endif
     *frame_data = request_data;
 
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
@@ -118,6 +124,9 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
     request_data->branch = Cnr3LiveGetFrameBranch::frame0_fresh_start;
     request_data->requested_frame = n;
     request_data->source_requested = true;
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    cnr3_diag_dsum12_observe_branch_frame0(data.dsum12_recovery_plan);
+#endif
     *frame_data = request_data;
 
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
@@ -258,6 +267,77 @@ void cnr3_trace_live_hot_zone_observation(
 #endif
 }
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+
+int cnr3_diag_live_recovery_search_depth(
+    int requested_frame,
+    const Cnr3CacheRecoverySearchPlan& plan
+) noexcept {
+    if (!cnr3_frame_number_is_valid(requested_frame)) {
+        return 0;
+    }
+
+    if (plan.anchor_found && cnr3_frame_number_is_valid(plan.anchor_frame_number)) {
+        return requested_frame - plan.anchor_frame_number;
+    }
+
+    if (cnr3_frame_number_is_valid(plan.search_lower_frame)) {
+        return requested_frame - plan.search_lower_frame;
+    }
+
+    return 0;
+}
+
+void cnr3_diag_live_observe_recovery_search_result(
+    Cnr3FilterData& data,
+    int requested_frame,
+    Cnr3Status plan_status,
+    Cnr3LiveRecoveryBranch accepted_branch,
+    const Cnr3CacheRecoverySearchPlan& plan
+) noexcept {
+    if (!cnr3_status_is_ok(plan_status)) {
+        cnr3_diag_dsum03_observe_search_result(
+            data.dsum03_recovery_search,
+            false,
+            Cnr3DiagDsum03RecoveryTermination::failure,
+            0
+        );
+        return;
+    }
+
+    if (accepted_branch == Cnr3LiveRecoveryBranch::exact_anchor) {
+        cnr3_diag_dsum03_observe_search_result(
+            data.dsum03_recovery_search,
+            true,
+            Cnr3DiagDsum03RecoveryTermination::present_output,
+            cnr3_diag_live_recovery_search_depth(requested_frame, plan)
+        );
+        return;
+    }
+
+    if (accepted_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+        cnr3_diag_dsum03_observe_search_result(
+            data.dsum03_recovery_search,
+            true,
+            plan.search_lower_frame == 0
+                ? Cnr3DiagDsum03RecoveryTermination::frame0
+                : Cnr3DiagDsum03RecoveryTermination::bound,
+            cnr3_diag_live_recovery_search_depth(requested_frame, plan)
+        );
+        return;
+    }
+
+    cnr3_diag_dsum03_observe_search_result(
+        data.dsum03_recovery_search,
+        false,
+        Cnr3DiagDsum03RecoveryTermination::failure,
+        cnr3_diag_live_recovery_search_depth(requested_frame, plan)
+    );
+}
+
+#endif
+
 Cnr3Status cnr3_fill_recovery_source_request_numbers(
     int n,
     Cnr3LiveGetFrameFrameData& request_data
@@ -355,6 +435,15 @@ const VSFrame* cnr3_start_live_recovery(
         );
 
     if (!cnr3_status_is_ok(plan_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+        cnr3_diag_live_observe_recovery_search_result(
+            data,
+            n,
+            plan_status,
+            Cnr3LiveRecoveryBranch::none,
+            recovery_plan
+        );
+#endif
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -380,6 +469,15 @@ const VSFrame* cnr3_start_live_recovery(
         recovery_floor_frame = recovery_plan.search_lower_frame;
     }
     else {
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+        cnr3_diag_live_observe_recovery_search_result(
+            data,
+            n,
+            plan_status,
+            Cnr3LiveRecoveryBranch::none,
+            recovery_plan
+        );
+#endif
         const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
         cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
 
@@ -448,6 +546,28 @@ const VSFrame* cnr3_start_live_recovery(
     }
 
     request_data->source_requested = true;
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+    cnr3_diag_live_observe_recovery_search_result(
+        data,
+        n,
+        plan_status,
+        request_data->recovery_branch,
+        request_data->recovery_plan
+    );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    request_data->dsum12_recovery_plan_stats = &data.dsum12_recovery_plan;
+    cnr3_diag_dsum12_observe_recovery_plan_published(
+        data.dsum12_recovery_plan,
+        request_data->recovery_branch == Cnr3LiveRecoveryBranch::exact_anchor,
+        request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start,
+        request_data->recovery_plan.anchor_found,
+        request_data->recovery_plan.hole_frame_numbers.size(),
+        request_data->recovery_branch == Cnr3LiveRecoveryBranch::exact_anchor
+            ? n - request_data->recovery_plan.anchor_frame_number
+            : 0
+    );
+#endif
     *frame_data = request_data;
 
     for (const int source_frame_number : request_data->source_request_frame_numbers) {

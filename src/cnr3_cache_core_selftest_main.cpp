@@ -156,6 +156,95 @@ namespace {
 #endif
 
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+
+    void cnr3_selftest_emit_dsum03_reference_summary() noexcept {
+        Cnr3DiagDsum03RecoverySearchStats stats{};
+
+        cnr3_diag_dsum03_observe_search_result(
+            stats,
+            true,
+            Cnr3DiagDsum03RecoveryTermination::present_output,
+            3
+        );
+        cnr3_diag_dsum03_observe_search_result(
+            stats,
+            true,
+            Cnr3DiagDsum03RecoveryTermination::bound,
+            50
+        );
+        cnr3_diag_dsum03_observe_search_result(
+            stats,
+            false,
+            Cnr3DiagDsum03RecoveryTermination::failure,
+            50
+        );
+        cnr3_diag_dsum03_observe_holes_filled(stats, 4U);
+
+#if defined(CNR3_DIAG_PRINT_DSUM03_RECOVERY_SEARCH)
+        cnr3_diag_dsum03_write_recovery_search_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+
+    void cnr3_selftest_emit_dsum12_reference_summary() noexcept {
+        Cnr3DiagDsum12RecoveryPlanStats stats{};
+
+        cnr3_diag_dsum12_observe_branch_frame0(stats);
+        cnr3_diag_dsum12_observe_branch_pred_present(stats);
+        cnr3_diag_dsum12_observe_branch_cache_hit(stats);
+        cnr3_diag_dsum12_observe_recovery_plan_published(
+            stats,
+            true,
+            false,
+            true,
+            2U,
+            3
+        );
+        cnr3_diag_dsum12_observe_hole_source_retrieved(stats);
+        cnr3_diag_dsum12_observe_hole_source_retrieved(stats);
+        cnr3_diag_dsum12_observe_holes_filled(stats, 2U);
+        cnr3_diag_dsum12_observe_recovery_plan_destroyed(stats);
+
+#if defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+        cnr3_diag_dsum12_write_recovery_plan_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+
+    void cnr3_selftest_emit_dsum13_reference_summary() noexcept {
+        Cnr3DiagDsum13RecalculationStats stats{};
+
+        cnr3_diag_dsum13_observe_compute_completion(stats, 10, 0);
+        cnr3_diag_dsum13_observe_compute_completion(stats, 11, 1);
+        cnr3_diag_dsum13_observe_compute_completion(stats, 11, 1);
+        cnr3_diag_dsum13_observe_compute_completion(stats, 12, 5);
+        cnr3_diag_dsum13_observe_compute_completion(stats, 12, 7);
+        cnr3_diag_dsum13_observe_compute_completion(stats, 12, 9);
+
+#if defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+        cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
 
     void cnr3_selftest_emit_dsum04_reference_summary() noexcept {
@@ -342,6 +431,9 @@ int main(int argc, char** argv) {
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     cnr3_selftest_emit_dsum01_reference_summary();
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+    cnr3_selftest_emit_dsum03_reference_summary();
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
     cnr3_selftest_emit_dsum04_reference_summary();
 #endif
@@ -356,6 +448,12 @@ int main(int argc, char** argv) {
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
     cnr3_selftest_emit_dsum11_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    cnr3_selftest_emit_dsum12_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+    cnr3_selftest_emit_dsum13_reference_summary();
 #endif
 
     cnr3_selftest_print_summary_to_stderr(result);

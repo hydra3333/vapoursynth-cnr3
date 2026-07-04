@@ -40,6 +40,15 @@ struct Cnr3FilterData {
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     Cnr3DiagDsum01RequestOrderStats dsum01_request_order{};
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+    Cnr3DiagDsum03RecoverySearchStats dsum03_recovery_search{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    Cnr3DiagDsum12RecoveryPlanStats dsum12_recovery_plan{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+    Cnr3DiagDsum13RecalculationStats dsum13_recalculation{};
+#endif
 };
 
 struct Cnr3LiveOutputStoreRequest {
@@ -81,6 +90,9 @@ struct Cnr3LiveGetFrameFrameData {
     Cnr3LiveRecoveryHoleOutcome recovery_floor_outcome = Cnr3LiveRecoveryHoleOutcome::none;
     std::vector<int> source_request_frame_numbers{};
     std::vector<Cnr3LiveRecoveryHoleOutcome> per_hole_outcomes{};
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    Cnr3DiagDsum12RecoveryPlanStats* dsum12_recovery_plan_stats = nullptr;
+#endif
     Cnr3CachePinList pin_list{};
 };
 

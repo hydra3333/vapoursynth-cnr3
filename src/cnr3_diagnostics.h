@@ -2,6 +2,7 @@
 
 #include "cnr3_common.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -175,6 +176,287 @@ cnr3_diag_dsum01_snapshot_request_order(
 void cnr3_diag_dsum01_write_request_order_summary_to_stderr(
     Cnr3InstanceId instance_id,
     const Cnr3DiagDsum01RequestOrderStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+
+inline constexpr std::size_t CNR3_DIAG_DSUM03_DEPTH_HISTOGRAM_BIN_COUNT = 6U;
+
+enum class Cnr3DiagDsum03RecoveryTermination : unsigned char {
+    present_output = 0,
+    frame0,
+    bound,
+    failure
+};
+
+/*
+    D-SUM-03 recovery-search diagnostic state.
+
+    This is per filter instance and observe-only. The mutex protects these
+    counters only; it is not a cache/CMS atomic-scope lock. Summary printing
+    snapshots the state and releases this mutex before formatting stderr.
+*/
+struct Cnr3DiagDsum03RecoverySearchStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t search_attempts = 0;
+    std::uint64_t search_successes = 0;
+    std::uint64_t search_failures = 0;
+    std::uint64_t depth_histogram[
+        CNR3_DIAG_DSUM03_DEPTH_HISTOGRAM_BIN_COUNT
+    ] = {};
+    std::uint64_t terminated_on_present_output = 0;
+    std::uint64_t terminated_on_frame0 = 0;
+    std::uint64_t terminated_on_bound = 0;
+    std::uint64_t terminated_on_failure = 0;
+    std::uint64_t holes_filled = 0;
+};
+
+struct Cnr3DiagDsum03RecoverySearchSnapshot {
+    std::uint64_t search_attempts = 0;
+    std::uint64_t search_successes = 0;
+    std::uint64_t search_failures = 0;
+    std::uint64_t depth_histogram[
+        CNR3_DIAG_DSUM03_DEPTH_HISTOGRAM_BIN_COUNT
+    ] = {};
+    std::uint64_t terminated_on_present_output = 0;
+    std::uint64_t terminated_on_frame0 = 0;
+    std::uint64_t terminated_on_bound = 0;
+    std::uint64_t terminated_on_failure = 0;
+    std::uint64_t holes_filled = 0;
+};
+
+void cnr3_diag_dsum03_observe_search_result(
+    Cnr3DiagDsum03RecoverySearchStats& stats,
+    bool search_succeeded,
+    Cnr3DiagDsum03RecoveryTermination termination,
+    int search_depth
+) noexcept;
+
+void cnr3_diag_dsum03_observe_holes_filled(
+    Cnr3DiagDsum03RecoverySearchStats& stats,
+    std::size_t hole_count
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum03RecoverySearchSnapshot
+cnr3_diag_dsum03_snapshot_recovery_search(
+    const Cnr3DiagDsum03RecoverySearchStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM03_RECOVERY_SEARCH)
+
+void cnr3_diag_dsum03_write_recovery_search_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum03RecoverySearchStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+
+/*
+    D-SUM-12 recovery-plan / recovery-rate diagnostic state.
+
+    This tracks only accepted/published recovery activations. Scratch
+    Cnr3CacheRecoverySearchPlan values are deliberately excluded: creation is
+    counted only when the recovery branch publishes frameData, and destruction
+    is counted at the single frameData discard boundary for branch==recovery.
+*/
+struct Cnr3DiagDsum12RecoveryPlanStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t recovery_plans_created = 0;
+    std::uint64_t recovery_plans_destroyed = 0;
+    std::uint64_t nearest_present_output_found = 0;
+    std::uint64_t holes_identified = 0;
+    std::uint64_t holes_filled = 0;
+    std::uint64_t source_frames_for_holes_requested = 0;
+    std::uint64_t source_frames_for_holes_retrieved = 0;
+    std::uint64_t fallback_failures = 0;
+    std::uint64_t bounded_start_honesty_failures = 0;
+
+    std::uint64_t frames_total = 0;
+    std::uint64_t frames_cache_hit = 0;
+    std::uint64_t frames_pred_present = 0;
+    std::uint64_t frames_frame0 = 0;
+    std::uint64_t frames_recovered_exact = 0;
+    std::uint64_t frames_recovered_floor = 0;
+    std::uint64_t recovery_span_sum = 0;
+    std::uint64_t recovery_span_samples = 0;
+    int recovery_span_max = 0;
+};
+
+struct Cnr3DiagDsum12RecoveryPlanSnapshot {
+    std::uint64_t recovery_plans_created = 0;
+    std::uint64_t recovery_plans_destroyed = 0;
+    std::uint64_t nearest_present_output_found = 0;
+    std::uint64_t holes_identified = 0;
+    std::uint64_t holes_filled = 0;
+    std::uint64_t source_frames_for_holes_requested = 0;
+    std::uint64_t source_frames_for_holes_retrieved = 0;
+    std::uint64_t fallback_failures = 0;
+    std::uint64_t bounded_start_honesty_failures = 0;
+
+    std::uint64_t frames_total = 0;
+    std::uint64_t frames_cache_hit = 0;
+    std::uint64_t frames_pred_present = 0;
+    std::uint64_t frames_frame0 = 0;
+    std::uint64_t frames_recovered_exact = 0;
+    std::uint64_t frames_recovered_floor = 0;
+    std::uint64_t recovery_span_sum = 0;
+    std::uint64_t recovery_span_samples = 0;
+    int recovery_span_max = 0;
+};
+
+void cnr3_diag_dsum12_observe_branch_cache_hit(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+void cnr3_diag_dsum12_observe_branch_frame0(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+void cnr3_diag_dsum12_observe_branch_pred_present(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+void cnr3_diag_dsum12_observe_recovery_plan_published(
+    Cnr3DiagDsum12RecoveryPlanStats& stats,
+    bool exact_anchor_recovery,
+    bool floor_fresh_start_recovery,
+    bool nearest_present_output_found,
+    std::size_t hole_count,
+    int exact_anchor_span
+) noexcept;
+
+void cnr3_diag_dsum12_observe_recovery_plan_destroyed(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+void cnr3_diag_dsum12_observe_holes_filled(
+    Cnr3DiagDsum12RecoveryPlanStats& stats,
+    std::size_t hole_count
+) noexcept;
+
+void cnr3_diag_dsum12_observe_hole_source_retrieved(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+void cnr3_diag_dsum12_observe_fallback_failure(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+void cnr3_diag_dsum12_observe_bounded_start_honesty_failure(
+    Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum12RecoveryPlanSnapshot
+cnr3_diag_dsum12_snapshot_recovery_plan(
+    const Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+
+void cnr3_diag_dsum12_write_recovery_plan_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum12RecoveryPlanStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+
+inline constexpr std::size_t CNR3_DIAG_DSUM13_RECALC_DEPTH_HISTOGRAM_BIN_COUNT = 7U;
+inline constexpr std::size_t CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY_MULTIPLIER = 16U;
+inline constexpr std::size_t CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY_FLOOR = 1024U;
+
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+inline constexpr std::size_t CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY = 1600U;
+#else
+inline constexpr std::size_t CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY = 16000U;
+#endif
+
+static_assert(
+    CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY >=
+    CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY_FLOOR
+);
+
+struct Cnr3DiagDsum13ComputeCountEntry {
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    std::uint16_t compute_count = 0;
+    std::uint8_t max_depth = 0;
+    bool occupied = false;
+};
+
+/*
+    D-SUM-13 recalculation diagnostic state.
+
+    The fixed map is deliberately per instance and compile-gated. With the
+    normal profile it is 16000 compact entries, about 128 KiB per instance;
+    with the tiny diagnostic profile it is 1600 entries. Saturation is honest:
+    once full, later unseen frames are dropped and the writer says the counts
+    are lower bounds.
+*/
+struct Cnr3DiagDsum13RecalculationStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t recalculated_frame_count = 0;
+    std::uint64_t recalculation_depth_histogram[
+        CNR3_DIAG_DSUM13_RECALC_DEPTH_HISTOGRAM_BIN_COUNT
+    ] = {};
+    int max_recalculation_depth = 0;
+    std::uint64_t frames_recalculated_once = 0;
+    std::uint64_t frames_recalculated_multiple_times = 0;
+
+    std::uint64_t compute_observations_total = 0;
+    bool compute_count_map_saturated = false;
+    std::uint64_t compute_count_observations_dropped = 0;
+
+    std::array<
+        Cnr3DiagDsum13ComputeCountEntry,
+        CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY
+    > compute_count_map{};
+};
+
+struct Cnr3DiagDsum13RecalculationSnapshot {
+    std::uint64_t recalculated_frame_count = 0;
+    std::uint64_t recalculation_depth_histogram[
+        CNR3_DIAG_DSUM13_RECALC_DEPTH_HISTOGRAM_BIN_COUNT
+    ] = {};
+    int max_recalculation_depth = 0;
+    std::uint64_t frames_recalculated_once = 0;
+    std::uint64_t frames_recalculated_multiple_times = 0;
+
+    std::uint64_t compute_observations_total = 0;
+    bool compute_count_map_saturated = false;
+    std::uint64_t compute_count_observations_dropped = 0;
+    std::size_t compute_count_map_capacity = CNR3_DIAG_DSUM13_COMPUTE_COUNT_MAP_CAPACITY;
+};
+
+void cnr3_diag_dsum13_observe_compute_completion(
+    Cnr3DiagDsum13RecalculationStats& stats,
+    int frame_number,
+    int recalculation_depth
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum13RecalculationSnapshot
+cnr3_diag_dsum13_snapshot_recalculation(
+    const Cnr3DiagDsum13RecalculationStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+
+void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum13RecalculationStats& stats
 ) noexcept;
 
 #endif

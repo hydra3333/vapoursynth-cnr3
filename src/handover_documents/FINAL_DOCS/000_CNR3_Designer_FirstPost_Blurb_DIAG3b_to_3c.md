@@ -28,7 +28,7 @@ Attachments (latest versions), in read order:
   4. Document_B_CNR3_Restart_Work_Plan_and_Current_State_v3_16.md (work plan / current state)
   5. CNR3_THIS_CHAT_DELTA_current_state_SLIMMED_v4_26.md          (detailed current-state delta)
   6. cnr3_cache_manager_design_v7_15.md                           (the CMS design authority)
-  7. CNR3_Diagnostics_Arc_Condensed_Plan_v1_6.txt                 (arc plan; the 3a/3b/3c sub-sequence)
+  7. CNR3_Diagnostics_Arc_Condensed_Plan_v1_7.txt                 (arc plan; the 3a/3b/3c sub-sequence)
   8. cnr3_diagnostics_specification_v1_5.md                       (D-SUM programme spec)
   9. CNR3_CMS_Future_Investigations_and_Open_Questions_v7_17.md   (FI ledger incl. FI-11/12/13)
  10. z_CNR3_Diagnostics_Arc_Findings_Decisions_Provenance_v1_4.md (decision record incl. D-1/D-2 lessons)
@@ -108,7 +108,7 @@ Then I will hand you the next artifact (matrix/S-series logs, or the spec-v2 tas
 
 ## Maintainer notes (NOT pasted)
 VERSION POINTERS (2026-07-04): role handover v1.16 | reviewer intro v3.9 | Doc A v3.13 | Doc B v3.16 |
-DELTA v4.26 | design v7.15 | condensed plan v1.6 | diag spec v1.5 | FI v7.17 | provenance v1.4 |
+DELTA v4.26 | design v7.15 | condensed plan v1.7 | diag spec v1.5 | FI v7.17 | provenance v1.4 |
 rationale doc v1 | 3b scope v1 + C1-C4 + D-2 review | plan-trace spec v1 + cross-check.
 src.zip must be the CURRENT committed baseline (post-3a now; post-3b once committed — refresh at commit).
 At the 3b commit: advance DELTA/Doc B/Provenance, refresh src.zip, and update item 12-14 status lines.

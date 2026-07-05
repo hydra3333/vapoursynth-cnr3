@@ -1,5 +1,5 @@
 ================================================================================
-CNR3 DIAGNOSTICS ARC -- CONDENSED PLAN v1.5 (designer proposal; v1.5 CURRENCY TOUCH -- the MARSHALLING-OPTIMISATION ARC (AVX2 through Lever E, ~-80%, DELTA v4.23) that ran after W.3 is now COMPLETE; the diagnostics arc is the ACTIVE next arc. Adds a within-batch CHURN-FIELD PRIORITY note (DIAG.2/.3) and a build_config.h reuse obligation (DIAG.1). The 4-phase DESIGN BODY DIAG.1-.4 is UNCHANGED. Supersedes v1.4.)
+CNR3 DIAGNOSTICS ARC -- CONDENSED PLAN v1.7 (designer proposal; v1.7 EXECUTION-STATE TOUCH -- advances DIAG.3b from NEXT to PATCH-APPROVED/PROOF-GATE-IN-PROGRESS (decisions C1-C4 + C-ALIAS; finding D-2 retro-sanctioned; four-way all-on PASS; six-config matrix + S-series real-run acceptance OWED before commit). No design change. Supersedes v1.6.)
 ================================================================================
 Goal: implement the 14-family D-SUM observe-only telemetry framework
 (cnr3_diagnostics_specification_v1_5.md + cnr3_memory_diagnostics_spec_v2.md) in
@@ -57,24 +57,88 @@ DIAG.2 -- CACHE-CORE FAMILY BATCH
     signals; a plain evict count does not distinguish inherent from tunable. Field-map
     choice only; no phase/sequencing change.
 
-DIAG.3 -- GETFRAME / RECOVERY / RETURN FAMILY BATCH
-  - The families that observe the live getFrame dispatch + recovery, as one batch:
-    D-SUM-03 (recovery-search), D-SUM-06 (source request/retrieve/release),
-    D-SUM-07 (temp-output/owned-output-ref lifecycle), D-SUM-09 (return-decision/
-    transfer), D-SUM-12 (recovery planning/hole-filling), D-SUM-13 (recalculation
-    histogram), D-SUM-14 (scene-change/reset/checkpoint-promotion).
-  - Proof: the existing recovery + P.11C .vpy harnesses already drive these paths;
-    assert the new D-SUM fields against them + macro-off check. (D-SUM-14 in
-    particular composes directly with the P.11C work just completed.)
-  - CHURN-FIELD PRIORITY (coordinator interest): D-SUM-12 (recovery planning) must
-    include the RECOVERY-RATE fields -- total frames, frames-present (cache-hit),
-    frames-recovered split EXACT vs FLOOR-RESET, recovery-as-%-of-frames, and mean/max
-    recovery span. This is THE counter that answers "is the ~50% fmUnordered-no--r-1
-    recovery inherent or tunable" (the FI-10 multi-thread sub-finding). Run the S-series
-    harness (S1 in-order ~0%, S3 shuffle, S7 jumps, S8 jumps+shuffle) under -r 1 with
-    this summary on to get the DETERMINISTIC recovery-rate baseline per arrival pattern;
-    the real-threads comparison (num_threads>1, higher -r) is the LATER step that
-    isolates concurrency-specific churn. Field-map choice only; no sequencing change.
+DIAG.3 -- GETFRAME / RECOVERY / RETURN FAMILY BATCH  (split into 3a / 3b / 3c)
+  The families that observe the live getFrame dispatch + recovery. Originally scoped as
+  one batch of seven; SPLIT during execution into three sub-batches by domain + risk
+  gradient (observe-only summaries first, the invasive bail-touching family last):
+
+  DIAG.3a -- RECOVERY / RECOMPUTE / CHURN TRIO  [COMMITTED 2026-07-04]
+    D-SUM-03 (recovery-search), D-SUM-12 (recovery planning/hole-filling + RECOVERY-RATE),
+    D-SUM-13 (recalculation). These three answer the CHURN question (below). Proven:
+    all-on four-way 56/56; R-PROCESS-19 five-config matrix; S-series -r 1 with
+    recovery_plan_balance==0 under churn (S8: 171 plans created+destroyed), saturation
+    false. Recovery-rate baseline captured: S1 0% / S3 27.5% / S7 0.375% / S8 21.4% --
+    the S8-vs-S7 contrast shows recovery churn is driven by ARRIVAL DISORDER within a
+    working set (shuffle), not by distant seeking (jumps).
+
+  DIAG.3b -- LIFECYCLE / RETURN / SCENE-RESET BATCH  [PATCH APPROVED; PROOF GATE IN PROGRESS]
+    STATE (2026-07-04): confirm report accepted with decisions C1-C4 + C-ALIAS (temp-output balance
+    counts only genuinely-produced frames -- the production addFrameRef cache copy is OUTSIDE the
+    balance; alias/null copyFrame is never a creation and the alias free is a D-SUM-06 SOURCE release;
+    additive return-decision hooks, no allows_return refactor; scene-driven resets only; near-grid =
+    distance<=1 both sides with the tiny-profile caveat). Patch APPROVED with finding D-2 (a pure
+    two-line condition hoist implemented without prior proposal -- retro-sanctioned; propose-first now
+    RATIFIED as R-PROCESS-25, with R-PROCESS-24 flush-per-line, Document A v3.13). Four-way all-on
+    PASS. NOTE the synthetic-vs-real reading discipline: selftest reference emitters deliberately print
+    non-zero failure-category fixtures; the REAL-RUN S-series must show those fields == 0.
+    OWED BEFORE COMMIT: six-config R-PROCESS-19 matrix + S-series real-run acceptance (the three
+    balances == 0 on S1/S3/S7/S8; violations/partial-acquire/promotion-mismatches == 0; D-SUM-07
+    balance must close even with duplicate_computed_but_discarded > 0 on S7/S8 -- the C1 test).
+    D-SUM-06 (source request/retrieve/release), D-SUM-07 (temp-output/owned-output-ref
+    lifecycle), D-SUM-09 (return-decision/transfer), D-SUM-14 (scene-change/reset/
+    checkpoint-promotion). Observe-only summaries + lifecycle balances (the D-SUM-06/07/09
+    balances are the getFrame-side analogue of the DIAG.2b cache-side balances). D-SUM-14
+    composes directly with the P.11C work.
+
+  DIAG.3c -- PLAN / RESULT PLAN-TRACE FAMILY  [AFTER 3b; SPEC-v2 FIRST]
+    The per-output-frame plan-vs-result trace: for each requested frame, an O-record (the
+    PLAN arInitial built -- strategy + target/predecessor/anchor/floor/holes/sources/
+    pinned) and an R-record (the RESULT arAllFramesReady produced -- computed/adopted/
+    unpinned/failed-where), emitted as clean copy-pasteable sorted blocks (by-datetime,
+    by-frame, by-phase), buffered in a preallocated windowed buffer, flush-always, dumped
+    on clean-end OR failure-bail. Spec drafted: CNR3_DIAG_PlanResult_Vocabulary_and_
+    Architecture_Spec_v1.md (five enum sets, *=checkpoint glyph, ~13 failure-reason
+    categories). Coder cross-check DONE (DIAG.3a cycle); its findings -> a SPEC v2 BEFORE
+    scoping 3c: (i) `sources` role must be branch-specific (cache_hit/frame0/pred_present
+    request n WITHOUT populating source_request_frame_numbers); (ii) a source-line site-to-
+    failure-category TABLE, not a message parser; (iii) add ALLOCATION_FAILED /
+    RECOVERY_PLAN_FAILED_OR_REFUSED / HOT_ZONE_OBSERVATION_FAILED to the categories (bail
+    sites are >50 once arInitial + top-level are counted, not ~50); (iv) compile-time
+    from/to for the first cut (DECIDED); (v) dump-on-bail is the INVASIVE part.
+    WHY LAST: 3c is the only DIAG family that touches the ~50+ setFilterError BAIL SITES
+    (control-flow-adjacent -> R-PROCESS-21), the most invasive diagnostic in the arc. It
+    lands after the getFrame path is fully instrumented + understood, with its own focused
+    review. LIKELY SUB-SPLIT when scoped: 3c.1 = buffered plan/result capture (observe-
+    only, NO bail touch); 3c.2 = the dump-on-bail mechanism (the invasive part, its own
+    R-PROCESS-21 sub-review). Decide the split at 3c scoping, not now.
+
+  ------ CHURN-FIELD PRIORITY (coordinator interest) -- SATISFIED in 3a ------
+  D-SUM-12 includes the RECOVERY-RATE fields (total frames, frames-present cache-hit,
+  frames-recovered EXACT vs FLOOR, recovery-as-%, mean/max span) -- THE counter answering
+  "is the ~50% fmUnordered-no--r-1 recovery inherent or tunable" (the FI-10/FI-11 multi-
+  thread sub-finding). The -r 1 S-series gave the DETERMINISTIC baseline (above); the
+  real-threads comparison (num_threads>1, higher -r) is the LATER step isolating
+  concurrency-specific churn.
+
+  ------ FI-11: RING <-> RECOVERY CORRELATION (do NOT lose -- coordinator intuits it WILL be needed) ------
+  D-SUM-10's recently-evicted RING (committed in DIAG.2a) records WHAT was evicted;
+  D-SUM-12 (DIAG.3a) records WHAT was rebuilt via recovery. The FI-11 question -- how much
+  of the recovery churn is evict-then-REBUILD of a region we just evicted -- is answered
+  by CORRELATING the two.
+    * OFFLINE correlation: AVAILABLE NOW, no code. Read the [DSUM10-RING-*] dumps against
+      D-SUM-12's recovered targets from the SAME run and ask "were the recovered frames in
+      the evicted region." USE PLANNED: during the FI-11 inherent-vs-tunable analysis,
+      naturally post-arc / before the real-footage campaign. First data point already
+      exists (S8 21.4% shuffle-driven vs S7 0.375% jump-driven).
+    * IN-RUN correlation COUNTER (a live field flagging "recovered target was in the
+      recently-evicted ring"): DEFERRED (FI-11). Needs a getFrame-side read of cache-
+      internal ring state -> breaks the getFrame/cache boundary + couples DSUM10+DSUM12
+      gates. UNSCHEDULED / CONDITIONAL: build ONLY if the offline correlation proves
+      insufficient OR the signal is wanted LIVE (e.g. watching churn during the real-
+      footage campaign). If it lands: a small DSUM10+DSUM12-gated follow-up, investigate-
+      first, observe-only, the cross-family read scoped carefully. COORDINATOR NOTE: this
+      is intuited to be needed eventually -- keep it visible, do not let it decay to a
+      forgotten FI line.
 
 DIAG.4 -- MEMORY DIAGNOSTICS + ARC CLOSE
   - D-SUM-02 (memory diagnostics) per cnr3_memory_diagnostics_spec_v2.md (snapshot

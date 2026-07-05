@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.3a-recovery-rate-recalc-v2";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.3b-add-lifecycle-return-scene-DSUM-telemetry";
 
 /*
     CMS07-P.11C.2 live scene-change default.

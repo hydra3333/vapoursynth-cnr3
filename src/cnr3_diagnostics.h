@@ -256,6 +256,238 @@ void cnr3_diag_dsum03_write_recovery_search_summary_to_stderr(
 
 #endif
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+
+/*
+    D-SUM-06 source-frame lifecycle diagnostic state.
+
+    This is per filter instance and observe-only. It tracks plugin-side source
+    request/retrieve/release balance only; output/cache/return references
+    belong to D-SUM-07/D-SUM-09 and cache-side ownership diagnostics.
+*/
+struct Cnr3DiagDsum06SourceFrameLifecycleStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t source_frames_requested_total = 0;
+    std::uint64_t source_frames_retrieved_total = 0;
+    std::uint64_t source_frames_released_total = 0;
+    std::uint64_t same_activation_request_violations = 0;
+    std::uint64_t source_frame_count_max = 0;
+    std::uint64_t partial_acquire_failures = 0;
+    std::uint64_t source_frame_release_balance_errors = 0;
+
+    std::uint64_t current_source_frame_count = 0;
+};
+
+struct Cnr3DiagDsum06SourceFrameLifecycleSnapshot {
+    std::uint64_t source_frames_requested_total = 0;
+    std::uint64_t source_frames_retrieved_total = 0;
+    std::uint64_t source_frames_released_total = 0;
+    long long source_frame_release_balance = 0;
+    std::uint64_t same_activation_request_violations = 0;
+    std::uint64_t source_frame_count_max = 0;
+    std::uint64_t partial_acquire_failures = 0;
+    std::uint64_t source_frame_release_balance_errors = 0;
+};
+
+void cnr3_diag_dsum06_observe_source_requests(
+    Cnr3DiagDsum06SourceFrameLifecycleStats& stats,
+    std::size_t request_count
+) noexcept;
+
+void cnr3_diag_dsum06_observe_source_retrieve(
+    Cnr3DiagDsum06SourceFrameLifecycleStats& stats,
+    bool same_activation_requested,
+    bool retrieved
+) noexcept;
+
+void cnr3_diag_dsum06_observe_source_release(
+    Cnr3DiagDsum06SourceFrameLifecycleStats& stats
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum06SourceFrameLifecycleSnapshot
+cnr3_diag_dsum06_snapshot_source_frame_lifecycle(
+    const Cnr3DiagDsum06SourceFrameLifecycleStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
+
+void cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum06SourceFrameLifecycleStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+
+/*
+    D-SUM-07 temporary-output lifecycle diagnostic state.
+
+    This tracks genuinely produced non-alias temporary output frames. Production
+    addFrameRef() cache copies are deliberately outside this balance; they are
+    separate references owned at the cache boundary.
+*/
+struct Cnr3DiagDsum07TempOutputLifecycleStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t temporary_outputs_created = 0;
+    std::uint64_t temporary_outputs_stored = 0;
+    std::uint64_t temporary_outputs_released = 0;
+    std::uint64_t temporary_outputs_transferred = 0;
+    std::uint64_t caller_still_owns_temporary_output = 0;
+    std::uint64_t duplicate_computed_but_discarded = 0;
+};
+
+struct Cnr3DiagDsum07TempOutputLifecycleSnapshot {
+    std::uint64_t temporary_outputs_created = 0;
+    std::uint64_t temporary_outputs_stored = 0;
+    std::uint64_t temporary_outputs_released = 0;
+    std::uint64_t temporary_outputs_transferred = 0;
+    long long temporary_output_balance = 0;
+    std::uint64_t caller_still_owns_temporary_output = 0;
+    std::uint64_t duplicate_computed_but_discarded = 0;
+};
+
+void cnr3_diag_dsum07_observe_temporary_output_created(
+    Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+void cnr3_diag_dsum07_observe_temporary_output_stored(
+    Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+void cnr3_diag_dsum07_observe_temporary_output_released(
+    Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+void cnr3_diag_dsum07_observe_temporary_output_transferred(
+    Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+void cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(
+    Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum07TempOutputLifecycleSnapshot
+cnr3_diag_dsum07_snapshot_temp_output_lifecycle(
+    const Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+
+void cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum07TempOutputLifecycleStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+
+enum class Cnr3DiagDsum09ReturnNoReason : unsigned char {
+    hard_store_failure = 0,
+    store_status_not_returnable,
+    duplicate_winner_lookup_failed,
+    null_return_frame,
+    discard_failed_after_return_ready
+};
+
+/*
+    D-SUM-09 return-transfer diagnostic state.
+
+    Lookup-reference accounting here is return-boundary accounting for live
+    getFrame Cnr3OwnedFrameRef objects. It is intentionally disjoint from
+    D-SUM-04 cache-core lookup-reference accounting.
+*/
+struct Cnr3DiagDsum09ReturnTransferStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t return_decisions_checked = 0;
+    std::uint64_t return_decision_yes = 0;
+    std::uint64_t return_decision_no = 0;
+    std::uint64_t return_no_hard_store_failure = 0;
+    std::uint64_t return_no_store_status_not_returnable = 0;
+    std::uint64_t return_no_duplicate_winner_lookup_failed = 0;
+    std::uint64_t return_no_null_return_frame = 0;
+    std::uint64_t return_no_discard_failed_after_return_ready = 0;
+    std::uint64_t return_transfer_attempted = 0;
+    std::uint64_t return_transfer_succeeded = 0;
+    std::uint64_t lookup_ref_transferred = 0;
+    std::uint64_t lookup_ref_released = 0;
+    std::uint64_t output_authoritative = 0;
+
+    std::uint64_t lookup_ref_acquired = 0;
+};
+
+struct Cnr3DiagDsum09ReturnTransferSnapshot {
+    std::uint64_t return_decisions_checked = 0;
+    std::uint64_t return_decision_yes = 0;
+    std::uint64_t return_decision_no = 0;
+    std::uint64_t return_no_hard_store_failure = 0;
+    std::uint64_t return_no_store_status_not_returnable = 0;
+    std::uint64_t return_no_duplicate_winner_lookup_failed = 0;
+    std::uint64_t return_no_null_return_frame = 0;
+    std::uint64_t return_no_discard_failed_after_return_ready = 0;
+    std::uint64_t return_transfer_attempted = 0;
+    std::uint64_t return_transfer_succeeded = 0;
+    std::uint64_t lookup_ref_transferred = 0;
+    std::uint64_t lookup_ref_released = 0;
+    long long lookup_ref_balance = 0;
+    std::uint64_t output_authoritative = 0;
+    std::uint64_t lookup_ref_acquired = 0;
+};
+
+void cnr3_diag_dsum09_observe_return_decision(
+    Cnr3DiagDsum09ReturnTransferStats& stats,
+    bool return_allowed,
+    Cnr3DiagDsum09ReturnNoReason no_reason
+) noexcept;
+
+void cnr3_diag_dsum09_observe_return_no_reason(
+    Cnr3DiagDsum09ReturnTransferStats& stats,
+    Cnr3DiagDsum09ReturnNoReason no_reason
+) noexcept;
+
+void cnr3_diag_dsum09_observe_return_transfer(
+    Cnr3DiagDsum09ReturnTransferStats& stats,
+    bool transfer_succeeded,
+    bool output_authoritative
+) noexcept;
+
+void cnr3_diag_dsum09_observe_lookup_ref_acquired(
+    Cnr3DiagDsum09ReturnTransferStats& stats
+) noexcept;
+
+void cnr3_diag_dsum09_observe_lookup_ref_transferred(
+    Cnr3DiagDsum09ReturnTransferStats& stats
+) noexcept;
+
+void cnr3_diag_dsum09_observe_lookup_ref_released(
+    Cnr3DiagDsum09ReturnTransferStats& stats
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum09ReturnTransferSnapshot
+cnr3_diag_dsum09_snapshot_return_transfer(
+    const Cnr3DiagDsum09ReturnTransferStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
+
+void cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum09ReturnTransferStats& stats
+) noexcept;
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
 
 /*
@@ -457,6 +689,71 @@ cnr3_diag_dsum13_snapshot_recalculation(
 void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
     Cnr3InstanceId instance_id,
     const Cnr3DiagDsum13RecalculationStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+
+/*
+    D-SUM-14 scene-reset diagnostic state.
+
+    This is a getFrame-side summary reader. It surfaces already-computed scene
+    process summaries and their checkpoint-store consequences without changing
+    pixel, cache, or return control flow.
+*/
+struct Cnr3DiagDsum14SceneResetStats {
+    mutable std::mutex mutex{};
+
+    std::uint64_t scene_change_detections = 0;
+    std::uint64_t source_copy_reset_frames = 0;
+    std::uint64_t scene_change_checkpoint_promotions = 0;
+    std::uint64_t scene_change_checkpoint_store_successes = 0;
+    std::uint64_t scene_change_checkpoint_store_duplicate_skips = 0;
+    std::uint64_t scene_change_checkpoint_store_errors = 0;
+    std::uint64_t scene_change_checkpoint_promotion_mismatches = 0;
+    std::uint64_t cut_near_grid_checkpoint_count = 0;
+    bool scene_chroma_enabled = false;
+    long long scene_threshold_used = 0;
+};
+
+struct Cnr3DiagDsum14SceneResetSnapshot {
+    std::uint64_t scene_change_detections = 0;
+    std::uint64_t source_copy_reset_frames = 0;
+    std::uint64_t scene_change_checkpoint_promotions = 0;
+    std::uint64_t scene_change_checkpoint_store_successes = 0;
+    std::uint64_t scene_change_checkpoint_store_duplicate_skips = 0;
+    std::uint64_t scene_change_checkpoint_store_errors = 0;
+    std::uint64_t scene_change_checkpoint_promotion_mismatches = 0;
+    std::uint64_t cut_near_grid_checkpoint_count = 0;
+    bool scene_chroma_enabled = false;
+    long long scene_threshold_used = 0;
+};
+
+void cnr3_diag_dsum14_observe_scene_outcome(
+    Cnr3DiagDsum14SceneResetStats& stats,
+    int frame_number,
+    bool scene_chroma_used,
+    long long scene_threshold,
+    bool scene_change_detected,
+    bool scene_change_reset_output_used,
+    bool checkpoint_store_requested,
+    Cnr3Status checkpoint_store_status,
+    bool checkpoint_promoted
+) noexcept;
+
+[[nodiscard]] Cnr3DiagDsum14SceneResetSnapshot
+cnr3_diag_dsum14_snapshot_scene_reset(
+    const Cnr3DiagDsum14SceneResetStats& stats
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
+
+void cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3DiagDsum14SceneResetStats& stats
 ) noexcept;
 
 #endif

@@ -533,6 +533,81 @@ void cnr3_set_filter_error(
     }
 }
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+
+bool cnr3_live_source_frame_was_requested_in_activation(
+    const Cnr3LiveGetFrameFrameData& request_data,
+    int frame_number
+) noexcept {
+    if (!request_data.source_requested) {
+        return false;
+    }
+
+    if (request_data.source_request_frame_numbers.empty()) {
+        return request_data.requested_frame == frame_number;
+    }
+
+    for (const int requested_source_frame : request_data.source_request_frame_numbers) {
+        if (requested_source_frame == frame_number) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void cnr3_diag_live_observe_source_retrieve(
+    Cnr3FilterData& data,
+    const Cnr3LiveGetFrameFrameData& request_data,
+    int frame_number,
+    const VSFrame* frame
+) noexcept {
+    cnr3_diag_dsum06_observe_source_retrieve(
+        data.dsum06_source_frame_lifecycle,
+        cnr3_live_source_frame_was_requested_in_activation(
+            request_data,
+            frame_number
+        ),
+        frame != nullptr
+    );
+}
+
+void cnr3_diag_live_observe_source_release(
+    Cnr3FilterData& data
+) noexcept {
+    cnr3_diag_dsum06_observe_source_release(
+        data.dsum06_source_frame_lifecycle
+    );
+}
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+
+void cnr3_diag_live_observe_scene_outcome(
+    Cnr3FilterData& data,
+    int frame_number,
+    const Cnr3CallerSuppliedFrameProcessSummary& process_summary,
+    bool checkpoint_store_requested,
+    Cnr3Status checkpoint_store_status,
+    bool checkpoint_promoted
+) noexcept {
+    cnr3_diag_dsum14_observe_scene_outcome(
+        data.dsum14_scene_reset,
+        frame_number,
+        process_summary.scene_chroma_used,
+        static_cast<long long>(process_summary.scene_change_threshold),
+        process_summary.scene_change_detected,
+        process_summary.scene_change_reset_output_used,
+        checkpoint_store_requested,
+        checkpoint_store_status,
+        checkpoint_promoted
+    );
+}
+
+#endif
+
 bool cnr3_live_store_status_allows_return(
     Cnr3Status status
 ) noexcept {
@@ -720,10 +795,22 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
 
     if (output_frame == nullptr || vsapi == nullptr) {
         if (output_frame != nullptr && vsapi != nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+            cnr3_diag_dsum07_observe_temporary_output_released(
+                data.dsum07_temp_output_lifecycle
+            );
+#endif
             vsapi->freeFrame(output_frame);
         }
 
         out_store_status = Cnr3Status::invalid_argument;
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_decision(
+            data.dsum09_return_transfer,
+            false,
+            Cnr3DiagDsum09ReturnNoReason::hard_store_failure
+        );
+#endif
         return out_store_status;
     }
 
@@ -740,25 +827,82 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
     out_store_status = store_summary.store_status;
 
     if (!cnr3_status_is_ok(hard_store_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_decision(
+            data.dsum09_return_transfer,
+            false,
+            Cnr3DiagDsum09ReturnNoReason::hard_store_failure
+        );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         return hard_store_status;
     }
 
     if (out_store_status == Cnr3Status::ok) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_decision(
+            data.dsum09_return_transfer,
+            true,
+            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
+        );
+        cnr3_diag_dsum09_observe_return_transfer(
+            data.dsum09_return_transfer,
+            true,
+            true
+        );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_transferred(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         out_return_frame = output_frame;
         return Cnr3Status::ok;
     }
 
     if (out_store_status != Cnr3Status::duplicate) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_decision(
+            data.dsum09_return_transfer,
+            false,
+            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
+        );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         return out_store_status;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_observe_return_decision(
+        data.dsum09_return_transfer,
+        true,
+        Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
+    );
+#endif
 
     /*
         A duplicate target store means another activation's first-in-best-
         dressed output[N] is authoritative. Discard this activation's computed
         loser and return a fresh reference to the cached winner instead.
     */
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_diag_dsum07_observe_temporary_output_released(
+        data.dsum07_temp_output_lifecycle
+    );
+    cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(
+        data.dsum07_temp_output_lifecycle
+    );
+#endif
     vsapi->freeFrame(output_frame);
     output_frame = nullptr;
 
@@ -770,11 +914,26 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
     );
 
     if (!cnr3_status_is_ok(lookup_status) || !cached_winner_ref.has_frame()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_no_reason(
+            data.dsum09_return_transfer,
+            Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
+        );
+#endif
         return !cnr3_status_is_ok(lookup_status)
             ? lookup_status
             : Cnr3Status::invariant_violation;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_observe_lookup_ref_acquired(data.dsum09_return_transfer);
+    cnr3_diag_dsum09_observe_return_transfer(
+        data.dsum09_return_transfer,
+        true,
+        true
+    );
+    cnr3_diag_dsum09_observe_lookup_ref_transferred(data.dsum09_return_transfer);
+#endif
     out_returned_cached_winner = true;
     out_return_frame = cached_winner_ref.transfer_to_caller();
     return Cnr3Status::ok;
@@ -806,6 +965,9 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
     }
 
     const VSFrame* source_trigger_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, source_trigger_frame);
+#endif
 
     if (source_trigger_frame == nullptr) {
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
@@ -823,6 +985,9 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
         source reference is nevertheless a normal owned reference and must be
         released exactly once outside any cache lock.
     */
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_release(data);
+#endif
     vsapi->freeFrame(source_trigger_frame);
     source_trigger_frame = nullptr;
 
@@ -834,6 +999,12 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
     );
 
     if (!cnr3_status_is_ok(lookup_status) || !returned_cache_ref.has_frame()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_no_reason(
+            data.dsum09_return_transfer,
+            Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -843,12 +1014,27 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
         return nullptr;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_observe_lookup_ref_acquired(data.dsum09_return_transfer);
+#endif
     const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
         frame_data,
         data.output_cache
     );
 
     if (!cnr3_status_is_ok(discard_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_observe_return_no_reason(
+            data.dsum09_return_transfer,
+            Cnr3DiagDsum09ReturnNoReason::discard_failed_after_return_ready
+        );
+        cnr3_diag_dsum09_observe_return_transfer(
+            data.dsum09_return_transfer,
+            false,
+            true
+        );
+        cnr3_diag_dsum09_observe_lookup_ref_released(data.dsum09_return_transfer);
+#endif
         returned_cache_ref.reset();
         cnr3_set_filter_error(
             frame_ctx,
@@ -860,6 +1046,14 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
 
     cnr3_trace_live_cache_hit_return(data, n);
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_observe_return_transfer(
+        data.dsum09_return_transfer,
+        true,
+        true
+    );
+    cnr3_diag_dsum09_observe_lookup_ref_transferred(data.dsum09_return_transfer);
+#endif
     return returned_cache_ref.transfer_to_caller();
 }
 
@@ -890,6 +1084,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     }
 
     const VSFrame* source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, source_frame);
+#endif
 
     if (source_frame == nullptr) {
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
@@ -910,6 +1107,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     if (!cnr3_status_is_ok(predecessor_status) ||
         !predecessor_compute_ref.has_frame()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(source_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -924,6 +1124,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     if (output_frame == nullptr) {
         predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(source_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -936,6 +1139,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     if (output_frame == source_frame) {
         predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -946,6 +1152,11 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         return nullptr;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_diag_dsum07_observe_temporary_output_created(
+        data.dsum07_temp_output_lifecycle
+    );
+#endif
     Cnr3CallerSuppliedFrameProcessSummary process_summary{};
     const Cnr3Status process_status =
         cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
@@ -962,10 +1173,18 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         );
 
     predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_release(data);
+#endif
     vsapi->freeFrame(source_frame);
     source_frame = nullptr;
 
     if (!cnr3_status_is_ok(process_status) || !process_summary.frame_processed) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -988,6 +1207,11 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
 
     if (!cnr3_status_is_ok(frame_byte_count_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1012,6 +1236,16 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
             store_status,
             returned_cached_winner
         );
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+    cnr3_diag_live_observe_scene_outcome(
+        data,
+        n,
+        process_summary,
+        store_as_checkpoint,
+        store_status,
+        store_as_checkpoint && cnr3_live_store_status_allows_return(store_status)
+    );
+#endif
     output_frame = nullptr;
 
     if (!cnr3_status_is_ok(return_status) || return_frame == nullptr) {
@@ -1182,6 +1416,14 @@ const VSFrame* cnr3_complete_live_recovery(
                 data.source,
                 frame_ctx
             );
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+            cnr3_diag_live_observe_source_retrieve(
+                data,
+                *request_data,
+                floor_frame,
+                floor_source_frame
+            );
+#endif
 
             if (floor_source_frame == nullptr) {
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
@@ -1199,6 +1441,9 @@ const VSFrame* cnr3_complete_live_recovery(
             VSFrame* floor_output_frame = vsapi->copyFrame(floor_source_frame, core);
 
             if (floor_output_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+                cnr3_diag_live_observe_source_release(data);
+#endif
                 vsapi->freeFrame(floor_source_frame);
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
@@ -1213,6 +1458,9 @@ const VSFrame* cnr3_complete_live_recovery(
             }
 
             if (floor_output_frame == floor_source_frame) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+                cnr3_diag_live_observe_source_release(data);
+#endif
                 vsapi->freeFrame(floor_output_frame);
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
@@ -1226,6 +1474,14 @@ const VSFrame* cnr3_complete_live_recovery(
                 return nullptr;
             }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+            cnr3_diag_dsum07_observe_temporary_output_created(
+                data.dsum07_temp_output_lifecycle
+            );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+            cnr3_diag_live_observe_source_release(data);
+#endif
             vsapi->freeFrame(floor_source_frame);
             floor_source_frame = nullptr;
 
@@ -1236,6 +1492,11 @@ const VSFrame* cnr3_complete_live_recovery(
             );
 
             if (!cnr3_status_is_ok(adopt_floor_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+                cnr3_diag_dsum07_observe_temporary_output_released(
+                    data.dsum07_temp_output_lifecycle
+                );
+#endif
                 vsapi->freeFrame(floor_output_frame);
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
@@ -1249,6 +1510,11 @@ const VSFrame* cnr3_complete_live_recovery(
                 return nullptr;
             }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+            cnr3_diag_dsum07_observe_temporary_output_stored(
+                data.dsum07_temp_output_lifecycle
+            );
+#endif
             floor_output_frame = nullptr;
 
             Cnr3CombinedStoreAndPruneSummary floor_store_summary{};
@@ -1380,6 +1646,14 @@ const VSFrame* cnr3_complete_live_recovery(
             data.source,
             frame_ctx
         );
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_retrieve(
+            data,
+            *request_data,
+            hole_frame,
+            source_frame
+        );
+#endif
 
         if (source_frame == nullptr) {
             predecessor_compute_ref.reset();
@@ -1400,6 +1674,9 @@ const VSFrame* cnr3_complete_live_recovery(
 
         if (hole_output_frame == nullptr) {
             predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+            cnr3_diag_live_observe_source_release(data);
+#endif
             vsapi->freeFrame(source_frame);
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
@@ -1412,6 +1689,9 @@ const VSFrame* cnr3_complete_live_recovery(
 
         if (hole_output_frame == source_frame) {
             predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+            cnr3_diag_live_observe_source_release(data);
+#endif
             vsapi->freeFrame(hole_output_frame);
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
@@ -1422,6 +1702,11 @@ const VSFrame* cnr3_complete_live_recovery(
             return nullptr;
         }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_created(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         Cnr3CallerSuppliedFrameProcessSummary hole_process_summary{};
         const Cnr3Status hole_process_status =
             cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
@@ -1438,11 +1723,19 @@ const VSFrame* cnr3_complete_live_recovery(
             );
 
         predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(source_frame);
         source_frame = nullptr;
 
         if (!cnr3_status_is_ok(hole_process_status) ||
             !hole_process_summary.frame_processed) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+            cnr3_diag_dsum07_observe_temporary_output_released(
+                data.dsum07_temp_output_lifecycle
+            );
+#endif
             vsapi->freeFrame(hole_output_frame);
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
@@ -1460,6 +1753,11 @@ const VSFrame* cnr3_complete_live_recovery(
         );
 
         if (!cnr3_status_is_ok(adopt_hole_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+            cnr3_diag_dsum07_observe_temporary_output_released(
+                data.dsum07_temp_output_lifecycle
+            );
+#endif
             vsapi->freeFrame(hole_output_frame);
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
@@ -1470,6 +1768,11 @@ const VSFrame* cnr3_complete_live_recovery(
             return nullptr;
         }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_stored(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         hole_output_frame = nullptr;
 
         const Cnr3LiveOutputStoreRequest hole_store_request{
@@ -1493,6 +1796,16 @@ const VSFrame* cnr3_complete_live_recovery(
             );
         cnr3_trace_live_combined_store_and_prune(data, hole_store_summary);
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+        cnr3_diag_live_observe_scene_outcome(
+            data,
+            hole_frame,
+            hole_process_summary,
+            hole_store_as_checkpoint,
+            hole_store_summary.store_status,
+            hole_store_summary.as2_summary.resulting_slot_is_checkpoint
+        );
+#endif
         if (!cnr3_status_is_ok(hole_store_status) ||
             !hole_store_summary.as2_summary.pin_recorded) {
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
@@ -1567,6 +1880,9 @@ const VSFrame* cnr3_complete_live_recovery(
     }
 
     const VSFrame* target_source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, target_source_frame);
+#endif
 
     if (target_source_frame == nullptr) {
         target_predecessor_compute_ref.reset();
@@ -1583,6 +1899,9 @@ const VSFrame* cnr3_complete_live_recovery(
 
     if (target_output_frame == nullptr) {
         target_predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(target_source_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1595,6 +1914,9 @@ const VSFrame* cnr3_complete_live_recovery(
 
     if (target_output_frame == target_source_frame) {
         target_predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(target_output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1605,6 +1927,11 @@ const VSFrame* cnr3_complete_live_recovery(
         return nullptr;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_diag_dsum07_observe_temporary_output_created(
+        data.dsum07_temp_output_lifecycle
+    );
+#endif
     Cnr3CallerSuppliedFrameProcessSummary target_process_summary{};
     const Cnr3Status target_process_status =
         cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
@@ -1621,11 +1948,19 @@ const VSFrame* cnr3_complete_live_recovery(
         );
 
     target_predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_release(data);
+#endif
     vsapi->freeFrame(target_source_frame);
     target_source_frame = nullptr;
 
     if (!cnr3_status_is_ok(target_process_status) ||
         !target_process_summary.frame_processed) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(target_output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1657,6 +1992,16 @@ const VSFrame* cnr3_complete_live_recovery(
             target_store_status,
             returned_cached_winner
         );
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+    cnr3_diag_live_observe_scene_outcome(
+        data,
+        n,
+        target_process_summary,
+        target_store_as_checkpoint,
+        target_store_status,
+        target_store_as_checkpoint && cnr3_live_store_status_allows_return(target_store_status)
+    );
+#endif
     target_output_frame = nullptr;
 
     if (!cnr3_status_is_ok(target_return_status) || return_frame == nullptr) {
@@ -1766,6 +2111,9 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
     }
 
     const VSFrame* source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, source_frame);
+#endif
 
     if (source_frame == nullptr) {
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
@@ -1780,6 +2128,9 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
     VSFrame* output_frame = vsapi->copyFrame(source_frame, core);
 
     if (output_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(source_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1791,6 +2142,9 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
     }
 
     if (output_frame == source_frame) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_live_observe_source_release(data);
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1801,12 +2155,25 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         return nullptr;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_diag_dsum07_observe_temporary_output_created(
+        data.dsum07_temp_output_lifecycle
+    );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_live_observe_source_release(data);
+#endif
     vsapi->freeFrame(source_frame);
     source_frame = nullptr;
 
     const VSFrame* cache_frame_ref = vsapi->addFrameRef(output_frame);
 
     if (cache_frame_ref == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1825,6 +2192,11 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
 
     if (!cnr3_status_is_ok(adopt_status)) {
         vsapi->freeFrame(cache_frame_ref);
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1840,6 +2212,11 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
 
     if (!cnr3_status_is_ok(frame_byte_count_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1864,8 +2241,24 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
 
     const Cnr3Status store_status = store_summary.store_status;
 
-    if (!cnr3_status_is_ok(store_hard_status) ||
-        !cnr3_live_store_status_allows_return(store_status)) {
+    const bool frame0_return_allowed =
+        cnr3_live_store_status_allows_return(store_status);
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_observe_return_decision(
+        data.dsum09_return_transfer,
+        cnr3_status_is_ok(store_hard_status) && frame0_return_allowed,
+        cnr3_status_is_ok(store_hard_status)
+            ? Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
+            : Cnr3DiagDsum09ReturnNoReason::hard_store_failure
+    );
+#endif
+
+    if (!cnr3_status_is_ok(store_hard_status) || !frame0_return_allowed) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_observe_temporary_output_released(
+            data.dsum07_temp_output_lifecycle
+        );
+#endif
         vsapi->freeFrame(output_frame);
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
@@ -1901,6 +2294,18 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         replaces the K.1E.3 temporary boundary, so source[N] cannot remain
         a fallback output.
     */
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_observe_return_transfer(
+        data.dsum09_return_transfer,
+        true,
+        true
+    );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_diag_dsum07_observe_temporary_output_transferred(
+        data.dsum07_temp_output_lifecycle
+    );
+#endif
     return output_frame;
 }
 const VSFrame* cnr3_arAllFramesReady(

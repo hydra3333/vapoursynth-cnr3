@@ -64,6 +64,12 @@ const VSFrame* cnr3_publish_live_cache_hit_return(
         source[N] for pixel computation, but requests one real source frame so
         the non-source filter returns only from arAllFramesReady.
     */
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_dsum06_observe_source_requests(
+        data.dsum06_source_frame_lifecycle,
+        1U
+    );
+#endif
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
 
     return nullptr;
@@ -99,6 +105,12 @@ const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predece
 #endif
     *frame_data = request_data;
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_dsum06_observe_source_requests(
+        data.dsum06_source_frame_lifecycle,
+        1U
+    );
+#endif
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
 
     return nullptr;
@@ -129,6 +141,12 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
 #endif
     *frame_data = request_data;
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_dsum06_observe_source_requests(
+        data.dsum06_source_frame_lifecycle,
+        1U
+    );
+#endif
     vsapi->requestFrameFilter(n, data.source, frame_ctx);
 
     return nullptr;
@@ -570,6 +588,12 @@ const VSFrame* cnr3_start_live_recovery(
 #endif
     *frame_data = request_data;
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_dsum06_observe_source_requests(
+        data.dsum06_source_frame_lifecycle,
+        request_data->source_request_frame_numbers.size()
+    );
+#endif
     for (const int source_frame_number : request_data->source_request_frame_numbers) {
         vsapi->requestFrameFilter(source_frame_number, data.source, frame_ctx);
     }

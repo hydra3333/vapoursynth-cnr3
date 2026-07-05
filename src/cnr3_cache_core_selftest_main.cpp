@@ -192,6 +192,150 @@ namespace {
 
 #endif
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+
+    void cnr3_selftest_emit_dsum06_reference_summary() noexcept {
+        Cnr3DiagDsum06SourceFrameLifecycleStats stats{};
+
+        cnr3_diag_dsum06_observe_source_requests(stats, 3U);
+        cnr3_diag_dsum06_observe_source_retrieve(stats, true, true);
+        cnr3_diag_dsum06_observe_source_retrieve(stats, true, true);
+        cnr3_diag_dsum06_observe_source_retrieve(stats, true, true);
+        cnr3_diag_dsum06_observe_source_release(stats);
+        cnr3_diag_dsum06_observe_source_release(stats);
+        cnr3_diag_dsum06_observe_source_release(stats);
+        cnr3_diag_dsum06_observe_source_retrieve(stats, false, false);
+
+#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
+        cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+
+    void cnr3_selftest_emit_dsum07_reference_summary() noexcept {
+        Cnr3DiagDsum07TempOutputLifecycleStats stats{};
+
+        cnr3_diag_dsum07_observe_temporary_output_created(stats);
+        cnr3_diag_dsum07_observe_temporary_output_created(stats);
+        cnr3_diag_dsum07_observe_temporary_output_created(stats);
+        cnr3_diag_dsum07_observe_temporary_output_stored(stats);
+        cnr3_diag_dsum07_observe_temporary_output_released(stats);
+        cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(stats);
+        cnr3_diag_dsum07_observe_temporary_output_transferred(stats);
+
+#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+
+    void cnr3_selftest_emit_dsum09_reference_summary() noexcept {
+        Cnr3DiagDsum09ReturnTransferStats stats{};
+
+        cnr3_diag_dsum09_observe_return_decision(
+            stats,
+            true,
+            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
+        );
+        cnr3_diag_dsum09_observe_return_transfer(stats, true, true);
+        cnr3_diag_dsum09_observe_return_decision(
+            stats,
+            false,
+            Cnr3DiagDsum09ReturnNoReason::hard_store_failure
+        );
+        cnr3_diag_dsum09_observe_return_decision(
+            stats,
+            false,
+            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
+        );
+        cnr3_diag_dsum09_observe_return_no_reason(
+            stats,
+            Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
+        );
+        cnr3_diag_dsum09_observe_return_no_reason(
+            stats,
+            Cnr3DiagDsum09ReturnNoReason::null_return_frame
+        );
+        cnr3_diag_dsum09_observe_return_no_reason(
+            stats,
+            Cnr3DiagDsum09ReturnNoReason::discard_failed_after_return_ready
+        );
+        cnr3_diag_dsum09_observe_lookup_ref_acquired(stats);
+        cnr3_diag_dsum09_observe_lookup_ref_transferred(stats);
+        cnr3_diag_dsum09_observe_lookup_ref_acquired(stats);
+        cnr3_diag_dsum09_observe_lookup_ref_released(stats);
+
+#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
+        cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+
+    void cnr3_selftest_emit_dsum14_reference_summary() noexcept {
+        Cnr3DiagDsum14SceneResetStats stats{};
+
+        cnr3_diag_dsum14_observe_scene_outcome(
+            stats,
+            9,
+            true,
+            15000,
+            true,
+            true,
+            true,
+            Cnr3Status::ok,
+            true
+        );
+        cnr3_diag_dsum14_observe_scene_outcome(
+            stats,
+            11,
+            true,
+            15000,
+            true,
+            false,
+            true,
+            Cnr3Status::duplicate,
+            true
+        );
+        cnr3_diag_dsum14_observe_scene_outcome(
+            stats,
+            15,
+            false,
+            15000,
+            true,
+            true,
+            true,
+            Cnr3Status::vapoursynth_error,
+            false
+        );
+
+#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
+        cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            stats
+        );
+#endif
+    }
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
 
     void cnr3_selftest_emit_dsum12_reference_summary() noexcept {
@@ -434,6 +578,12 @@ int main(int argc, char** argv) {
 #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
     cnr3_selftest_emit_dsum03_reference_summary();
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_selftest_emit_dsum06_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_selftest_emit_dsum07_reference_summary();
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
     cnr3_selftest_emit_dsum04_reference_summary();
 #endif
@@ -442,6 +592,9 @@ int main(int argc, char** argv) {
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
     cnr3_selftest_emit_dsum08_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    cnr3_selftest_emit_dsum09_reference_summary();
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     cnr3_selftest_emit_dsum10_reference_summary();
@@ -454,6 +607,9 @@ int main(int argc, char** argv) {
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
     cnr3_selftest_emit_dsum13_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+    cnr3_selftest_emit_dsum14_reference_summary();
 #endif
 
     cnr3_selftest_print_summary_to_stderr(result);

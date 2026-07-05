@@ -1,0 +1,1967 @@
+diff --git a/src/cnr3_arAllFramesReady.cpp b/src/cnr3_arAllFramesReady.cpp
+index 5c73d5c..52d1ee6 100644
+--- a/src/cnr3_arAllFramesReady.cpp
++++ b/src/cnr3_arAllFramesReady.cpp
+@@ -533,6 +533,81 @@ void cnr3_set_filter_error(
+     }
+ }
+ 
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++
++bool cnr3_live_source_frame_was_requested_in_activation(
++    const Cnr3LiveGetFrameFrameData& request_data,
++    int frame_number
++) noexcept {
++    if (!request_data.source_requested) {
++        return false;
++    }
++
++    if (request_data.source_request_frame_numbers.empty()) {
++        return request_data.requested_frame == frame_number;
++    }
++
++    for (const int requested_source_frame : request_data.source_request_frame_numbers) {
++        if (requested_source_frame == frame_number) {
++            return true;
++        }
++    }
++
++    return false;
++}
++
++void cnr3_diag_live_observe_source_retrieve(
++    Cnr3FilterData& data,
++    const Cnr3LiveGetFrameFrameData& request_data,
++    int frame_number,
++    const VSFrame* frame
++) noexcept {
++    cnr3_diag_dsum06_observe_source_retrieve(
++        data.dsum06_source_frame_lifecycle,
++        cnr3_live_source_frame_was_requested_in_activation(
++            request_data,
++            frame_number
++        ),
++        frame != nullptr
++    );
++}
++
++void cnr3_diag_live_observe_source_release(
++    Cnr3FilterData& data
++) noexcept {
++    cnr3_diag_dsum06_observe_source_release(
++        data.dsum06_source_frame_lifecycle
++    );
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++
++void cnr3_diag_live_observe_scene_outcome(
++    Cnr3FilterData& data,
++    int frame_number,
++    const Cnr3CallerSuppliedFrameProcessSummary& process_summary,
++    bool checkpoint_store_requested,
++    Cnr3Status checkpoint_store_status,
++    bool checkpoint_promoted
++) noexcept {
++    cnr3_diag_dsum14_observe_scene_outcome(
++        data.dsum14_scene_reset,
++        frame_number,
++        process_summary.scene_chroma_used,
++        static_cast<long long>(process_summary.scene_change_threshold),
++        process_summary.scene_change_detected,
++        process_summary.scene_change_reset_output_used,
++        checkpoint_store_requested,
++        checkpoint_store_status,
++        checkpoint_promoted
++    );
++}
++
++#endif
++
+ bool cnr3_live_store_status_allows_return(
+     Cnr3Status status
+ ) noexcept {
+@@ -720,10 +795,22 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
+ 
+     if (output_frame == nullptr || vsapi == nullptr) {
+         if (output_frame != nullptr && vsapi != nullptr) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++            cnr3_diag_dsum07_observe_temporary_output_released(
++                data.dsum07_temp_output_lifecycle
++            );
++#endif
+             vsapi->freeFrame(output_frame);
+         }
+ 
+         out_store_status = Cnr3Status::invalid_argument;
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_decision(
++            data.dsum09_return_transfer,
++            false,
++            Cnr3DiagDsum09ReturnNoReason::hard_store_failure
++        );
++#endif
+         return out_store_status;
+     }
+ 
+@@ -740,25 +827,82 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
+     out_store_status = store_summary.store_status;
+ 
+     if (!cnr3_status_is_ok(hard_store_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_decision(
++            data.dsum09_return_transfer,
++            false,
++            Cnr3DiagDsum09ReturnNoReason::hard_store_failure
++        );
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         return hard_store_status;
+     }
+ 
+     if (out_store_status == Cnr3Status::ok) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_decision(
++            data.dsum09_return_transfer,
++            true,
++            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
++        );
++        cnr3_diag_dsum09_observe_return_transfer(
++            data.dsum09_return_transfer,
++            true,
++            true
++        );
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_transferred(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         out_return_frame = output_frame;
+         return Cnr3Status::ok;
+     }
+ 
+     if (out_store_status != Cnr3Status::duplicate) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_decision(
++            data.dsum09_return_transfer,
++            false,
++            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
++        );
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         return out_store_status;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_observe_return_decision(
++        data.dsum09_return_transfer,
++        true,
++        Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
++    );
++#endif
++
+     /*
+         A duplicate target store means another activation's first-in-best-
+         dressed output[N] is authoritative. Discard this activation's computed
+         loser and return a fresh reference to the cached winner instead.
+     */
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_diag_dsum07_observe_temporary_output_released(
++        data.dsum07_temp_output_lifecycle
++    );
++    cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(
++        data.dsum07_temp_output_lifecycle
++    );
++#endif
+     vsapi->freeFrame(output_frame);
+     output_frame = nullptr;
+ 
+@@ -770,11 +914,26 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
+     );
+ 
+     if (!cnr3_status_is_ok(lookup_status) || !cached_winner_ref.has_frame()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_no_reason(
++            data.dsum09_return_transfer,
++            Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
++        );
++#endif
+         return !cnr3_status_is_ok(lookup_status)
+             ? lookup_status
+             : Cnr3Status::invariant_violation;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_observe_lookup_ref_acquired(data.dsum09_return_transfer);
++    cnr3_diag_dsum09_observe_return_transfer(
++        data.dsum09_return_transfer,
++        true,
++        true
++    );
++    cnr3_diag_dsum09_observe_lookup_ref_transferred(data.dsum09_return_transfer);
++#endif
+     out_returned_cached_winner = true;
+     out_return_frame = cached_winner_ref.transfer_to_caller();
+     return Cnr3Status::ok;
+@@ -806,6 +965,9 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
+     }
+ 
+     const VSFrame* source_trigger_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, source_trigger_frame);
++#endif
+ 
+     if (source_trigger_frame == nullptr) {
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+@@ -823,6 +985,9 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
+         source reference is nevertheless a normal owned reference and must be
+         released exactly once outside any cache lock.
+     */
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_release(data);
++#endif
+     vsapi->freeFrame(source_trigger_frame);
+     source_trigger_frame = nullptr;
+ 
+@@ -834,6 +999,12 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
+     );
+ 
+     if (!cnr3_status_is_ok(lookup_status) || !returned_cache_ref.has_frame()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_no_reason(
++            data.dsum09_return_transfer,
++            Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
++        );
++#endif
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+             frame_ctx,
+@@ -843,12 +1014,27 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
+         return nullptr;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_observe_lookup_ref_acquired(data.dsum09_return_transfer);
++#endif
+     const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
+         frame_data,
+         data.output_cache
+     );
+ 
+     if (!cnr3_status_is_ok(discard_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_observe_return_no_reason(
++            data.dsum09_return_transfer,
++            Cnr3DiagDsum09ReturnNoReason::discard_failed_after_return_ready
++        );
++        cnr3_diag_dsum09_observe_return_transfer(
++            data.dsum09_return_transfer,
++            false,
++            true
++        );
++        cnr3_diag_dsum09_observe_lookup_ref_released(data.dsum09_return_transfer);
++#endif
+         returned_cache_ref.reset();
+         cnr3_set_filter_error(
+             frame_ctx,
+@@ -860,6 +1046,14 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
+ 
+     cnr3_trace_live_cache_hit_return(data, n);
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_observe_return_transfer(
++        data.dsum09_return_transfer,
++        true,
++        true
++    );
++    cnr3_diag_dsum09_observe_lookup_ref_transferred(data.dsum09_return_transfer);
++#endif
+     return returned_cache_ref.transfer_to_caller();
+ }
+ 
+@@ -890,6 +1084,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+     }
+ 
+     const VSFrame* source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, source_frame);
++#endif
+ 
+     if (source_frame == nullptr) {
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+@@ -910,6 +1107,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+ 
+     if (!cnr3_status_is_ok(predecessor_status) ||
+         !predecessor_compute_ref.has_frame()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(source_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -924,6 +1124,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+ 
+     if (output_frame == nullptr) {
+         predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(source_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -936,6 +1139,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+ 
+     if (output_frame == source_frame) {
+         predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -946,6 +1152,11 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+         return nullptr;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_diag_dsum07_observe_temporary_output_created(
++        data.dsum07_temp_output_lifecycle
++    );
++#endif
+     Cnr3CallerSuppliedFrameProcessSummary process_summary{};
+     const Cnr3Status process_status =
+         cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
+@@ -962,10 +1173,18 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+         );
+ 
+     predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_release(data);
++#endif
+     vsapi->freeFrame(source_frame);
+     source_frame = nullptr;
+ 
+     if (!cnr3_status_is_ok(process_status) || !process_summary.frame_processed) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -988,6 +1207,11 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+         cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
+ 
+     if (!cnr3_status_is_ok(frame_byte_count_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1012,6 +1236,16 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+             store_status,
+             returned_cached_winner
+         );
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++    cnr3_diag_live_observe_scene_outcome(
++        data,
++        n,
++        process_summary,
++        store_as_checkpoint,
++        store_status,
++        store_as_checkpoint && cnr3_live_store_status_allows_return(store_status)
++    );
++#endif
+     output_frame = nullptr;
+ 
+     if (!cnr3_status_is_ok(return_status) || return_frame == nullptr) {
+@@ -1182,6 +1416,14 @@ const VSFrame* cnr3_complete_live_recovery(
+                 data.source,
+                 frame_ctx
+             );
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++            cnr3_diag_live_observe_source_retrieve(
++                data,
++                *request_data,
++                floor_frame,
++                floor_source_frame
++            );
++#endif
+ 
+             if (floor_source_frame == nullptr) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+@@ -1199,6 +1441,9 @@ const VSFrame* cnr3_complete_live_recovery(
+             VSFrame* floor_output_frame = vsapi->copyFrame(floor_source_frame, core);
+ 
+             if (floor_output_frame == nullptr) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++                cnr3_diag_live_observe_source_release(data);
++#endif
+                 vsapi->freeFrame(floor_source_frame);
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
+@@ -1213,6 +1458,9 @@ const VSFrame* cnr3_complete_live_recovery(
+             }
+ 
+             if (floor_output_frame == floor_source_frame) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++                cnr3_diag_live_observe_source_release(data);
++#endif
+                 vsapi->freeFrame(floor_output_frame);
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
+@@ -1226,6 +1474,14 @@ const VSFrame* cnr3_complete_live_recovery(
+                 return nullptr;
+             }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++            cnr3_diag_dsum07_observe_temporary_output_created(
++                data.dsum07_temp_output_lifecycle
++            );
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++            cnr3_diag_live_observe_source_release(data);
++#endif
+             vsapi->freeFrame(floor_source_frame);
+             floor_source_frame = nullptr;
+ 
+@@ -1236,6 +1492,11 @@ const VSFrame* cnr3_complete_live_recovery(
+             );
+ 
+             if (!cnr3_status_is_ok(adopt_floor_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++                cnr3_diag_dsum07_observe_temporary_output_released(
++                    data.dsum07_temp_output_lifecycle
++                );
++#endif
+                 vsapi->freeFrame(floor_output_frame);
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
+@@ -1249,6 +1510,11 @@ const VSFrame* cnr3_complete_live_recovery(
+                 return nullptr;
+             }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++            cnr3_diag_dsum07_observe_temporary_output_stored(
++                data.dsum07_temp_output_lifecycle
++            );
++#endif
+             floor_output_frame = nullptr;
+ 
+             Cnr3CombinedStoreAndPruneSummary floor_store_summary{};
+@@ -1380,6 +1646,14 @@ const VSFrame* cnr3_complete_live_recovery(
+             data.source,
+             frame_ctx
+         );
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_retrieve(
++            data,
++            *request_data,
++            hole_frame,
++            source_frame
++        );
++#endif
+ 
+         if (source_frame == nullptr) {
+             predecessor_compute_ref.reset();
+@@ -1400,6 +1674,9 @@ const VSFrame* cnr3_complete_live_recovery(
+ 
+         if (hole_output_frame == nullptr) {
+             predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++            cnr3_diag_live_observe_source_release(data);
++#endif
+             vsapi->freeFrame(source_frame);
+             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+             cnr3_set_filter_error(
+@@ -1412,6 +1689,9 @@ const VSFrame* cnr3_complete_live_recovery(
+ 
+         if (hole_output_frame == source_frame) {
+             predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++            cnr3_diag_live_observe_source_release(data);
++#endif
+             vsapi->freeFrame(hole_output_frame);
+             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+             cnr3_set_filter_error(
+@@ -1422,6 +1702,11 @@ const VSFrame* cnr3_complete_live_recovery(
+             return nullptr;
+         }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_created(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         Cnr3CallerSuppliedFrameProcessSummary hole_process_summary{};
+         const Cnr3Status hole_process_status =
+             cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
+@@ -1438,11 +1723,19 @@ const VSFrame* cnr3_complete_live_recovery(
+             );
+ 
+         predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(source_frame);
+         source_frame = nullptr;
+ 
+         if (!cnr3_status_is_ok(hole_process_status) ||
+             !hole_process_summary.frame_processed) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++            cnr3_diag_dsum07_observe_temporary_output_released(
++                data.dsum07_temp_output_lifecycle
++            );
++#endif
+             vsapi->freeFrame(hole_output_frame);
+             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+             cnr3_set_filter_error(
+@@ -1460,6 +1753,11 @@ const VSFrame* cnr3_complete_live_recovery(
+         );
+ 
+         if (!cnr3_status_is_ok(adopt_hole_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++            cnr3_diag_dsum07_observe_temporary_output_released(
++                data.dsum07_temp_output_lifecycle
++            );
++#endif
+             vsapi->freeFrame(hole_output_frame);
+             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+             cnr3_set_filter_error(
+@@ -1470,6 +1768,11 @@ const VSFrame* cnr3_complete_live_recovery(
+             return nullptr;
+         }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_stored(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         hole_output_frame = nullptr;
+ 
+         const Cnr3LiveOutputStoreRequest hole_store_request{
+@@ -1493,6 +1796,16 @@ const VSFrame* cnr3_complete_live_recovery(
+             );
+         cnr3_trace_live_combined_store_and_prune(data, hole_store_summary);
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++        cnr3_diag_live_observe_scene_outcome(
++            data,
++            hole_frame,
++            hole_process_summary,
++            hole_store_as_checkpoint,
++            hole_store_summary.store_status,
++            hole_store_summary.as2_summary.resulting_slot_is_checkpoint
++        );
++#endif
+         if (!cnr3_status_is_ok(hole_store_status) ||
+             !hole_store_summary.as2_summary.pin_recorded) {
+             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+@@ -1567,6 +1880,9 @@ const VSFrame* cnr3_complete_live_recovery(
+     }
+ 
+     const VSFrame* target_source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, target_source_frame);
++#endif
+ 
+     if (target_source_frame == nullptr) {
+         target_predecessor_compute_ref.reset();
+@@ -1583,6 +1899,9 @@ const VSFrame* cnr3_complete_live_recovery(
+ 
+     if (target_output_frame == nullptr) {
+         target_predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(target_source_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1595,6 +1914,9 @@ const VSFrame* cnr3_complete_live_recovery(
+ 
+     if (target_output_frame == target_source_frame) {
+         target_predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(target_output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1605,6 +1927,11 @@ const VSFrame* cnr3_complete_live_recovery(
+         return nullptr;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_diag_dsum07_observe_temporary_output_created(
++        data.dsum07_temp_output_lifecycle
++    );
++#endif
+     Cnr3CallerSuppliedFrameProcessSummary target_process_summary{};
+     const Cnr3Status target_process_status =
+         cnr3_process_caller_supplied_vapoursynth_frame_triplet_with_scene_change(
+@@ -1621,11 +1948,19 @@ const VSFrame* cnr3_complete_live_recovery(
+         );
+ 
+     target_predecessor_compute_ref.reset();
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_release(data);
++#endif
+     vsapi->freeFrame(target_source_frame);
+     target_source_frame = nullptr;
+ 
+     if (!cnr3_status_is_ok(target_process_status) ||
+         !target_process_summary.frame_processed) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(target_output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1657,6 +1992,16 @@ const VSFrame* cnr3_complete_live_recovery(
+             target_store_status,
+             returned_cached_winner
+         );
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++    cnr3_diag_live_observe_scene_outcome(
++        data,
++        n,
++        target_process_summary,
++        target_store_as_checkpoint,
++        target_store_status,
++        target_store_as_checkpoint && cnr3_live_store_status_allows_return(target_store_status)
++    );
++#endif
+     target_output_frame = nullptr;
+ 
+     if (!cnr3_status_is_ok(target_return_status) || return_frame == nullptr) {
+@@ -1766,6 +2111,9 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+     }
+ 
+     const VSFrame* source_frame = vsapi->getFrameFilter(n, data.source, frame_ctx);
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_retrieve(data, *request_data, n, source_frame);
++#endif
+ 
+     if (source_frame == nullptr) {
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+@@ -1780,6 +2128,9 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+     VSFrame* output_frame = vsapi->copyFrame(source_frame, core);
+ 
+     if (output_frame == nullptr) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(source_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1791,6 +2142,9 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+     }
+ 
+     if (output_frame == source_frame) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_live_observe_source_release(data);
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1801,12 +2155,25 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+         return nullptr;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_diag_dsum07_observe_temporary_output_created(
++        data.dsum07_temp_output_lifecycle
++    );
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_live_observe_source_release(data);
++#endif
+     vsapi->freeFrame(source_frame);
+     source_frame = nullptr;
+ 
+     const VSFrame* cache_frame_ref = vsapi->addFrameRef(output_frame);
+ 
+     if (cache_frame_ref == nullptr) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1825,6 +2192,11 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+ 
+     if (!cnr3_status_is_ok(adopt_status)) {
+         vsapi->freeFrame(cache_frame_ref);
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1840,6 +2212,11 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+         cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
+ 
+     if (!cnr3_status_is_ok(frame_byte_count_status)) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1864,8 +2241,24 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+ 
+     const Cnr3Status store_status = store_summary.store_status;
+ 
+-    if (!cnr3_status_is_ok(store_hard_status) ||
+-        !cnr3_live_store_status_allows_return(store_status)) {
++    const bool frame0_return_allowed =
++        cnr3_live_store_status_allows_return(store_status);
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_observe_return_decision(
++        data.dsum09_return_transfer,
++        cnr3_status_is_ok(store_hard_status) && frame0_return_allowed,
++        cnr3_status_is_ok(store_hard_status)
++            ? Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
++            : Cnr3DiagDsum09ReturnNoReason::hard_store_failure
++    );
++#endif
++
++    if (!cnr3_status_is_ok(store_hard_status) || !frame0_return_allowed) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_observe_temporary_output_released(
++            data.dsum07_temp_output_lifecycle
++        );
++#endif
+         vsapi->freeFrame(output_frame);
+         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
+         cnr3_set_filter_error(
+@@ -1901,6 +2294,18 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
+         replaces the K.1E.3 temporary boundary, so source[N] cannot remain
+         a fallback output.
+     */
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_observe_return_transfer(
++        data.dsum09_return_transfer,
++        true,
++        true
++    );
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_diag_dsum07_observe_temporary_output_transferred(
++        data.dsum07_temp_output_lifecycle
++    );
++#endif
+     return output_frame;
+ }
+ const VSFrame* cnr3_arAllFramesReady(
+diff --git a/src/cnr3_arInitial.cpp b/src/cnr3_arInitial.cpp
+index a449f1c..34ce2df 100644
+--- a/src/cnr3_arInitial.cpp
++++ b/src/cnr3_arInitial.cpp
+@@ -64,6 +64,12 @@ const VSFrame* cnr3_publish_live_cache_hit_return(
+         source[N] for pixel computation, but requests one real source frame so
+         the non-source filter returns only from arAllFramesReady.
+     */
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_dsum06_observe_source_requests(
++        data.dsum06_source_frame_lifecycle,
++        1U
++    );
++#endif
+     vsapi->requestFrameFilter(n, data.source, frame_ctx);
+ 
+     return nullptr;
+@@ -99,6 +105,12 @@ const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predece
+ #endif
+     *frame_data = request_data;
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_dsum06_observe_source_requests(
++        data.dsum06_source_frame_lifecycle,
++        1U
++    );
++#endif
+     vsapi->requestFrameFilter(n, data.source, frame_ctx);
+ 
+     return nullptr;
+@@ -129,6 +141,12 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
+ #endif
+     *frame_data = request_data;
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_dsum06_observe_source_requests(
++        data.dsum06_source_frame_lifecycle,
++        1U
++    );
++#endif
+     vsapi->requestFrameFilter(n, data.source, frame_ctx);
+ 
+     return nullptr;
+@@ -570,6 +588,12 @@ const VSFrame* cnr3_start_live_recovery(
+ #endif
+     *frame_data = request_data;
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_dsum06_observe_source_requests(
++        data.dsum06_source_frame_lifecycle,
++        request_data->source_request_frame_numbers.size()
++    );
++#endif
+     for (const int source_frame_number : request_data->source_request_frame_numbers) {
+         vsapi->requestFrameFilter(source_frame_number, data.source, frame_ctx);
+     }
+diff --git a/src/cnr3_cache_core_selftest_main.cpp b/src/cnr3_cache_core_selftest_main.cpp
+index b574ae2..e0163be 100644
+--- a/src/cnr3_cache_core_selftest_main.cpp
++++ b/src/cnr3_cache_core_selftest_main.cpp
+@@ -192,6 +192,150 @@ namespace {
+ 
+ #endif
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++
++    void cnr3_selftest_emit_dsum06_reference_summary() noexcept {
++        Cnr3DiagDsum06SourceFrameLifecycleStats stats{};
++
++        cnr3_diag_dsum06_observe_source_requests(stats, 3U);
++        cnr3_diag_dsum06_observe_source_retrieve(stats, true, true);
++        cnr3_diag_dsum06_observe_source_retrieve(stats, true, true);
++        cnr3_diag_dsum06_observe_source_retrieve(stats, true, true);
++        cnr3_diag_dsum06_observe_source_release(stats);
++        cnr3_diag_dsum06_observe_source_release(stats);
++        cnr3_diag_dsum06_observe_source_release(stats);
++        cnr3_diag_dsum06_observe_source_retrieve(stats, false, false);
++
++#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
++        cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++
++    void cnr3_selftest_emit_dsum07_reference_summary() noexcept {
++        Cnr3DiagDsum07TempOutputLifecycleStats stats{};
++
++        cnr3_diag_dsum07_observe_temporary_output_created(stats);
++        cnr3_diag_dsum07_observe_temporary_output_created(stats);
++        cnr3_diag_dsum07_observe_temporary_output_created(stats);
++        cnr3_diag_dsum07_observe_temporary_output_stored(stats);
++        cnr3_diag_dsum07_observe_temporary_output_released(stats);
++        cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(stats);
++        cnr3_diag_dsum07_observe_temporary_output_transferred(stats);
++
++#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++        cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++
++    void cnr3_selftest_emit_dsum09_reference_summary() noexcept {
++        Cnr3DiagDsum09ReturnTransferStats stats{};
++
++        cnr3_diag_dsum09_observe_return_decision(
++            stats,
++            true,
++            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
++        );
++        cnr3_diag_dsum09_observe_return_transfer(stats, true, true);
++        cnr3_diag_dsum09_observe_return_decision(
++            stats,
++            false,
++            Cnr3DiagDsum09ReturnNoReason::hard_store_failure
++        );
++        cnr3_diag_dsum09_observe_return_decision(
++            stats,
++            false,
++            Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable
++        );
++        cnr3_diag_dsum09_observe_return_no_reason(
++            stats,
++            Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
++        );
++        cnr3_diag_dsum09_observe_return_no_reason(
++            stats,
++            Cnr3DiagDsum09ReturnNoReason::null_return_frame
++        );
++        cnr3_diag_dsum09_observe_return_no_reason(
++            stats,
++            Cnr3DiagDsum09ReturnNoReason::discard_failed_after_return_ready
++        );
++        cnr3_diag_dsum09_observe_lookup_ref_acquired(stats);
++        cnr3_diag_dsum09_observe_lookup_ref_transferred(stats);
++        cnr3_diag_dsum09_observe_lookup_ref_acquired(stats);
++        cnr3_diag_dsum09_observe_lookup_ref_released(stats);
++
++#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
++        cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++
++    void cnr3_selftest_emit_dsum14_reference_summary() noexcept {
++        Cnr3DiagDsum14SceneResetStats stats{};
++
++        cnr3_diag_dsum14_observe_scene_outcome(
++            stats,
++            9,
++            true,
++            15000,
++            true,
++            true,
++            true,
++            Cnr3Status::ok,
++            true
++        );
++        cnr3_diag_dsum14_observe_scene_outcome(
++            stats,
++            11,
++            true,
++            15000,
++            true,
++            false,
++            true,
++            Cnr3Status::duplicate,
++            true
++        );
++        cnr3_diag_dsum14_observe_scene_outcome(
++            stats,
++            15,
++            false,
++            15000,
++            true,
++            true,
++            true,
++            Cnr3Status::vapoursynth_error,
++            false
++        );
++
++#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
++        cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
++            CNR3_SELFTEST_INSTANCE_ID,
++            stats
++        );
++#endif
++    }
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+ 
+     void cnr3_selftest_emit_dsum12_reference_summary() noexcept {
+@@ -434,6 +578,12 @@ int main(int argc, char** argv) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+     cnr3_selftest_emit_dsum03_reference_summary();
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_selftest_emit_dsum06_reference_summary();
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_selftest_emit_dsum07_reference_summary();
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+     cnr3_selftest_emit_dsum04_reference_summary();
+ #endif
+@@ -443,6 +593,9 @@ int main(int argc, char** argv) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+     cnr3_selftest_emit_dsum08_reference_summary();
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    cnr3_selftest_emit_dsum09_reference_summary();
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+     cnr3_selftest_emit_dsum10_reference_summary();
+ #endif
+@@ -455,6 +608,9 @@ int main(int argc, char** argv) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+     cnr3_selftest_emit_dsum13_reference_summary();
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++    cnr3_selftest_emit_dsum14_reference_summary();
++#endif
+ 
+     cnr3_selftest_print_summary_to_stderr(result);
+ 
+diff --git a/src/cnr3_diagnostics.cpp b/src/cnr3_diagnostics.cpp
+index e8b5b93..4ac3093 100644
+--- a/src/cnr3_diagnostics.cpp
++++ b/src/cnr3_diagnostics.cpp
+@@ -1,4 +1,6 @@
+ #include "cnr3_diagnostics.h"
++#include "cnr3_build_config.h"
++#include "cnr3_cache_core.h"
+ 
+ #include <cstdio>
+ #include <cstring>
+@@ -804,6 +806,382 @@ void cnr3_diag_dsum03_write_recovery_search_summary_to_stderr(
+ 
+ #endif
+ 
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++
++void cnr3_diag_dsum06_observe_source_requests(
++    Cnr3DiagDsum06SourceFrameLifecycleStats& stats,
++    std::size_t request_count
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_add(
++        stats.source_frames_requested_total,
++        static_cast<std::uint64_t>(request_count)
++    );
++}
++
++void cnr3_diag_dsum06_observe_source_retrieve(
++    Cnr3DiagDsum06SourceFrameLifecycleStats& stats,
++    bool same_activation_requested,
++    bool retrieved
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    if (!same_activation_requested) {
++        cnr3_diag_saturating_increment(stats.same_activation_request_violations);
++    }
++
++    if (!retrieved) {
++        cnr3_diag_saturating_increment(stats.partial_acquire_failures);
++        return;
++    }
++
++    cnr3_diag_saturating_increment(stats.source_frames_retrieved_total);
++    cnr3_diag_saturating_increment(stats.current_source_frame_count);
++
++    if (stats.current_source_frame_count > stats.source_frame_count_max) {
++        stats.source_frame_count_max = stats.current_source_frame_count;
++    }
++}
++
++void cnr3_diag_dsum06_observe_source_release(
++    Cnr3DiagDsum06SourceFrameLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    cnr3_diag_saturating_increment(stats.source_frames_released_total);
++
++    if (stats.current_source_frame_count == 0U) {
++        cnr3_diag_saturating_increment(stats.source_frame_release_balance_errors);
++        return;
++    }
++
++    cnr3_diag_saturating_decrement(stats.current_source_frame_count);
++}
++
++Cnr3DiagDsum06SourceFrameLifecycleSnapshot
++cnr3_diag_dsum06_snapshot_source_frame_lifecycle(
++    const Cnr3DiagDsum06SourceFrameLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    Cnr3DiagDsum06SourceFrameLifecycleSnapshot snapshot{};
++    snapshot.source_frames_requested_total = stats.source_frames_requested_total;
++    snapshot.source_frames_retrieved_total = stats.source_frames_retrieved_total;
++    snapshot.source_frames_released_total = stats.source_frames_released_total;
++    snapshot.source_frame_release_balance =
++        static_cast<long long>(stats.source_frames_retrieved_total) -
++        static_cast<long long>(stats.source_frames_released_total);
++    snapshot.same_activation_request_violations = stats.same_activation_request_violations;
++    snapshot.source_frame_count_max = stats.source_frame_count_max;
++    snapshot.partial_acquire_failures = stats.partial_acquire_failures;
++    snapshot.source_frame_release_balance_errors =
++        stats.source_frame_release_balance_errors;
++    return snapshot;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
++
++void cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum06SourceFrameLifecycleStats& stats
++) noexcept {
++    const Cnr3DiagDsum06SourceFrameLifecycleSnapshot snapshot =
++        cnr3_diag_dsum06_snapshot_source_frame_lifecycle(stats);
++
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-06",
++        "[DSUM-SUMMARY] D-SUM-06 source-frame lifecycle summary"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-06",
++        "[DSUM-SUMMARY] D-SUM-06 interpretation: retrieved/released must balance; retrieve without same-activation request is a lifecycle violation; partial acquire failure must be inspected even when cleanup is clean"
++    );
++
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "source_frames_requested_total", snapshot.source_frames_requested_total);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "source_frames_retrieved_total", snapshot.source_frames_retrieved_total);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "source_frames_released_total", snapshot.source_frames_released_total);
++    cnr3_diag_write_int64_row(instance_id, "D-SUM-06", "D-SUM-06", "source_frame_release_balance", snapshot.source_frame_release_balance);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "same_activation_request_violations", snapshot.same_activation_request_violations);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "source_frame_count_max", snapshot.source_frame_count_max);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "partial_acquire_failures", snapshot.partial_acquire_failures);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-06", "D-SUM-06", "source_frame_release_balance_errors", snapshot.source_frame_release_balance_errors);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++
++void cnr3_diag_dsum07_observe_temporary_output_created(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.temporary_outputs_created);
++}
++
++void cnr3_diag_dsum07_observe_temporary_output_stored(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.temporary_outputs_stored);
++}
++
++void cnr3_diag_dsum07_observe_temporary_output_released(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.temporary_outputs_released);
++}
++
++void cnr3_diag_dsum07_observe_temporary_output_transferred(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.temporary_outputs_transferred);
++    cnr3_diag_saturating_increment(stats.caller_still_owns_temporary_output);
++}
++
++void cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.duplicate_computed_but_discarded);
++}
++
++Cnr3DiagDsum07TempOutputLifecycleSnapshot
++cnr3_diag_dsum07_snapshot_temp_output_lifecycle(
++    const Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    Cnr3DiagDsum07TempOutputLifecycleSnapshot snapshot{};
++    snapshot.temporary_outputs_created = stats.temporary_outputs_created;
++    snapshot.temporary_outputs_stored = stats.temporary_outputs_stored;
++    snapshot.temporary_outputs_released = stats.temporary_outputs_released;
++    snapshot.temporary_outputs_transferred = stats.temporary_outputs_transferred;
++    snapshot.temporary_output_balance =
++        static_cast<long long>(stats.temporary_outputs_created) -
++        static_cast<long long>(
++            stats.temporary_outputs_stored +
++            stats.temporary_outputs_released +
++            stats.temporary_outputs_transferred
++        );
++    snapshot.caller_still_owns_temporary_output =
++        stats.caller_still_owns_temporary_output;
++    snapshot.duplicate_computed_but_discarded =
++        stats.duplicate_computed_but_discarded;
++    return snapshot;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++
++void cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept {
++    const Cnr3DiagDsum07TempOutputLifecycleSnapshot snapshot =
++        cnr3_diag_dsum07_snapshot_temp_output_lifecycle(stats);
++
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-07",
++        "[DSUM-SUMMARY] D-SUM-07 temporary-output lifecycle summary"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-07",
++        "[DSUM-SUMMARY] D-SUM-07 interpretation: duplicate computed/discarded may be normal under stress; clean ownership is the key question -- no leak, no double-free, no ambiguous owner, documented balance equation"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-07",
++        "[DSUM-SUMMARY] D-SUM-07 note: duplicate_computed_but_discarded overlaps temporary_outputs_released; the balance remains created == stored + released + transferred"
++    );
++
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-07", "D-SUM-07", "temporary_outputs_created", snapshot.temporary_outputs_created);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-07", "D-SUM-07", "temporary_outputs_stored", snapshot.temporary_outputs_stored);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-07", "D-SUM-07", "temporary_outputs_released", snapshot.temporary_outputs_released);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-07", "D-SUM-07", "temporary_outputs_transferred", snapshot.temporary_outputs_transferred);
++    cnr3_diag_write_int64_row(instance_id, "D-SUM-07", "D-SUM-07", "temporary_output_balance", snapshot.temporary_output_balance);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-07", "D-SUM-07", "caller_still_owns_temporary_output", snapshot.caller_still_owns_temporary_output);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-07", "D-SUM-07", "duplicate_computed_but_discarded", snapshot.duplicate_computed_but_discarded);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++
++namespace {
++
++    void cnr3_diag_dsum09_increment_no_reason_locked(
++        Cnr3DiagDsum09ReturnTransferStats& stats,
++        Cnr3DiagDsum09ReturnNoReason no_reason
++    ) noexcept {
++        switch (no_reason) {
++        case Cnr3DiagDsum09ReturnNoReason::hard_store_failure:
++            cnr3_diag_saturating_increment(stats.return_no_hard_store_failure);
++            break;
++        case Cnr3DiagDsum09ReturnNoReason::store_status_not_returnable:
++            cnr3_diag_saturating_increment(stats.return_no_store_status_not_returnable);
++            break;
++        case Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed:
++            cnr3_diag_saturating_increment(stats.return_no_duplicate_winner_lookup_failed);
++            break;
++        case Cnr3DiagDsum09ReturnNoReason::null_return_frame:
++            cnr3_diag_saturating_increment(stats.return_no_null_return_frame);
++            break;
++        case Cnr3DiagDsum09ReturnNoReason::discard_failed_after_return_ready:
++        default:
++            cnr3_diag_saturating_increment(stats.return_no_discard_failed_after_return_ready);
++            break;
++        }
++    }
++
++} // namespace
++
++void cnr3_diag_dsum09_observe_return_decision(
++    Cnr3DiagDsum09ReturnTransferStats& stats,
++    bool return_allowed,
++    Cnr3DiagDsum09ReturnNoReason no_reason
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    cnr3_diag_saturating_increment(stats.return_decisions_checked);
++
++    if (return_allowed) {
++        cnr3_diag_saturating_increment(stats.return_decision_yes);
++        return;
++    }
++
++    cnr3_diag_saturating_increment(stats.return_decision_no);
++    cnr3_diag_dsum09_increment_no_reason_locked(stats, no_reason);
++}
++
++void cnr3_diag_dsum09_observe_return_no_reason(
++    Cnr3DiagDsum09ReturnTransferStats& stats,
++    Cnr3DiagDsum09ReturnNoReason no_reason
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_dsum09_increment_no_reason_locked(stats, no_reason);
++}
++
++void cnr3_diag_dsum09_observe_return_transfer(
++    Cnr3DiagDsum09ReturnTransferStats& stats,
++    bool transfer_succeeded,
++    bool output_authoritative
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    cnr3_diag_saturating_increment(stats.return_transfer_attempted);
++    if (transfer_succeeded) {
++        cnr3_diag_saturating_increment(stats.return_transfer_succeeded);
++    }
++    if (output_authoritative) {
++        cnr3_diag_saturating_increment(stats.output_authoritative);
++    }
++}
++
++void cnr3_diag_dsum09_observe_lookup_ref_acquired(
++    Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.lookup_ref_acquired);
++}
++
++void cnr3_diag_dsum09_observe_lookup_ref_transferred(
++    Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.lookup_ref_transferred);
++}
++
++void cnr3_diag_dsum09_observe_lookup_ref_released(
++    Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++    cnr3_diag_saturating_increment(stats.lookup_ref_released);
++}
++
++Cnr3DiagDsum09ReturnTransferSnapshot cnr3_diag_dsum09_snapshot_return_transfer(
++    const Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    Cnr3DiagDsum09ReturnTransferSnapshot snapshot{};
++    snapshot.return_decisions_checked = stats.return_decisions_checked;
++    snapshot.return_decision_yes = stats.return_decision_yes;
++    snapshot.return_decision_no = stats.return_decision_no;
++    snapshot.return_no_hard_store_failure = stats.return_no_hard_store_failure;
++    snapshot.return_no_store_status_not_returnable = stats.return_no_store_status_not_returnable;
++    snapshot.return_no_duplicate_winner_lookup_failed = stats.return_no_duplicate_winner_lookup_failed;
++    snapshot.return_no_null_return_frame = stats.return_no_null_return_frame;
++    snapshot.return_no_discard_failed_after_return_ready = stats.return_no_discard_failed_after_return_ready;
++    snapshot.return_transfer_attempted = stats.return_transfer_attempted;
++    snapshot.return_transfer_succeeded = stats.return_transfer_succeeded;
++    snapshot.lookup_ref_transferred = stats.lookup_ref_transferred;
++    snapshot.lookup_ref_released = stats.lookup_ref_released;
++    snapshot.lookup_ref_acquired = stats.lookup_ref_acquired;
++    snapshot.lookup_ref_balance =
++        static_cast<long long>(stats.lookup_ref_acquired) -
++        static_cast<long long>(stats.lookup_ref_transferred + stats.lookup_ref_released);
++    snapshot.output_authoritative = stats.output_authoritative;
++    return snapshot;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
++
++void cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept {
++    const Cnr3DiagDsum09ReturnTransferSnapshot snapshot =
++        cnr3_diag_dsum09_snapshot_return_transfer(stats);
++
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-09",
++        "[DSUM-SUMMARY] D-SUM-09 return-transfer summary"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-09",
++        "[DSUM-SUMMARY] D-SUM-09 interpretation: decision and transfer are separate and both accounted; yes-without-transfer needs cleanup/error accounting; lookup_ref_balance must remain zero"
++    );
++
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_decisions_checked", snapshot.return_decisions_checked);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_decision_yes", snapshot.return_decision_yes);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_decision_no", snapshot.return_decision_no);
++    cnr3_diag_write_text_line(instance_id, "D-SUM-09", "[DSUM-SUMMARY] D-SUM-09 return_no_reason_split decision-stage");
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_no_hard_store_failure", snapshot.return_no_hard_store_failure);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_no_store_status_not_returnable", snapshot.return_no_store_status_not_returnable);
++    cnr3_diag_write_text_line(instance_id, "D-SUM-09", "[DSUM-SUMMARY] D-SUM-09 return_no_reason_split transfer-stage");
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_no_duplicate_winner_lookup_failed", snapshot.return_no_duplicate_winner_lookup_failed);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_no_null_return_frame", snapshot.return_no_null_return_frame);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_no_discard_failed_after_return_ready", snapshot.return_no_discard_failed_after_return_ready);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_transfer_attempted", snapshot.return_transfer_attempted);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "return_transfer_succeeded", snapshot.return_transfer_succeeded);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "lookup_ref_transferred", snapshot.lookup_ref_transferred);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "lookup_ref_released", snapshot.lookup_ref_released);
++    cnr3_diag_write_int64_row(instance_id, "D-SUM-09", "D-SUM-09", "lookup_ref_balance", snapshot.lookup_ref_balance);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-09", "D-SUM-09", "output_authoritative", snapshot.output_authoritative);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+ 
+ namespace {
+@@ -1196,3 +1574,156 @@ void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
+ }
+ 
+ #endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++
++namespace {
++
++    [[nodiscard]] bool cnr3_diag_dsum14_is_near_checkpoint_grid(
++        int frame_number
++    ) noexcept {
++        if (frame_number < 0 || CNR3_CACHE_CHECKPOINT_INTERVAL <= 0) {
++            return false;
++        }
++
++        const int remainder = frame_number % CNR3_CACHE_CHECKPOINT_INTERVAL;
++        const int distance_before = remainder;
++        const int distance_after = CNR3_CACHE_CHECKPOINT_INTERVAL - remainder;
++        const int nearest_distance =
++            distance_before < distance_after ? distance_before : distance_after;
++
++        return nearest_distance <= 1;
++    }
++
++} // namespace
++
++void cnr3_diag_dsum14_observe_scene_outcome(
++    Cnr3DiagDsum14SceneResetStats& stats,
++    int frame_number,
++    bool scene_chroma_used,
++    long long scene_threshold,
++    bool scene_change_detected,
++    bool scene_change_reset_output_used,
++    bool checkpoint_store_requested,
++    Cnr3Status checkpoint_store_status,
++    bool checkpoint_promoted
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    stats.scene_chroma_enabled = scene_chroma_used;
++    stats.scene_threshold_used = scene_threshold;
++
++    if (!scene_change_detected) {
++        return;
++    }
++
++    cnr3_diag_saturating_increment(stats.scene_change_detections);
++
++    if (scene_change_reset_output_used) {
++        cnr3_diag_saturating_increment(stats.source_copy_reset_frames);
++    }
++
++    if (checkpoint_store_requested) {
++        if (checkpoint_store_status == Cnr3Status::ok) {
++            cnr3_diag_saturating_increment(
++                stats.scene_change_checkpoint_store_successes
++            );
++        }
++        else if (checkpoint_store_status == Cnr3Status::duplicate) {
++            cnr3_diag_saturating_increment(
++                stats.scene_change_checkpoint_store_duplicate_skips
++            );
++        }
++        else {
++            cnr3_diag_saturating_increment(
++                stats.scene_change_checkpoint_store_errors
++            );
++        }
++    }
++
++    if (checkpoint_promoted) {
++        cnr3_diag_saturating_increment(stats.scene_change_checkpoint_promotions);
++    }
++
++    if (scene_change_reset_output_used && !checkpoint_promoted) {
++        cnr3_diag_saturating_increment(
++            stats.scene_change_checkpoint_promotion_mismatches
++        );
++    }
++
++    if (cnr3_diag_dsum14_is_near_checkpoint_grid(frame_number)) {
++        cnr3_diag_saturating_increment(stats.cut_near_grid_checkpoint_count);
++    }
++}
++
++Cnr3DiagDsum14SceneResetSnapshot cnr3_diag_dsum14_snapshot_scene_reset(
++    const Cnr3DiagDsum14SceneResetStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock(stats.mutex);
++
++    Cnr3DiagDsum14SceneResetSnapshot snapshot{};
++    snapshot.scene_change_detections = stats.scene_change_detections;
++    snapshot.source_copy_reset_frames = stats.source_copy_reset_frames;
++    snapshot.scene_change_checkpoint_promotions =
++        stats.scene_change_checkpoint_promotions;
++    snapshot.scene_change_checkpoint_store_successes =
++        stats.scene_change_checkpoint_store_successes;
++    snapshot.scene_change_checkpoint_store_duplicate_skips =
++        stats.scene_change_checkpoint_store_duplicate_skips;
++    snapshot.scene_change_checkpoint_store_errors =
++        stats.scene_change_checkpoint_store_errors;
++    snapshot.scene_change_checkpoint_promotion_mismatches =
++        stats.scene_change_checkpoint_promotion_mismatches;
++    snapshot.cut_near_grid_checkpoint_count = stats.cut_near_grid_checkpoint_count;
++    snapshot.scene_chroma_enabled = stats.scene_chroma_enabled;
++    snapshot.scene_threshold_used = stats.scene_threshold_used;
++    return snapshot;
++}
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
++
++void cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum14SceneResetStats& stats
++) noexcept {
++    const Cnr3DiagDsum14SceneResetSnapshot snapshot =
++        cnr3_diag_dsum14_snapshot_scene_reset(stats);
++
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-14",
++        "[DSUM-SUMMARY] D-SUM-14 scene-reset summary"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-14",
++        "[DSUM-SUMMARY] D-SUM-14 interpretation: scene-change detection is pixel-layer observation; source-copy reset is algorithmic; checkpoint promotion is cache/store consequence; eligible reset without required promotion is a serious issue"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-14",
++        "[DSUM-SUMMARY] D-SUM-14 note: source_copy_reset_frames counts scene-driven resets only; structural frame-0/floor fresh-starts remain in D-SUM-12"
++    );
++    cnr3_diag_write_text_line(
++        instance_id,
++        "D-SUM-14",
++        "[DSUM-SUMMARY] D-SUM-14 note: near-grid means distance to nearest checkpoint grid <= 1; tiny profile interval=3 makes every frame near-grid"
++    );
++
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_detections", snapshot.scene_change_detections);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "source_copy_reset_frames", snapshot.source_copy_reset_frames);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_checkpoint_promotions", snapshot.scene_change_checkpoint_promotions);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_checkpoint_store_successes", snapshot.scene_change_checkpoint_store_successes);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_checkpoint_store_duplicate_skips", snapshot.scene_change_checkpoint_store_duplicate_skips);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_checkpoint_store_errors", snapshot.scene_change_checkpoint_store_errors);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_checkpoint_promotion_mismatches", snapshot.scene_change_checkpoint_promotion_mismatches);
++    cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "cut_near_grid_checkpoint_count", snapshot.cut_near_grid_checkpoint_count);
++    cnr3_diag_write_bool_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_chroma_enabled", snapshot.scene_chroma_enabled);
++    cnr3_diag_write_int64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_threshold_used", snapshot.scene_threshold_used);
++
++    cnr3_diag_flush_stderr();
++}
++
++#endif
+diff --git a/src/cnr3_diagnostics.h b/src/cnr3_diagnostics.h
+index 53ced1a..42d5723 100644
+--- a/src/cnr3_diagnostics.h
++++ b/src/cnr3_diagnostics.h
+@@ -256,6 +256,238 @@ void cnr3_diag_dsum03_write_recovery_search_summary_to_stderr(
+ 
+ #endif
+ 
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++
++/*
++    D-SUM-06 source-frame lifecycle diagnostic state.
++
++    This is per filter instance and observe-only. It tracks plugin-side source
++    request/retrieve/release balance only; output/cache/return references
++    belong to D-SUM-07/D-SUM-09 and cache-side ownership diagnostics.
++*/
++struct Cnr3DiagDsum06SourceFrameLifecycleStats {
++    mutable std::mutex mutex{};
++
++    std::uint64_t source_frames_requested_total = 0;
++    std::uint64_t source_frames_retrieved_total = 0;
++    std::uint64_t source_frames_released_total = 0;
++    std::uint64_t same_activation_request_violations = 0;
++    std::uint64_t source_frame_count_max = 0;
++    std::uint64_t partial_acquire_failures = 0;
++    std::uint64_t source_frame_release_balance_errors = 0;
++
++    std::uint64_t current_source_frame_count = 0;
++};
++
++struct Cnr3DiagDsum06SourceFrameLifecycleSnapshot {
++    std::uint64_t source_frames_requested_total = 0;
++    std::uint64_t source_frames_retrieved_total = 0;
++    std::uint64_t source_frames_released_total = 0;
++    long long source_frame_release_balance = 0;
++    std::uint64_t same_activation_request_violations = 0;
++    std::uint64_t source_frame_count_max = 0;
++    std::uint64_t partial_acquire_failures = 0;
++    std::uint64_t source_frame_release_balance_errors = 0;
++};
++
++void cnr3_diag_dsum06_observe_source_requests(
++    Cnr3DiagDsum06SourceFrameLifecycleStats& stats,
++    std::size_t request_count
++) noexcept;
++
++void cnr3_diag_dsum06_observe_source_retrieve(
++    Cnr3DiagDsum06SourceFrameLifecycleStats& stats,
++    bool same_activation_requested,
++    bool retrieved
++) noexcept;
++
++void cnr3_diag_dsum06_observe_source_release(
++    Cnr3DiagDsum06SourceFrameLifecycleStats& stats
++) noexcept;
++
++[[nodiscard]] Cnr3DiagDsum06SourceFrameLifecycleSnapshot
++cnr3_diag_dsum06_snapshot_source_frame_lifecycle(
++    const Cnr3DiagDsum06SourceFrameLifecycleStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
++
++void cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum06SourceFrameLifecycleStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++
++/*
++    D-SUM-07 temporary-output lifecycle diagnostic state.
++
++    This tracks genuinely produced non-alias temporary output frames. Production
++    addFrameRef() cache copies are deliberately outside this balance; they are
++    separate references owned at the cache boundary.
++*/
++struct Cnr3DiagDsum07TempOutputLifecycleStats {
++    mutable std::mutex mutex{};
++
++    std::uint64_t temporary_outputs_created = 0;
++    std::uint64_t temporary_outputs_stored = 0;
++    std::uint64_t temporary_outputs_released = 0;
++    std::uint64_t temporary_outputs_transferred = 0;
++    std::uint64_t caller_still_owns_temporary_output = 0;
++    std::uint64_t duplicate_computed_but_discarded = 0;
++};
++
++struct Cnr3DiagDsum07TempOutputLifecycleSnapshot {
++    std::uint64_t temporary_outputs_created = 0;
++    std::uint64_t temporary_outputs_stored = 0;
++    std::uint64_t temporary_outputs_released = 0;
++    std::uint64_t temporary_outputs_transferred = 0;
++    long long temporary_output_balance = 0;
++    std::uint64_t caller_still_owns_temporary_output = 0;
++    std::uint64_t duplicate_computed_but_discarded = 0;
++};
++
++void cnr3_diag_dsum07_observe_temporary_output_created(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++void cnr3_diag_dsum07_observe_temporary_output_stored(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++void cnr3_diag_dsum07_observe_temporary_output_released(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++void cnr3_diag_dsum07_observe_temporary_output_transferred(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++void cnr3_diag_dsum07_observe_duplicate_computed_but_discarded(
++    Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++[[nodiscard]] Cnr3DiagDsum07TempOutputLifecycleSnapshot
++cnr3_diag_dsum07_snapshot_temp_output_lifecycle(
++    const Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++
++void cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum07TempOutputLifecycleStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++
++enum class Cnr3DiagDsum09ReturnNoReason : unsigned char {
++    hard_store_failure = 0,
++    store_status_not_returnable,
++    duplicate_winner_lookup_failed,
++    null_return_frame,
++    discard_failed_after_return_ready
++};
++
++/*
++    D-SUM-09 return-transfer diagnostic state.
++
++    Lookup-reference accounting here is return-boundary accounting for live
++    getFrame Cnr3OwnedFrameRef objects. It is intentionally disjoint from
++    D-SUM-04 cache-core lookup-reference accounting.
++*/
++struct Cnr3DiagDsum09ReturnTransferStats {
++    mutable std::mutex mutex{};
++
++    std::uint64_t return_decisions_checked = 0;
++    std::uint64_t return_decision_yes = 0;
++    std::uint64_t return_decision_no = 0;
++    std::uint64_t return_no_hard_store_failure = 0;
++    std::uint64_t return_no_store_status_not_returnable = 0;
++    std::uint64_t return_no_duplicate_winner_lookup_failed = 0;
++    std::uint64_t return_no_null_return_frame = 0;
++    std::uint64_t return_no_discard_failed_after_return_ready = 0;
++    std::uint64_t return_transfer_attempted = 0;
++    std::uint64_t return_transfer_succeeded = 0;
++    std::uint64_t lookup_ref_transferred = 0;
++    std::uint64_t lookup_ref_released = 0;
++    std::uint64_t output_authoritative = 0;
++
++    std::uint64_t lookup_ref_acquired = 0;
++};
++
++struct Cnr3DiagDsum09ReturnTransferSnapshot {
++    std::uint64_t return_decisions_checked = 0;
++    std::uint64_t return_decision_yes = 0;
++    std::uint64_t return_decision_no = 0;
++    std::uint64_t return_no_hard_store_failure = 0;
++    std::uint64_t return_no_store_status_not_returnable = 0;
++    std::uint64_t return_no_duplicate_winner_lookup_failed = 0;
++    std::uint64_t return_no_null_return_frame = 0;
++    std::uint64_t return_no_discard_failed_after_return_ready = 0;
++    std::uint64_t return_transfer_attempted = 0;
++    std::uint64_t return_transfer_succeeded = 0;
++    std::uint64_t lookup_ref_transferred = 0;
++    std::uint64_t lookup_ref_released = 0;
++    long long lookup_ref_balance = 0;
++    std::uint64_t output_authoritative = 0;
++    std::uint64_t lookup_ref_acquired = 0;
++};
++
++void cnr3_diag_dsum09_observe_return_decision(
++    Cnr3DiagDsum09ReturnTransferStats& stats,
++    bool return_allowed,
++    Cnr3DiagDsum09ReturnNoReason no_reason
++) noexcept;
++
++void cnr3_diag_dsum09_observe_return_no_reason(
++    Cnr3DiagDsum09ReturnTransferStats& stats,
++    Cnr3DiagDsum09ReturnNoReason no_reason
++) noexcept;
++
++void cnr3_diag_dsum09_observe_return_transfer(
++    Cnr3DiagDsum09ReturnTransferStats& stats,
++    bool transfer_succeeded,
++    bool output_authoritative
++) noexcept;
++
++void cnr3_diag_dsum09_observe_lookup_ref_acquired(
++    Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept;
++
++void cnr3_diag_dsum09_observe_lookup_ref_transferred(
++    Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept;
++
++void cnr3_diag_dsum09_observe_lookup_ref_released(
++    Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept;
++
++[[nodiscard]] Cnr3DiagDsum09ReturnTransferSnapshot
++cnr3_diag_dsum09_snapshot_return_transfer(
++    const Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
++
++void cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum09ReturnTransferStats& stats
++) noexcept;
++
++#endif
++
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+ 
+ /*
+@@ -460,3 +692,68 @@ void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
+ ) noexcept;
+ 
+ #endif
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++
++/*
++    D-SUM-14 scene-reset diagnostic state.
++
++    This is a getFrame-side summary reader. It surfaces already-computed scene
++    process summaries and their checkpoint-store consequences without changing
++    pixel, cache, or return control flow.
++*/
++struct Cnr3DiagDsum14SceneResetStats {
++    mutable std::mutex mutex{};
++
++    std::uint64_t scene_change_detections = 0;
++    std::uint64_t source_copy_reset_frames = 0;
++    std::uint64_t scene_change_checkpoint_promotions = 0;
++    std::uint64_t scene_change_checkpoint_store_successes = 0;
++    std::uint64_t scene_change_checkpoint_store_duplicate_skips = 0;
++    std::uint64_t scene_change_checkpoint_store_errors = 0;
++    std::uint64_t scene_change_checkpoint_promotion_mismatches = 0;
++    std::uint64_t cut_near_grid_checkpoint_count = 0;
++    bool scene_chroma_enabled = false;
++    long long scene_threshold_used = 0;
++};
++
++struct Cnr3DiagDsum14SceneResetSnapshot {
++    std::uint64_t scene_change_detections = 0;
++    std::uint64_t source_copy_reset_frames = 0;
++    std::uint64_t scene_change_checkpoint_promotions = 0;
++    std::uint64_t scene_change_checkpoint_store_successes = 0;
++    std::uint64_t scene_change_checkpoint_store_duplicate_skips = 0;
++    std::uint64_t scene_change_checkpoint_store_errors = 0;
++    std::uint64_t scene_change_checkpoint_promotion_mismatches = 0;
++    std::uint64_t cut_near_grid_checkpoint_count = 0;
++    bool scene_chroma_enabled = false;
++    long long scene_threshold_used = 0;
++};
++
++void cnr3_diag_dsum14_observe_scene_outcome(
++    Cnr3DiagDsum14SceneResetStats& stats,
++    int frame_number,
++    bool scene_chroma_used,
++    long long scene_threshold,
++    bool scene_change_detected,
++    bool scene_change_reset_output_used,
++    bool checkpoint_store_requested,
++    Cnr3Status checkpoint_store_status,
++    bool checkpoint_promoted
++) noexcept;
++
++[[nodiscard]] Cnr3DiagDsum14SceneResetSnapshot
++cnr3_diag_dsum14_snapshot_scene_reset(
++    const Cnr3DiagDsum14SceneResetStats& stats
++) noexcept;
++
++#endif
++
++#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
++
++void cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3DiagDsum14SceneResetStats& stats
++) noexcept;
++
++#endif
+diff --git a/src/cnr3_plugin_internal.h b/src/cnr3_plugin_internal.h
+index 276afc5..5017761 100644
+--- a/src/cnr3_plugin_internal.h
++++ b/src/cnr3_plugin_internal.h
+@@ -43,12 +43,24 @@ struct Cnr3FilterData {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+     Cnr3DiagDsum03RecoverySearchStats dsum03_recovery_search{};
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    Cnr3DiagDsum06SourceFrameLifecycleStats dsum06_source_frame_lifecycle{};
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    Cnr3DiagDsum07TempOutputLifecycleStats dsum07_temp_output_lifecycle{};
++#endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
++    Cnr3DiagDsum09ReturnTransferStats dsum09_return_transfer{};
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+     Cnr3DiagDsum12RecoveryPlanStats dsum12_recovery_plan{};
+ #endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+     Cnr3DiagDsum13RecalculationStats dsum13_recalculation{};
+ #endif
++#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
++    Cnr3DiagDsum14SceneResetStats dsum14_scene_reset{};
++#endif
+ };
+ 
+ struct Cnr3LiveOutputStoreRequest {
+diff --git a/src/vapoursynth-Cnr3.cpp b/src/vapoursynth-Cnr3.cpp
+index c216235..5d9cd68 100644
+--- a/src/vapoursynth-Cnr3.cpp
++++ b/src/vapoursynth-Cnr3.cpp
+@@ -311,6 +311,18 @@ void VS_CC cnr3_free_filter(
+         data->dsum03_recovery_search
+     );
+ #endif
++#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
++    cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
++        data->config.instance_id,
++        data->dsum06_source_frame_lifecycle
++    );
++#endif
++#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
++    cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
++        data->config.instance_id,
++        data->dsum07_temp_output_lifecycle
++    );
++#endif
+ #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+     cnr3_cache_ownership_diagnostic_write_summary(
+         data->config.instance_id,
+@@ -329,6 +341,12 @@ void VS_CC cnr3_free_filter(
+         data->output_cache.cache_store_diagnostic_stats()
+     );
+ #endif
++#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
++    cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
++        data->config.instance_id,
++        data->dsum09_return_transfer
++    );
++#endif
+ #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+     cnr3_cache_prune_diagnostic_write_summary(
+         data->config.instance_id,
+@@ -353,6 +371,12 @@ void VS_CC cnr3_free_filter(
+         data->dsum13_recalculation
+     );
+ #endif
++#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
++    cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
++        data->config.instance_id,
++        data->dsum14_scene_reset
++    );
++#endif
+ 
+     if (data->source != nullptr && vsapi != nullptr) {
+         vsapi->freeNode(data->source);

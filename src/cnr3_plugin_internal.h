@@ -43,11 +43,23 @@ struct Cnr3FilterData {
 #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
     Cnr3DiagDsum03RecoverySearchStats dsum03_recovery_search{};
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    Cnr3DiagDsum06SourceFrameLifecycleStats dsum06_source_frame_lifecycle{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    Cnr3DiagDsum07TempOutputLifecycleStats dsum07_temp_output_lifecycle{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    Cnr3DiagDsum09ReturnTransferStats dsum09_return_transfer{};
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
     Cnr3DiagDsum12RecoveryPlanStats dsum12_recovery_plan{};
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
     Cnr3DiagDsum13RecalculationStats dsum13_recalculation{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
+    Cnr3DiagDsum14SceneResetStats dsum14_scene_reset{};
 #endif
 };
 

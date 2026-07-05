@@ -311,6 +311,18 @@ void VS_CC cnr3_free_filter(
         data->dsum03_recovery_search
     );
 #endif
+#if defined(CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE)
+    cnr3_diag_dsum06_write_source_frame_lifecycle_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum06_source_frame_lifecycle
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    cnr3_diag_dsum07_write_temp_output_lifecycle_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum07_temp_output_lifecycle
+    );
+#endif
 #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
     cnr3_cache_ownership_diagnostic_write_summary(
         data->config.instance_id,
@@ -327,6 +339,12 @@ void VS_CC cnr3_free_filter(
     cnr3_cache_store_diagnostic_write_summary(
         data->config.instance_id,
         data->output_cache.cache_store_diagnostic_stats()
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
+    cnr3_diag_dsum09_write_return_transfer_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum09_return_transfer
     );
 #endif
 #if defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
@@ -351,6 +369,12 @@ void VS_CC cnr3_free_filter(
     cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
         data->config.instance_id,
         data->dsum13_recalculation
+    );
+#endif
+#if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET)
+    cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
+        data->config.instance_id,
+        data->dsum14_scene_reset
     );
 #endif
 

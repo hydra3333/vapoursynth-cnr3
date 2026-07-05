@@ -39,7 +39,15 @@ Attachments (latest versions), in read order:
  12. CNR3_Patch_Scope_DIAG3b_lifecycle_return_scene_v1.md         (the live 3b scope)
  13. CNR3_Designer_Response_DIAG3b_Confirm_Decisions_C1-C4.md     (3b decisions incl. C-ALIAS)
  14. CNR3_Designer_Review_DIAG3b_Patch_APPROVED_with_D2.md        (3b patch approval + finding D-2)
- 15. CNR3_DIAG_PlanResult_Vocabulary_and_Architecture_Spec_v1.md  (plan-trace spec v1 — 3c foundation)
+ 15. CNR3_DIAG_PlanResult_Vocabulary_and_Architecture_Spec_v1.md  (plan-trace spec v1 — 3c foundation.
+                                                                   NOTE: its status line and open-question
+                                                                   markers are STALE by design — the coder
+                                                                   cross-check HAS happened (item 16);
+                                                                   from/to is DECIDED compile-time; E/X +
+                                                                   dump-on-bail belong to 3c.2. Items 11+16
+                                                                   carry the current truth; v1 is superseded
+                                                                   by SPEC v2 as your next-steps item 3 —
+                                                                   do not re-commission the cross-check.)
  16. CNR3_DIAG3a_PlanResult_Cross_Check_Report_2026-07-04.md      (coder cross-check — spec v2 input)
  17. src.zip                                                      (current committed source baseline)
 

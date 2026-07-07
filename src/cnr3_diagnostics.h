@@ -120,7 +120,28 @@ enum class Cnr3DiagPlanTraceOutcome : unsigned char {
     none = 0,
     returned_cache_hit,
     returned_computed,
-    returned_recovered
+    returned_recovered,
+    failed
+};
+
+enum class Cnr3DiagPlanTraceFailReason : unsigned char {
+    none = 0,
+    copyframe_failed,
+    copyframe_source_alias,
+    source_retrieval_failed,
+    source_not_requested,
+    acquire_ref_failed,
+    adopt_failed,
+    store_prune_failed,
+    discharge_failed,
+    invalid_lifecycle,
+    invalid_branch_foundation,
+    scene_processing_failed,
+    byte_estimate_failed,
+    framedata_missing_or_unknown,
+    allocation_failed,
+    recovery_plan_failed_or_refused,
+    hot_zone_observation_failed
 };
 
 struct Cnr3DiagPlanTraceOpenFields {
@@ -136,9 +157,12 @@ struct Cnr3DiagPlanTraceOpenFields {
 
 struct Cnr3DiagPlanTraceResultFields {
     Cnr3DiagPlanTraceOutcome outcome = Cnr3DiagPlanTraceOutcome::none;
+    Cnr3DiagPlanTraceFailReason fail_reason = Cnr3DiagPlanTraceFailReason::none;
     std::vector<int> computed_frames{};
     std::vector<int> adopted_skipped_frames{};
     std::vector<int> post_compute_loser_frames{};
+    std::vector<int> not_reached_frames{};
+    std::vector<int> error_here_frames{};
 };
 
 struct Cnr3DiagPlanTraceRecord {
@@ -188,11 +212,32 @@ void cnr3_diag_plantrace_observe_result(
     const Cnr3DiagPlanTraceResultFields& fields
 ) noexcept;
 
+void cnr3_diag_plantrace_observe_failed_result_and_dump(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    const Cnr3DiagPlanTraceResultFields& fields
+) noexcept;
+
+void cnr3_diag_plantrace_observe_minimal_failed_and_dump(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) noexcept;
+
 #endif
 
 #if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
 
 void cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer
+) noexcept;
+
+void cnr3_diag_plantrace_write_bail_dump_to_stderr(
     Cnr3InstanceId instance_id,
     Cnr3DiagPlanTraceBuffer& buffer
 ) noexcept;

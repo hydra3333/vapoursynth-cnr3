@@ -1,0 +1,15 @@
+diff --git a/src/cnr3_diagnostics.cpp b/src/cnr3_diagnostics.cpp
+index 945392d..5fb4b96 100644
+--- a/src/cnr3_diagnostics.cpp
++++ b/src/cnr3_diagnostics.cpp
+@@ -777,10 +777,6 @@ namespace {
+             instance_id,
+             "[DSUM-PLANTRACE] legend R-code   X = not_reached                    E = error_here"
+         );
+-        cnr3_diag_plantrace_write_line(
+-            instance_id,
+-            "[DSUM-PLANTRACE] legend R-code   X = not_reached                    E = error_here"
+-        );
+         cnr3_diag_plantrace_write_line(
+             instance_id,
+             "[DSUM-PLANTRACE] legend glyph    *  checkpoint-grid frame (rides on a frame number in a role list or codes)"

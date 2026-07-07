@@ -2,6 +2,8 @@
 
 #include "cnr3_cache_core.h"
 
+#include "cnr3_plugin_internal.h"
+
 #include "cnr3_diagnostics.h"
 
 #include "cnr3_frame_processing.h"
@@ -16488,6 +16490,169 @@ Cnr3Status cnr3_cache_core_selftest_w3_combined_store_prune_helper() noexcept {
 }
 
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+Cnr3Status cnr3_cache_core_selftest_diag3c2_induced_bail_live_paths() noexcept {
+    auto fail = []() noexcept -> Cnr3Status {
+        return Cnr3Status::invariant_violation;
+    };
+
+    {
+        Cnr3FilterData data{};
+        cnr3_diag_plantrace_observe_minimal_failed_and_dump(
+            data.config.instance_id,
+            data.dsum_plantrace,
+            7,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            7
+        );
+
+        if (
+            !data.dsum_plantrace.dumped ||
+            data.dsum_plantrace.records.size() != 1U
+            ) {
+            return fail();
+        }
+
+        const Cnr3DiagPlanTraceRecord& record = data.dsum_plantrace.records[0];
+        if (
+            record.phase != Cnr3DiagPlanTracePhase::result ||
+            record.frame_number != 7 ||
+            record.result.outcome != Cnr3DiagPlanTraceOutcome::failed ||
+            record.result.fail_reason != Cnr3DiagPlanTraceFailReason::invalid_lifecycle ||
+            record.result.error_here_frames.size() != 1U ||
+            record.result.error_here_frames[0] != 7 ||
+            !record.result.not_reached_frames.empty() ||
+            !record.result.computed_frames.empty() ||
+            !record.result.adopted_skipped_frames.empty() ||
+            !record.result.post_compute_loser_frames.empty()
+            ) {
+            return fail();
+        }
+
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+        const std::size_t record_count_before_clean_end = data.dsum_plantrace.records.size();
+        cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+            data.config.instance_id,
+            data.dsum_plantrace
+        );
+        if (data.dsum_plantrace.records.size() != record_count_before_clean_end) {
+            return fail();
+        }
+#endif
+    }
+
+    {
+        Cnr3FilterData data{};
+        Cnr3LiveGetFrameFrameData request_data{};
+        request_data.branch = Cnr3LiveGetFrameBranch::recovery;
+        request_data.requested_frame = 33;
+        request_data.predecessor_frame = 32;
+        request_data.recovery_branch = Cnr3LiveRecoveryBranch::exact_anchor;
+        request_data.recovery_plan.anchor_found = true;
+        request_data.recovery_plan.anchor_frame_number = 29;
+        request_data.recovery_plan.hole_frame_numbers.push_back(30);
+        request_data.recovery_plan.hole_frame_numbers.push_back(31);
+        request_data.recovery_plan.hole_frame_numbers.push_back(32);
+        request_data.per_hole_outcomes.push_back(Cnr3LiveRecoveryHoleOutcome::adopted_skipped);
+        request_data.per_hole_outcomes.push_back(Cnr3LiveRecoveryHoleOutcome::none);
+        request_data.plantrace_ar_all_enter_tick = cnr3_diag_plantrace_sample_tick();
+
+        cnr3_diag_plantrace_observe_open(
+            data.dsum_plantrace,
+            request_data.requested_frame,
+            cnr3_diag_plantrace_sample_tick(),
+            cnr3_diag_plantrace_sample_tick(),
+            Cnr3DiagPlanTraceOpenFields{
+                Cnr3DiagPlanTraceStrategy::recovery_exact,
+                request_data.requested_frame,
+                request_data.predecessor_frame,
+                request_data.recovery_plan.anchor_frame_number,
+                CNR3_INVALID_FRAME_NUMBER,
+                request_data.recovery_plan.hole_frame_numbers,
+                {30, 31, 32, 33},
+                {request_data.recovery_plan.anchor_frame_number}
+            }
+        );
+
+        const Cnr3DiagPlanTraceResultFields failed_fields =
+            cnr3_live_plantrace_make_failed_result_from_request(
+                &request_data,
+                Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+                31
+            );
+
+        cnr3_diag_plantrace_observe_failed_result_and_dump(
+            data.config.instance_id,
+            data.dsum_plantrace,
+            request_data.requested_frame,
+            request_data.plantrace_ar_all_enter_tick,
+            failed_fields
+        );
+
+        if (
+            !data.dsum_plantrace.dumped ||
+            data.dsum_plantrace.records.size() != 2U
+            ) {
+            return fail();
+        }
+
+        const Cnr3DiagPlanTraceRecord& failed_record = data.dsum_plantrace.records[1];
+        if (
+            failed_record.phase != Cnr3DiagPlanTracePhase::result ||
+            failed_record.frame_number != 33 ||
+            failed_record.result.outcome != Cnr3DiagPlanTraceOutcome::failed ||
+            failed_record.result.fail_reason != Cnr3DiagPlanTraceFailReason::source_retrieval_failed ||
+            failed_record.result.error_here_frames.size() != 1U ||
+            failed_record.result.error_here_frames[0] != 31 ||
+            failed_record.result.not_reached_frames.size() != 2U ||
+            failed_record.result.not_reached_frames[0] != 32 ||
+            failed_record.result.not_reached_frames[1] != 33 ||
+            !failed_record.result.computed_frames.empty() ||
+            failed_record.result.adopted_skipped_frames.size() != 1U ||
+            failed_record.result.adopted_skipped_frames[0] != 30 ||
+            !failed_record.result.post_compute_loser_frames.empty()
+            ) {
+            return fail();
+        }
+
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+        const std::size_t record_count_before_clean_end = data.dsum_plantrace.records.size();
+        cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+            data.config.instance_id,
+            data.dsum_plantrace
+        );
+        if (data.dsum_plantrace.records.size() != record_count_before_clean_end) {
+            return fail();
+        }
+#endif
+    }
+
+    cnr3_cache_core_selftest_trace_line(
+        "DIAG.3c.2 induced bail proof scenario"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    minimal invalid-lifecycle FAILED record emits E=N and X=[]"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    recovery FAILED record uses the shared live request-data X-derivation helper"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    recovery FAILED record derives non-empty X from the plan remainder"
+    );
+    cnr3_cache_core_selftest_trace_line(
+        "    once-guarded bail dump prevents a duplicate clean-end plantrace block"
+    );
+
+    return Cnr3Status::ok;
+}
+
+#endif
+
+
+
+
 Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
 
@@ -16722,6 +16887,13 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
             "as1_lookup_pin_record_atomicity",
             cnr3_cache_core_selftest_as1_lookup_pin_record_atomicity
         }
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        ,
+        {
+            "diag3c2_induced_live_bail_plantrace",
+            cnr3_cache_core_selftest_diag3c2_induced_bail_live_paths
+        }
+#endif
     };
 
     Cnr3CacheCoreSelftestRunResult result{};

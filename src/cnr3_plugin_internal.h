@@ -114,6 +114,103 @@ struct Cnr3LiveGetFrameFrameData {
     Cnr3CachePinList pin_list{};
 };
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+inline void cnr3_live_plantrace_add_frame_once(
+    std::vector<int>& frames,
+    int frame_number
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return;
+    }
+
+    for (const int existing_frame : frames) {
+        if (existing_frame == frame_number) {
+            return;
+        }
+    }
+
+    frames.push_back(frame_number);
+}
+
+inline void cnr3_live_plantrace_add_recovery_outcome_frame(
+    Cnr3DiagPlanTraceResultFields& fields,
+    int frame_number,
+    Cnr3LiveRecoveryHoleOutcome outcome
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return;
+    }
+
+    switch (outcome) {
+    case Cnr3LiveRecoveryHoleOutcome::computed:
+        fields.computed_frames.push_back(frame_number);
+        return;
+    case Cnr3LiveRecoveryHoleOutcome::adopted_skipped:
+        fields.adopted_skipped_frames.push_back(frame_number);
+        return;
+    case Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser:
+        fields.post_compute_loser_frames.push_back(frame_number);
+        return;
+    case Cnr3LiveRecoveryHoleOutcome::none:
+    default:
+        return;
+    }
+}
+
+inline Cnr3DiagPlanTraceResultFields cnr3_live_plantrace_make_failed_result_from_request(
+    const Cnr3LiveGetFrameFrameData* request_data,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) {
+    Cnr3DiagPlanTraceResultFields fields{};
+    fields.outcome = Cnr3DiagPlanTraceOutcome::failed;
+    fields.fail_reason = fail_reason;
+
+    if (cnr3_frame_number_is_valid(error_frame)) {
+        fields.error_here_frames.push_back(error_frame);
+    }
+
+    if (request_data == nullptr ||
+        request_data->branch != Cnr3LiveGetFrameBranch::recovery) {
+        return fields;
+    }
+
+    if (request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+        cnr3_live_plantrace_add_recovery_outcome_frame(
+            fields,
+            request_data->recovery_floor_frame,
+            request_data->recovery_floor_outcome
+        );
+    }
+
+    const std::size_t hole_count = request_data->recovery_plan.hole_frame_numbers.size();
+    for (std::size_t i = 0U; i < hole_count; ++i) {
+        const int hole_frame = request_data->recovery_plan.hole_frame_numbers[i];
+        const Cnr3LiveRecoveryHoleOutcome outcome =
+            i < request_data->per_hole_outcomes.size()
+            ? request_data->per_hole_outcomes[i]
+            : Cnr3LiveRecoveryHoleOutcome::none;
+
+        cnr3_live_plantrace_add_recovery_outcome_frame(fields, hole_frame, outcome);
+
+        if (outcome == Cnr3LiveRecoveryHoleOutcome::none && hole_frame != error_frame) {
+            cnr3_live_plantrace_add_frame_once(fields.not_reached_frames, hole_frame);
+        }
+    }
+
+    if (request_data->requested_frame != error_frame) {
+        cnr3_live_plantrace_add_frame_once(
+            fields.not_reached_frames,
+            request_data->requested_frame
+        );
+    }
+
+    return fields;
+}
+
+#endif
+
 void cnr3_set_filter_error(
     VSFrameContext* frame_ctx,
     const VSAPI* vsapi,

@@ -143,6 +143,22 @@ private:
     Cnr3DiagPlanTraceTick enter_tick_ = 0;
 };
 
+
+void cnr3_diag_plantrace_observe_initial_failed(
+    Cnr3FilterData& data,
+    int frame_number,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) noexcept {
+    cnr3_diag_plantrace_observe_minimal_failed_and_dump(
+        data.config.instance_id,
+        data.dsum_plantrace,
+        frame_number,
+        fail_reason,
+        error_frame
+    );
+}
+
 #endif
 
 Cnr3Status cnr3_delete_unpublished_frame_data(
@@ -169,6 +185,14 @@ const VSFrame* cnr3_publish_live_cache_hit_return(
     const VSAPI* vsapi
 ) {
     if (request_data == nullptr || frame_data == nullptr || *frame_data != nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -216,6 +240,14 @@ const VSFrame* cnr3_publish_live_predecessor_present_compute_from_pinned_predece
         request_data->predecessor_frame != n - 1 ||
         !request_data->predecessor_pin_taken ||
         request_data->pin_list.pin_count() != 1U) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n - 1
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -252,6 +284,14 @@ const VSFrame* cnr3_publish_live_frame0_fresh_start(
     const VSAPI* vsapi
 ) {
     if (request_data == nullptr || frame_data == nullptr || *frame_data != nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -562,6 +602,14 @@ const VSFrame* cnr3_start_live_recovery(
     const VSAPI* vsapi
 ) {
     if (request_data == nullptr || frame_data == nullptr || *frame_data != nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -590,6 +638,14 @@ const VSFrame* cnr3_start_live_recovery(
         );
 #endif
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -629,6 +685,16 @@ const VSFrame* cnr3_start_live_recovery(
         const Cnr3Status discard_status =
             cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            cnr3_status_is_ok(discard_status)
+            ? Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused
+            : Cnr3DiagPlanTraceFailReason::discharge_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -652,6 +718,14 @@ const VSFrame* cnr3_start_live_recovery(
 
         if (!cnr3_status_is_ok(floor_holes_status)) {
             cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_initial_failed(
+                data,
+                n,
+                Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
+                request_data != nullptr ? request_data->recovery_floor_frame : n
+            );
+#endif
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
@@ -666,6 +740,14 @@ const VSFrame* cnr3_start_live_recovery(
 
     if (!cnr3_status_is_ok(source_plan_status)) {
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -682,6 +764,14 @@ const VSFrame* cnr3_start_live_recovery(
     }
     catch (const std::bad_alloc&) {
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::allocation_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -745,6 +835,14 @@ const VSFrame* cnr3_arInitial(
 #endif
 
     if (frame_data == nullptr || *frame_data != nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -764,6 +862,14 @@ const VSFrame* cnr3_arInitial(
         new (std::nothrow) Cnr3LiveGetFrameFrameData{};
 
     if (request_data == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::allocation_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -783,6 +889,14 @@ const VSFrame* cnr3_arInitial(
 
     if (!cnr3_status_is_ok(hot_zone_observation_status)) {
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::hot_zone_observation_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -811,6 +925,14 @@ const VSFrame* cnr3_arInitial(
 
     if (cache_hit_pin_status != Cnr3Status::not_found) {
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -858,6 +980,14 @@ const VSFrame* cnr3_arInitial(
 
     if (predecessor_pin_status != Cnr3Status::not_found) {
         cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_initial_failed(
+            data,
+            n,
+            Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+            request_data != nullptr ? request_data->predecessor_frame : n - 1
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,

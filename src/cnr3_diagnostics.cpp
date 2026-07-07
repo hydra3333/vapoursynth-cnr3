@@ -384,7 +384,51 @@ namespace {
             return "RETURNED_COMPUTED";
         case Cnr3DiagPlanTraceOutcome::returned_recovered:
             return "RETURNED_RECOVERED";
+        case Cnr3DiagPlanTraceOutcome::failed:
+            return "FAILED";
         case Cnr3DiagPlanTraceOutcome::none:
+        default:
+            return "NONE";
+        }
+    }
+
+    [[nodiscard]] const char* cnr3_diag_plantrace_fail_reason_name(
+        Cnr3DiagPlanTraceFailReason reason
+    ) noexcept {
+        switch (reason) {
+        case Cnr3DiagPlanTraceFailReason::copyframe_failed:
+            return "COPYFRAME_FAILED";
+        case Cnr3DiagPlanTraceFailReason::copyframe_source_alias:
+            return "COPYFRAME_SOURCE_ALIAS";
+        case Cnr3DiagPlanTraceFailReason::source_retrieval_failed:
+            return "SOURCE_RETRIEVAL_FAILED";
+        case Cnr3DiagPlanTraceFailReason::source_not_requested:
+            return "SOURCE_NOT_REQUESTED";
+        case Cnr3DiagPlanTraceFailReason::acquire_ref_failed:
+            return "ACQUIRE_REF_FAILED";
+        case Cnr3DiagPlanTraceFailReason::adopt_failed:
+            return "ADOPT_FAILED";
+        case Cnr3DiagPlanTraceFailReason::store_prune_failed:
+            return "STORE_PRUNE_FAILED";
+        case Cnr3DiagPlanTraceFailReason::discharge_failed:
+            return "DISCHARGE_FAILED";
+        case Cnr3DiagPlanTraceFailReason::invalid_lifecycle:
+            return "INVALID_LIFECYCLE";
+        case Cnr3DiagPlanTraceFailReason::invalid_branch_foundation:
+            return "INVALID_BRANCH_FOUNDATION";
+        case Cnr3DiagPlanTraceFailReason::scene_processing_failed:
+            return "SCENE_PROCESSING_FAILED";
+        case Cnr3DiagPlanTraceFailReason::byte_estimate_failed:
+            return "BYTE_ESTIMATE_FAILED";
+        case Cnr3DiagPlanTraceFailReason::framedata_missing_or_unknown:
+            return "FRAMEDATA_MISSING_OR_UNKNOWN";
+        case Cnr3DiagPlanTraceFailReason::allocation_failed:
+            return "ALLOCATION_FAILED";
+        case Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused:
+            return "RECOVERY_PLAN_FAILED_OR_REFUSED";
+        case Cnr3DiagPlanTraceFailReason::hot_zone_observation_failed:
+            return "HOT_ZONE_OBSERVATION_FAILED";
+        case Cnr3DiagPlanTraceFailReason::none:
         default:
             return "NONE";
         }
@@ -552,6 +596,12 @@ namespace {
         for (const int frame : result.post_compute_loser_frames) {
             cnr3_diag_plantrace_add_code(codes, frame, 'L');
         }
+        for (const int frame : result.not_reached_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'X');
+        }
+        for (const int frame : result.error_here_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'E');
+        }
 
         return cnr3_diag_plantrace_format_codes(std::move(codes));
     }
@@ -665,7 +715,7 @@ namespace {
         );
         cnr3_diag_plantrace_write_line(
             instance_id,
-            "[DSUM-PLANTRACE] legend outcome  RETURNED_CACHE_HIT / RETURNED_COMPUTED / RETURNED_RECOVERED  (R; FAILED: 3c.2)"
+            "[DSUM-PLANTRACE] legend outcome  RETURNED_CACHE_HIT / RETURNED_COMPUTED / RETURNED_RECOVERED / FAILED  (R)"
         );
         cnr3_diag_plantrace_write_line(
             instance_id,
@@ -722,6 +772,10 @@ namespace {
         cnr3_diag_plantrace_write_line(
             instance_id,
             "[DSUM-PLANTRACE] legend R-code   L = post_compute_discarded          N = none"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend R-code   X = not_reached                    E = error_here"
         );
         cnr3_diag_plantrace_write_line(
             instance_id,
@@ -821,6 +875,10 @@ namespace {
 
             line += " outcome=";
             line += cnr3_diag_plantrace_outcome_name(record.result.outcome);
+            if (record.result.outcome == Cnr3DiagPlanTraceOutcome::failed) {
+                line += " fail_reason=";
+                line += cnr3_diag_plantrace_fail_reason_name(record.result.fail_reason);
+            }
             line += " enter_utc=";
             line += enter_utc;
             line += " exit_utc=";
@@ -944,11 +1002,56 @@ void cnr3_diag_plantrace_observe_result(
     }
 }
 
+void cnr3_diag_plantrace_observe_failed_result_and_dump(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    const Cnr3DiagPlanTraceResultFields& fields
+) noexcept {
+    cnr3_diag_plantrace_observe_result(
+        buffer,
+        frame_number,
+        enter_tick,
+        cnr3_diag_plantrace_sample_tick(),
+        fields
+    );
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+    cnr3_diag_plantrace_write_bail_dump_to_stderr(instance_id, buffer);
+#endif
+}
+
+void cnr3_diag_plantrace_observe_minimal_failed_and_dump(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) noexcept {
+    Cnr3DiagPlanTraceResultFields fields{};
+    fields.outcome = Cnr3DiagPlanTraceOutcome::failed;
+    fields.fail_reason = fail_reason;
+    if (cnr3_frame_number_is_valid(error_frame)) {
+        fields.error_here_frames.push_back(error_frame);
+    }
+
+    const Cnr3DiagPlanTraceTick enter_tick = cnr3_diag_plantrace_sample_tick();
+    cnr3_diag_plantrace_observe_failed_result_and_dump(
+        instance_id,
+        buffer,
+        frame_number,
+        enter_tick,
+        fields
+    );
+}
+
 #endif
 
 #if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
 
-void cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+namespace {
+
+void cnr3_diag_plantrace_write_dump_to_stderr(
     Cnr3InstanceId instance_id,
     Cnr3DiagPlanTraceBuffer& buffer
 ) noexcept {
@@ -1023,6 +1126,22 @@ void cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
         " truncated=" + (reserve_failed ? "1" : "0")
     );
     cnr3_diag_flush_stderr();
+}
+
+} // namespace
+
+void cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer
+) noexcept {
+    cnr3_diag_plantrace_write_dump_to_stderr(instance_id, buffer);
+}
+
+void cnr3_diag_plantrace_write_bail_dump_to_stderr(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer
+) noexcept {
+    cnr3_diag_plantrace_write_dump_to_stderr(instance_id, buffer);
 }
 #endif
 

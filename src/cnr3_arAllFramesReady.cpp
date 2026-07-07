@@ -296,6 +296,85 @@ Cnr3DiagPlanTraceResultFields cnr3_diag_plantrace_make_recovery_result(
     return fields;
 }
 
+void cnr3_diag_plantrace_add_frame_once(
+    std::vector<int>& frames,
+    int frame_number
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return;
+    }
+
+    for (const int existing_frame : frames) {
+        if (existing_frame == frame_number) {
+            return;
+        }
+    }
+
+    frames.push_back(frame_number);
+}
+
+Cnr3DiagPlanTraceResultFields cnr3_diag_plantrace_make_failed_result_from_request(
+    const Cnr3LiveGetFrameFrameData* request_data,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) {
+    return cnr3_live_plantrace_make_failed_result_from_request(
+        request_data,
+        fail_reason,
+        error_frame
+    );
+}
+
+
+void cnr3_diag_plantrace_observe_failed_from_request(
+    Cnr3FilterData& data,
+    int frame_number,
+    const Cnr3LiveGetFrameFrameData* request_data,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) noexcept {
+    const Cnr3DiagPlanTraceTick enter_tick =
+        request_data != nullptr && request_data->plantrace_ar_all_enter_tick != 0
+        ? request_data->plantrace_ar_all_enter_tick
+        : cnr3_diag_plantrace_sample_tick();
+
+    cnr3_diag_plantrace_observe_failed_result_and_dump(
+        data.config.instance_id,
+        data.dsum_plantrace,
+        frame_number,
+        enter_tick,
+        cnr3_diag_plantrace_make_failed_result_from_request(
+            request_data,
+            fail_reason,
+            error_frame
+        )
+    );
+}
+
+void cnr3_diag_plantrace_observe_failed_with_progress(
+    Cnr3FilterData& data,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    const Cnr3DiagPlanTraceResultFields& progress_fields,
+    Cnr3DiagPlanTraceFailReason fail_reason,
+    int error_frame
+) noexcept {
+    Cnr3DiagPlanTraceResultFields fields = progress_fields;
+    fields.outcome = Cnr3DiagPlanTraceOutcome::failed;
+    fields.fail_reason = fail_reason;
+    fields.not_reached_frames.clear();
+    fields.error_here_frames.clear();
+    cnr3_diag_plantrace_add_frame_once(fields.error_here_frames, error_frame);
+
+    cnr3_diag_plantrace_observe_failed_result_and_dump(
+        data.config.instance_id,
+        data.dsum_plantrace,
+        frame_number,
+        enter_tick,
+        fields
+    );
+}
+
 #endif
 
 std::string cnr3_join_frame_numbers_for_kdt(
@@ -1054,6 +1133,15 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
         !request_data->source_requested ||
         !request_data->cache_hit_pin_taken ||
         request_data->pin_list.pin_count() != 1U) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1069,6 +1157,15 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
 #endif
 
     if (source_trigger_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1102,6 +1199,15 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
         cnr3_diag_dsum09_observe_return_no_reason(
             data.dsum09_return_transfer,
             Cnr3DiagDsum09ReturnNoReason::duplicate_winner_lookup_failed
+        );
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::framedata_missing_or_unknown,
+            n
         );
 #endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
@@ -1141,6 +1247,16 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
         cnr3_diag_dsum09_observe_lookup_ref_released(data.dsum09_return_transfer);
 #endif
         returned_cache_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_with_progress(
+            data,
+            n,
+            plantrace_enter_tick,
+            plantrace_result_fields,
+            Cnr3DiagPlanTraceFailReason::discharge_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -1188,6 +1304,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         !request_data->source_requested ||
         !request_data->predecessor_pin_taken ||
         request_data->pin_list.pin_count() != 1U) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1203,6 +1328,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 #endif
 
     if (source_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1225,6 +1359,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(source_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+            request_data != nullptr ? request_data->predecessor_frame : n - 1
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1242,6 +1385,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(source_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::copyframe_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1257,6 +1409,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::copyframe_source_alias,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1300,6 +1461,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         );
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::scene_processing_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1327,6 +1497,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         );
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::byte_estimate_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1363,6 +1542,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     output_frame = nullptr;
 
     if (!cnr3_status_is_ok(return_status) || return_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::store_prune_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1395,6 +1583,16 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     if (!cnr3_status_is_ok(discard_status)) {
         vsapi->freeFrame(return_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_with_progress(
+            data,
+            n,
+            plantrace_enter_tick,
+            plantrace_result_fields,
+            Cnr3DiagPlanTraceFailReason::discharge_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -1448,6 +1646,15 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_diag_live_observe_recovery_honesty_failure_if_needed(*request_data);
         }
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::invalid_lifecycle,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1475,6 +1682,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
         cnr3_diag_live_observe_recovery_honesty_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::invalid_branch_foundation,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1489,6 +1705,15 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_live_calculate_output_frame_byte_count(data, frame_byte_count);
 
     if (!cnr3_status_is_ok(frame_byte_count_status)) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::byte_estimate_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -1516,6 +1741,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
             cnr3_diag_live_observe_recovery_honesty_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::source_not_requested,
+                floor_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1535,6 +1769,15 @@ const VSFrame* cnr3_complete_live_recovery(
                 Cnr3LiveRecoveryHoleOutcome::adopted_skipped;
         }
         else if (floor_adopt_status != Cnr3Status::not_found) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+                floor_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1562,6 +1805,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_failed_from_request(
+                    data,
+                    n,
+                    request_data,
+                    Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+                    floor_frame
+                );
+#endif
                 (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
                 cnr3_set_filter_error(
                     frame_ctx,
@@ -1581,6 +1833,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_failed_from_request(
+                    data,
+                    n,
+                    request_data,
+                    Cnr3DiagPlanTraceFailReason::copyframe_failed,
+                    floor_frame
+                );
+#endif
                 (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
                 cnr3_set_filter_error(
                     frame_ctx,
@@ -1597,6 +1858,15 @@ const VSFrame* cnr3_complete_live_recovery(
                 vsapi->freeFrame(floor_output_frame);
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_failed_from_request(
+                    data,
+                    n,
+                    request_data,
+                    Cnr3DiagPlanTraceFailReason::copyframe_source_alias,
+                    floor_frame
+                );
 #endif
                 (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
                 cnr3_set_filter_error(
@@ -1634,6 +1904,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_failed_from_request(
+                    data,
+                    n,
+                    request_data,
+                    Cnr3DiagPlanTraceFailReason::adopt_failed,
+                    floor_frame
+                );
+#endif
                 (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
                 cnr3_set_filter_error(
                     frame_ctx,
@@ -1667,6 +1946,15 @@ const VSFrame* cnr3_complete_live_recovery(
                 !floor_store_summary.as2_summary.pin_recorded) {
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
                 cnr3_diag_live_observe_recovery_fallback_failure_if_needed(*request_data);
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_failed_from_request(
+                    data,
+                    n,
+                    request_data,
+                    Cnr3DiagPlanTraceFailReason::store_prune_failed,
+                    floor_frame
+                );
 #endif
                 (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
                 cnr3_set_filter_error(
@@ -1726,6 +2014,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
             cnr3_diag_live_observe_recovery_honesty_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::source_not_requested,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1747,6 +2044,15 @@ const VSFrame* cnr3_complete_live_recovery(
         }
 
         if (adopt_status != Cnr3Status::not_found) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1765,6 +2071,15 @@ const VSFrame* cnr3_complete_live_recovery(
 
         if (!cnr3_status_is_ok(predecessor_status) ||
             !predecessor_compute_ref.has_frame()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+                hole_frame - 1
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1790,6 +2105,15 @@ const VSFrame* cnr3_complete_live_recovery(
 
         if (source_frame == nullptr) {
             predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1811,6 +2135,15 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_diag_live_observe_source_release(data);
 #endif
             vsapi->freeFrame(source_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::copyframe_failed,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1826,6 +2159,15 @@ const VSFrame* cnr3_complete_live_recovery(
             cnr3_diag_live_observe_source_release(data);
 #endif
             vsapi->freeFrame(hole_output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::copyframe_source_alias,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1870,6 +2212,15 @@ const VSFrame* cnr3_complete_live_recovery(
             );
 #endif
             vsapi->freeFrame(hole_output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::scene_processing_failed,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1892,6 +2243,15 @@ const VSFrame* cnr3_complete_live_recovery(
             );
 #endif
             vsapi->freeFrame(hole_output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::adopt_failed,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1941,6 +2301,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #endif
         if (!cnr3_status_is_ok(hole_store_status) ||
             !hole_store_summary.as2_summary.pin_recorded) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_failed_from_request(
+                data,
+                n,
+                request_data,
+                Cnr3DiagPlanTraceFailReason::store_prune_failed,
+                hole_frame
+            );
+#endif
             (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
             cnr3_set_filter_error(
                 frame_ctx,
@@ -1984,6 +2353,15 @@ const VSFrame* cnr3_complete_live_recovery(
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
         cnr3_diag_live_observe_recovery_honesty_failure_if_needed(*request_data);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::source_not_requested,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2003,6 +2381,15 @@ const VSFrame* cnr3_complete_live_recovery(
 
     if (!cnr3_status_is_ok(target_predecessor_status) ||
         !target_predecessor_compute_ref.has_frame()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+            n - 1
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2019,6 +2406,15 @@ const VSFrame* cnr3_complete_live_recovery(
 
     if (target_source_frame == nullptr) {
         target_predecessor_compute_ref.reset();
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2036,6 +2432,15 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(target_source_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::copyframe_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2051,6 +2456,15 @@ const VSFrame* cnr3_complete_live_recovery(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(target_output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::copyframe_source_alias,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2095,6 +2509,15 @@ const VSFrame* cnr3_complete_live_recovery(
         );
 #endif
         vsapi->freeFrame(target_output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::scene_processing_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2138,6 +2561,15 @@ const VSFrame* cnr3_complete_live_recovery(
     target_output_frame = nullptr;
 
     if (!cnr3_status_is_ok(target_return_status) || return_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::store_prune_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2203,6 +2635,16 @@ const VSFrame* cnr3_complete_live_recovery(
 
     if (!cnr3_status_is_ok(discard_status)) {
         vsapi->freeFrame(return_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_with_progress(
+            data,
+            n,
+            plantrace_enter_tick,
+            plantrace_result_fields,
+            Cnr3DiagPlanTraceFailReason::discharge_failed,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -2258,6 +2700,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         request_data->branch != Cnr3LiveGetFrameBranch::frame0_fresh_start ||
         request_data->requested_frame != n ||
         !request_data->source_requested) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::source_not_requested,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2273,6 +2724,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
 #endif
 
     if (source_frame == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::source_retrieval_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2289,6 +2749,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(source_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::copyframe_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2303,6 +2772,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         cnr3_diag_live_observe_source_release(data);
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::copyframe_source_alias,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2332,6 +2810,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         );
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::acquire_ref_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2355,6 +2842,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         );
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::adopt_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2375,6 +2871,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         );
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::byte_estimate_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2417,6 +2922,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         );
 #endif
         vsapi->freeFrame(output_frame);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::store_prune_failed,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,
@@ -2500,6 +3014,15 @@ const VSFrame* cnr3_arAllFramesReady(
         static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
 
     if (request_data == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_minimal_failed_and_dump(
+            data.config.instance_id,
+            data.dsum_plantrace,
+            n,
+            Cnr3DiagPlanTraceFailReason::framedata_missing_or_unknown,
+            n
+        );
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,
@@ -2556,6 +3079,15 @@ const VSFrame* cnr3_arAllFramesReady(
         );
     case Cnr3LiveGetFrameBranch::none:
     default:
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_observe_failed_from_request(
+            data,
+            n,
+            request_data,
+            Cnr3DiagPlanTraceFailReason::framedata_missing_or_unknown,
+            n
+        );
+#endif
         (void)cnr3_discard_frame_data_with_cache(frame_data, data.output_cache);
         cnr3_set_filter_error(
             frame_ctx,

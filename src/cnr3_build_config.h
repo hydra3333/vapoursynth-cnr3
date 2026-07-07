@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.3c.1-plantrace-clean-end-capture-v2";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.3c.2-plantrace-dump-on-bail-failure-detail";
 
 /*
     CMS07-P.11C.2 live scene-change default.
@@ -509,7 +509,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
 //  Human interpretation: This is a per-frame trace, not an aggregate summary. It is
 //                        observe-only and must compile out completely when the master
 //                        compute gate is disabled.
-#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
+//#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
 #   define CNR3_DIAG_PRINT_DSUM_PLANTRACE 1
 #endif

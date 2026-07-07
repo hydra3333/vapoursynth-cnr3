@@ -400,6 +400,43 @@ namespace {
             recovery_result
         );
 
+        Cnr3DiagPlanTraceOpenFields failed_recovery_open{};
+        failed_recovery_open.strategy = Cnr3DiagPlanTraceStrategy::recovery_exact;
+        failed_recovery_open.target_frame = 33;
+        failed_recovery_open.predecessor_frame = 32;
+        failed_recovery_open.anchor_frame = 29;
+        failed_recovery_open.hole_frames.push_back(30);
+        failed_recovery_open.hole_frames.push_back(31);
+        failed_recovery_open.hole_frames.push_back(32);
+        failed_recovery_open.source_frames.push_back(30);
+        failed_recovery_open.source_frames.push_back(31);
+        failed_recovery_open.source_frames.push_back(32);
+        failed_recovery_open.source_frames.push_back(33);
+        failed_recovery_open.pinned_frames.push_back(29);
+        cnr3_diag_plantrace_observe_open(
+            buffer,
+            33,
+            5000000000ULL,
+            5001000000ULL,
+            failed_recovery_open
+        );
+
+        Cnr3DiagPlanTraceResultFields failed_recovery_result{};
+        failed_recovery_result.outcome = Cnr3DiagPlanTraceOutcome::failed;
+        failed_recovery_result.fail_reason =
+            Cnr3DiagPlanTraceFailReason::source_retrieval_failed;
+        failed_recovery_result.computed_frames.push_back(30);
+        failed_recovery_result.error_here_frames.push_back(31);
+        failed_recovery_result.not_reached_frames.push_back(32);
+        failed_recovery_result.not_reached_frames.push_back(33);
+        cnr3_diag_plantrace_observe_failed_result_and_dump(
+            CNR3_SELFTEST_INSTANCE_ID,
+            buffer,
+            33,
+            6000000000ULL,
+            failed_recovery_result
+        );
+
 #if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
         cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
             CNR3_SELFTEST_INSTANCE_ID,

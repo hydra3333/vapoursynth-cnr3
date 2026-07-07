@@ -1,0 +1,372 @@
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index 9936ae6..ba7b67a 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -2,6 +2,8 @@
+ 
+ #include "cnr3_cache_core.h"
+ 
++#include "cnr3_plugin_internal.h"
++
+ #include "cnr3_diagnostics.h"
+ 
+ #include "cnr3_frame_processing.h"
+@@ -66,6 +68,13 @@ namespace {
+         int get_frame_width_count = 0;
+         int get_frame_height_count = 0;
+         int last_plane = -1;
++
++        int request_frame_filter_count = 0;
++        int get_frame_filter_count = 0;
++        int set_filter_error_count = 0;
++        int last_requested_filter_frame = CNR3_INVALID_FRAME_NUMBER;
++        int last_retrieved_filter_frame = CNR3_INVALID_FRAME_NUMBER;
++        const char* last_filter_error_message = nullptr;
+     };
+ 
+     /*
+@@ -215,6 +224,48 @@ namespace {
+         return plane_state->height;
+     }
+ 
++    void VS_CC cnr3_cache_core_selftest_request_frame_filter(
++        int frame_number,
++        VSNode* node,
++        VSFrameContext* frame_ctx
++    ) noexcept {
++        (void)node;
++        (void)frame_ctx;
++
++        if (g_cnr3_cache_core_selftest_vsapi_state != nullptr) {
++            ++g_cnr3_cache_core_selftest_vsapi_state->request_frame_filter_count;
++            g_cnr3_cache_core_selftest_vsapi_state->last_requested_filter_frame = frame_number;
++        }
++    }
++
++    const VSFrame* VS_CC cnr3_cache_core_selftest_get_frame_filter_null(
++        int frame_number,
++        VSNode* node,
++        VSFrameContext* frame_ctx
++    ) noexcept {
++        (void)node;
++        (void)frame_ctx;
++
++        if (g_cnr3_cache_core_selftest_vsapi_state != nullptr) {
++            ++g_cnr3_cache_core_selftest_vsapi_state->get_frame_filter_count;
++            g_cnr3_cache_core_selftest_vsapi_state->last_retrieved_filter_frame = frame_number;
++        }
++
++        return nullptr;
++    }
++
++    void VS_CC cnr3_cache_core_selftest_set_filter_error(
++        const char* message,
++        VSFrameContext* frame_ctx
++    ) noexcept {
++        (void)frame_ctx;
++
++        if (g_cnr3_cache_core_selftest_vsapi_state != nullptr) {
++            ++g_cnr3_cache_core_selftest_vsapi_state->set_filter_error_count;
++            g_cnr3_cache_core_selftest_vsapi_state->last_filter_error_message = message;
++        }
++    }
++
+     VSAPI cnr3_cache_core_selftest_make_vsapi() noexcept {
+         VSAPI vsapi{};
+ 
+@@ -225,6 +276,9 @@ namespace {
+         vsapi.getWritePtr = cnr3_cache_core_selftest_get_write_ptr;
+         vsapi.getFrameWidth = cnr3_cache_core_selftest_get_frame_width;
+         vsapi.getFrameHeight = cnr3_cache_core_selftest_get_frame_height;
++        vsapi.requestFrameFilter = cnr3_cache_core_selftest_request_frame_filter;
++        vsapi.getFrameFilter = cnr3_cache_core_selftest_get_frame_filter_null;
++        vsapi.setFilterError = cnr3_cache_core_selftest_set_filter_error;
+ 
+         return vsapi;
+     }
+@@ -16488,6 +16542,271 @@ Cnr3Status cnr3_cache_core_selftest_w3_combined_store_prune_helper() noexcept {
+ }
+ 
+ 
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
++
++Cnr3Status cnr3_cache_core_selftest_diag3c2_induced_bail_live_paths() noexcept {
++    auto fail = []() noexcept -> Cnr3Status {
++        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++        return Cnr3Status::invariant_violation;
++    };
++
++    auto make_owned_frame = [](const VSFrame* frame,
++        const VSAPI* vsapi,
++        Cnr3OwnedFrameRef& out_owned_frame
++    ) noexcept -> Cnr3Status {
++        return out_owned_frame.reset_to_owned_frame(frame, vsapi);
++    };
++
++    auto store_seed_frame = [&make_owned_frame](
++        Cnr3OutputCacheCore& cache,
++        int frame_number,
++        const VSFrame* frame,
++        bool is_checkpoint,
++        const VSAPI* vsapi
++    ) noexcept -> Cnr3Status {
++        Cnr3OwnedFrameRef owned_frame{};
++        const Cnr3Status adopt_status = make_owned_frame(
++            frame,
++            vsapi,
++            owned_frame
++        );
++
++        if (!cnr3_status_is_ok(adopt_status)) {
++            return adopt_status;
++        }
++
++        return is_checkpoint
++            ? cache.store_checkpoint_owned_frame(frame_number, std::move(owned_frame))
++            : cache.store_noncheckpoint_owned_frame(frame_number, std::move(owned_frame));
++    };
++
++    {
++        Cnr3CacheCoreSelftestVsApiState vsapi_state{};
++        g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
++
++        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++        Cnr3FilterData data{};
++        int frame_ctx_storage = 0;
++        int stale_frame_data_storage = 0;
++        void* frame_data = &stale_frame_data_storage;
++
++        const VSFrame* result = cnr3_arInitial(
++            7,
++            data,
++            &frame_data,
++            reinterpret_cast<VSFrameContext*>(&frame_ctx_storage),
++            nullptr,
++            &vsapi
++        );
++
++        if (
++            result != nullptr ||
++            frame_data != &stale_frame_data_storage ||
++            vsapi_state.set_filter_error_count != 1 ||
++            !data.dsum_plantrace.dumped ||
++            data.dsum_plantrace.records.size() != 1U
++            ) {
++            return fail();
++        }
++
++        const Cnr3DiagPlanTraceRecord& record = data.dsum_plantrace.records[0];
++        if (
++            record.phase != Cnr3DiagPlanTracePhase::result ||
++            record.frame_number != 7 ||
++            record.result.outcome != Cnr3DiagPlanTraceOutcome::failed ||
++            record.result.fail_reason != Cnr3DiagPlanTraceFailReason::invalid_lifecycle ||
++            record.result.error_here_frames.size() != 1U ||
++            record.result.error_here_frames[0] != 7 ||
++            !record.result.not_reached_frames.empty() ||
++            !record.result.computed_frames.empty() ||
++            !record.result.adopted_skipped_frames.empty() ||
++            !record.result.post_compute_loser_frames.empty()
++            ) {
++            return fail();
++        }
++
++#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
++        const std::size_t record_count_before_clean_end = data.dsum_plantrace.records.size();
++        cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
++            data.config.instance_id,
++            data.dsum_plantrace
++        );
++        if (data.dsum_plantrace.records.size() != record_count_before_clean_end) {
++            return fail();
++        }
++#endif
++
++        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++    }
++
++    {
++        Cnr3CacheCoreSelftestVsApiState vsapi_state{};
++        g_cnr3_cache_core_selftest_vsapi_state = &vsapi_state;
++
++        VSAPI vsapi = cnr3_cache_core_selftest_make_vsapi();
++        Cnr3FilterData data{};
++        data.video_info.width = 4;
++        data.video_info.height = 4;
++        data.bits_per_sample = 8;
++        data.sub_sampling_w = 1;
++        data.sub_sampling_h = 1;
++
++        int source_node_storage = 0;
++        int frame_ctx_storage = 0;
++        int anchor_frame_storage = 2900;
++        int first_hole_frame_storage = 3000;
++        data.source = reinterpret_cast<VSNode*>(&source_node_storage);
++
++        const VSFrame* anchor_frame =
++            reinterpret_cast<const VSFrame*>(&anchor_frame_storage);
++        const VSFrame* first_hole_frame =
++            reinterpret_cast<const VSFrame*>(&first_hole_frame_storage);
++
++        if (
++            !cnr3_status_is_ok(store_seed_frame(
++                data.output_cache,
++                29,
++                anchor_frame,
++                false,
++                &vsapi
++            ))
++            ) {
++            return fail();
++        }
++
++        void* frame_data = nullptr;
++        const VSFrame* initial_result = cnr3_arInitial(
++            33,
++            data,
++            &frame_data,
++            reinterpret_cast<VSFrameContext*>(&frame_ctx_storage),
++            nullptr,
++            &vsapi
++        );
++
++        if (
++            initial_result != nullptr ||
++            frame_data == nullptr ||
++            vsapi_state.set_filter_error_count != 0 ||
++            vsapi_state.request_frame_filter_count != 4 ||
++            data.dsum_plantrace.dumped ||
++            data.dsum_plantrace.records.size() != 1U
++            ) {
++            (void)cnr3_discard_frame_data_with_cache(frame_data ? &frame_data : nullptr, data.output_cache);
++            return fail();
++        }
++
++        const Cnr3DiagPlanTraceRecord& open_record = data.dsum_plantrace.records[0];
++        if (
++            open_record.phase != Cnr3DiagPlanTracePhase::open ||
++            open_record.frame_number != 33 ||
++            open_record.open.strategy != Cnr3DiagPlanTraceStrategy::recovery_exact ||
++            open_record.open.anchor_frame != 29 ||
++            open_record.open.hole_frames.size() != 3U ||
++            open_record.open.hole_frames[0] != 30 ||
++            open_record.open.hole_frames[1] != 31 ||
++            open_record.open.hole_frames[2] != 32
++            ) {
++            (void)cnr3_discard_frame_data_with_cache(&frame_data, data.output_cache);
++            return fail();
++        }
++
++        if (
++            !cnr3_status_is_ok(store_seed_frame(
++                data.output_cache,
++                30,
++                first_hole_frame,
++                true,
++                &vsapi
++            ))
++            ) {
++            (void)cnr3_discard_frame_data_with_cache(&frame_data, data.output_cache);
++            return fail();
++        }
++
++        const VSFrame* all_ready_result = cnr3_arAllFramesReady(
++            33,
++            data,
++            &frame_data,
++            reinterpret_cast<VSFrameContext*>(&frame_ctx_storage),
++            nullptr,
++            &vsapi
++        );
++
++        if (
++            all_ready_result != nullptr ||
++            frame_data != nullptr ||
++            vsapi_state.set_filter_error_count != 1 ||
++            vsapi_state.get_frame_filter_count != 1 ||
++            vsapi_state.last_retrieved_filter_frame != 31 ||
++            !data.dsum_plantrace.dumped ||
++            data.dsum_plantrace.records.size() != 2U
++            ) {
++            (void)cnr3_discard_frame_data_with_cache(&frame_data, data.output_cache);
++            return fail();
++        }
++
++        const Cnr3DiagPlanTraceRecord& failed_record = data.dsum_plantrace.records[1];
++        if (
++            failed_record.phase != Cnr3DiagPlanTracePhase::result ||
++            failed_record.frame_number != 33 ||
++            failed_record.result.outcome != Cnr3DiagPlanTraceOutcome::failed ||
++            failed_record.result.fail_reason != Cnr3DiagPlanTraceFailReason::source_retrieval_failed ||
++            failed_record.result.error_here_frames.size() != 1U ||
++            failed_record.result.error_here_frames[0] != 31 ||
++            failed_record.result.not_reached_frames.size() != 2U ||
++            failed_record.result.not_reached_frames[0] != 32 ||
++            failed_record.result.not_reached_frames[1] != 33 ||
++            !failed_record.result.computed_frames.empty() ||
++            failed_record.result.adopted_skipped_frames.size() != 1U ||
++            failed_record.result.adopted_skipped_frames[0] != 30 ||
++            !failed_record.result.post_compute_loser_frames.empty()
++            ) {
++            return fail();
++        }
++
++#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
++        const std::size_t record_count_before_clean_end = data.dsum_plantrace.records.size();
++        cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
++            data.config.instance_id,
++            data.dsum_plantrace
++        );
++        if (data.dsum_plantrace.records.size() != record_count_before_clean_end) {
++            return fail();
++        }
++#endif
++
++        if (!cnr3_status_is_ok(data.output_cache.clear())) {
++            return fail();
++        }
++
++        g_cnr3_cache_core_selftest_vsapi_state = nullptr;
++    }
++
++    cnr3_cache_core_selftest_trace_line(
++        "DIAG.3c.2 induced live bail proof scenario"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    arInitial invalid-lifecycle bail emits a minimal FAILED record with E=N and X=[]"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    recovery arAllFramesReady null getFrameFilter bail derives E from the failing hole"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    recovery arAllFramesReady FAILED record derives non-empty X from the live plan remainder"
++    );
++    cnr3_cache_core_selftest_trace_line(
++        "    once-guarded bail dump prevents a duplicate clean-end plantrace block"
++    );
++
++    return Cnr3Status::ok;
++}
++
++#endif
++
++
++
+ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+     using Cnr3CacheCoreSelftestFunction = Cnr3Status(*)() noexcept;
+ 
+@@ -16722,6 +17041,13 @@ Cnr3CacheCoreSelftestRunResult cnr3_cache_core_selftest_run_all() noexcept {
+             "as1_lookup_pin_record_atomicity",
+             cnr3_cache_core_selftest_as1_lookup_pin_record_atomicity
+         }
++#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
++        ,
++        {
++            "diag3c2_induced_live_bail_plantrace",
++            cnr3_cache_core_selftest_diag3c2_induced_bail_live_paths
++        }
++#endif
+     };
+ 
+     Cnr3CacheCoreSelftestRunResult result{};

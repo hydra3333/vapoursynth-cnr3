@@ -248,6 +248,17 @@ const VSFrame* VS_CC cnr3_get_frame_keystone_live_k1f_proof(
     Cnr3FilterData* data = static_cast<Cnr3FilterData*>(instance_data);
 
     if (data == nullptr || data->source == nullptr || frame_data == nullptr || core == nullptr || vsapi == nullptr) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        if (data != nullptr) {
+            cnr3_diag_plantrace_observe_minimal_failed_and_dump(
+                data->config.instance_id,
+                data->dsum_plantrace,
+                n,
+                Cnr3DiagPlanTraceFailReason::framedata_missing_or_unknown,
+                n
+            );
+        }
+#endif
         cnr3_set_filter_error(
             frame_ctx,
             vsapi,

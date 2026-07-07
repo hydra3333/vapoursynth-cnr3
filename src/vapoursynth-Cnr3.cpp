@@ -377,6 +377,12 @@ void VS_CC cnr3_free_filter(
         data->dsum14_scene_reset
     );
 #endif
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+    cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+        data->config.instance_id,
+        data->dsum_plantrace
+    );
+#endif
 
     if (data->source != nullptr && vsapi != nullptr) {
         vsapi->freeNode(data->source);

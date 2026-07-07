@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.3b-add-lifecycle-return-scene-DSUM-telemetry";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.3c.1-plantrace-clean-end-capture-v2";
 
 /*
     CMS07-P.11C.2 live scene-change default.
@@ -494,5 +494,31 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
 // paired safety cross-check:
 #if defined(CNR3_DIAG_PRINT_DSUM14_SCENE_RESET) && !defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
 #   error "Cannot print DSUM14_SCENE_RESET without computing DSUM14_SCENE_RESET"
+#endif
+// ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+// NOTE:    Comment out the relevant #define line(s) to
+//          disable compute and/or print for this diagnostic.
+// Gate Description:
+//  ID: DSUM-PLANTRACE
+//  Name: Plan/result per-frame trace
+//  Purpose: Emits buffered O/R getFrame plan/result records at clean end-of-run.
+//  Activation condition: Add when investigating getFrame strategy/result pairing.
+//  Collection: arInitial success exits publish O records; arAllFramesReady success exits
+//              publish R records. Bail-path dump, X/E, and failure reason stay in 3c.2.
+//  Human interpretation: This is a per-frame trace, not an aggregate summary. It is
+//                        observe-only and must compile out completely when the master
+//                        compute gate is disabled.
+#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+#   define CNR3_DIAG_PRINT_DSUM_PLANTRACE 1
+#endif
+// paired safety cross-check:
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE) && !defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+#   error "Cannot print DSUM_PLANTRACE without computing DSUM_PLANTRACE"
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+#   define CNR3_DIAG_DSUM_PLANTRACE_FROM_FRAME 0
+#   define CNR3_DIAG_DSUM_PLANTRACE_TO_FRAME 150
 #endif
 // ---------------------------------------------------------------------------------------------

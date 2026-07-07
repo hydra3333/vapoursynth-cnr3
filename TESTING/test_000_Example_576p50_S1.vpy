@@ -2,6 +2,7 @@ import sys
 from typing import Callable, Optional, Tuple, List
 from enum import Enum
 import random  # for the in-zone request shuffle
+random.seed(20260706)
 
 import vapoursynth as vs
 

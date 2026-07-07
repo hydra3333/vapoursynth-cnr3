@@ -336,6 +336,80 @@ namespace {
 
 #endif
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+    void cnr3_selftest_emit_dsum_plantrace_reference_dump() noexcept {
+        Cnr3DiagPlanTraceBuffer buffer{};
+
+        Cnr3DiagPlanTraceOpenFields cache_open{};
+        cache_open.strategy = Cnr3DiagPlanTraceStrategy::cache_hit;
+        cache_open.target_frame = 10;
+        cache_open.source_frames.push_back(10);
+        cache_open.pinned_frames.push_back(10);
+        cnr3_diag_plantrace_observe_open(
+            buffer,
+            10,
+            1000000000ULL,
+            1001000000ULL,
+            cache_open
+        );
+
+        Cnr3DiagPlanTraceResultFields cache_result{};
+        cache_result.outcome = Cnr3DiagPlanTraceOutcome::returned_cache_hit;
+        cnr3_diag_plantrace_observe_result(
+            buffer,
+            10,
+            2000000000ULL,
+            2002000000ULL,
+            cache_result
+        );
+
+        Cnr3DiagPlanTraceOpenFields recovery_open{};
+        recovery_open.strategy = Cnr3DiagPlanTraceStrategy::recovery_exact;
+        recovery_open.target_frame = 23;
+        recovery_open.predecessor_frame = 22;
+        recovery_open.anchor_frame = 19;
+        recovery_open.hole_frames.push_back(20);
+        recovery_open.hole_frames.push_back(21);
+        recovery_open.hole_frames.push_back(22);
+        recovery_open.source_frames.push_back(20);
+        recovery_open.source_frames.push_back(21);
+        recovery_open.source_frames.push_back(22);
+        recovery_open.source_frames.push_back(23);
+        recovery_open.pinned_frames.push_back(19);
+        cnr3_diag_plantrace_observe_open(
+            buffer,
+            23,
+            3000000000ULL,
+            3001000000ULL,
+            recovery_open
+        );
+
+        Cnr3DiagPlanTraceResultFields recovery_result{};
+        recovery_result.outcome = Cnr3DiagPlanTraceOutcome::returned_recovered;
+        recovery_result.adopted_skipped_frames.push_back(20);
+        recovery_result.computed_frames.push_back(21);
+        recovery_result.computed_frames.push_back(22);
+        recovery_result.computed_frames.push_back(23);
+        cnr3_diag_plantrace_observe_result(
+            buffer,
+            23,
+            4000000000ULL,
+            4003000000ULL,
+            recovery_result
+        );
+
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+        cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+            CNR3_SELFTEST_INSTANCE_ID,
+            buffer
+        );
+#endif
+    }
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
 
     void cnr3_selftest_emit_dsum12_reference_summary() noexcept {
@@ -610,6 +684,9 @@ int main(int argc, char** argv) {
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
     cnr3_selftest_emit_dsum14_reference_summary();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    cnr3_selftest_emit_dsum_plantrace_reference_dump();
 #endif
 
     cnr3_selftest_print_summary_to_stderr(result);

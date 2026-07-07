@@ -37,6 +37,9 @@ struct Cnr3FilterData {
     int sub_sampling_h = -1;
     double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
     Cnr3SceneChangeConfig scene_change_config{};
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    Cnr3DiagPlanTraceBuffer dsum_plantrace{};
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     Cnr3DiagDsum01RequestOrderStats dsum01_request_order{};
 #endif
@@ -102,6 +105,9 @@ struct Cnr3LiveGetFrameFrameData {
     Cnr3LiveRecoveryHoleOutcome recovery_floor_outcome = Cnr3LiveRecoveryHoleOutcome::none;
     std::vector<int> source_request_frame_numbers{};
     std::vector<Cnr3LiveRecoveryHoleOutcome> per_hole_outcomes{};
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    Cnr3DiagPlanTraceTick plantrace_ar_all_enter_tick = 0;
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
     Cnr3DiagDsum12RecoveryPlanStats* dsum12_recovery_plan_stats = nullptr;
 #endif

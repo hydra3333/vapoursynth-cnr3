@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <vector>
 
 /*
     CNR3 generic diagnostics output core.
@@ -95,6 +96,108 @@ void cnr3_diag_write_line(
     Cnr3StderrFlushPolicy::no_flush for individual lines.
 */
 void cnr3_diag_flush_stderr() noexcept;
+
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+using Cnr3DiagPlanTraceTick = std::uint64_t;
+
+enum class Cnr3DiagPlanTracePhase : unsigned char {
+    open = 0,
+    result
+};
+
+enum class Cnr3DiagPlanTraceStrategy : unsigned char {
+    none = 0,
+    cache_hit,
+    frame0,
+    predecessor_present,
+    recovery_exact,
+    recovery_floor
+};
+
+enum class Cnr3DiagPlanTraceOutcome : unsigned char {
+    none = 0,
+    returned_cache_hit,
+    returned_computed,
+    returned_recovered
+};
+
+struct Cnr3DiagPlanTraceOpenFields {
+    Cnr3DiagPlanTraceStrategy strategy = Cnr3DiagPlanTraceStrategy::none;
+    int target_frame = CNR3_INVALID_FRAME_NUMBER;
+    int predecessor_frame = CNR3_INVALID_FRAME_NUMBER;
+    int anchor_frame = CNR3_INVALID_FRAME_NUMBER;
+    int floor_frame = CNR3_INVALID_FRAME_NUMBER;
+    std::vector<int> hole_frames{};
+    std::vector<int> source_frames{};
+    std::vector<int> pinned_frames{};
+};
+
+struct Cnr3DiagPlanTraceResultFields {
+    Cnr3DiagPlanTraceOutcome outcome = Cnr3DiagPlanTraceOutcome::none;
+    std::vector<int> computed_frames{};
+    std::vector<int> adopted_skipped_frames{};
+    std::vector<int> post_compute_loser_frames{};
+};
+
+struct Cnr3DiagPlanTraceRecord {
+    Cnr3DiagPlanTracePhase phase = Cnr3DiagPlanTracePhase::open;
+    int frame_number = CNR3_INVALID_FRAME_NUMBER;
+    std::uint64_t action_seq = 0;
+    Cnr3DiagPlanTraceTick enter_tick = 0;
+    Cnr3DiagPlanTraceTick exit_tick = 0;
+    Cnr3DiagPlanTraceOpenFields open{};
+    Cnr3DiagPlanTraceResultFields result{};
+};
+
+/*
+    DSUM-PLANTRACE per-instance buffer.
+
+    This diagnostics-only mutex protects the plan-trace vector and action_seq
+    only. It is not a cache/CMS lock. enter_tick is sampled outside this mutex;
+    action_seq is incremented inside the same critical section as append.
+*/
+struct Cnr3DiagPlanTraceBuffer {
+    mutable std::mutex mutex{};
+    std::uint64_t next_action_seq = 0;
+    bool time_anchor_set = false;
+    Cnr3DiagPlanTraceTick steady_anchor_tick = 0;
+    long long system_anchor_epoch_ms = 0;
+    bool dumped = false;
+    bool reserve_failed = false;
+    std::vector<Cnr3DiagPlanTraceRecord> records{};
+};
+
+[[nodiscard]] Cnr3DiagPlanTraceTick
+cnr3_diag_plantrace_sample_tick() noexcept;
+
+void cnr3_diag_plantrace_observe_open(
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    Cnr3DiagPlanTraceTick exit_tick,
+    const Cnr3DiagPlanTraceOpenFields& fields
+) noexcept;
+
+void cnr3_diag_plantrace_observe_result(
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    Cnr3DiagPlanTraceTick exit_tick,
+    const Cnr3DiagPlanTraceResultFields& fields
+) noexcept;
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+
+void cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer
+) noexcept;
+
+#endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
 

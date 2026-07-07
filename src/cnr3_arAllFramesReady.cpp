@@ -199,6 +199,105 @@ const char* cnr3_live_recovery_branch_name(
     }
 }
 
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+void cnr3_diag_plantrace_add_store_result_frame(
+    Cnr3DiagPlanTraceResultFields& fields,
+    int frame_number,
+    Cnr3Status store_status
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return;
+    }
+
+    if (store_status == Cnr3Status::duplicate) {
+        fields.post_compute_loser_frames.push_back(frame_number);
+        return;
+    }
+
+    fields.computed_frames.push_back(frame_number);
+}
+
+void cnr3_diag_plantrace_add_recovery_outcome_frame(
+    Cnr3DiagPlanTraceResultFields& fields,
+    int frame_number,
+    Cnr3LiveRecoveryHoleOutcome outcome
+) {
+    if (!cnr3_frame_number_is_valid(frame_number)) {
+        return;
+    }
+
+    switch (outcome) {
+    case Cnr3LiveRecoveryHoleOutcome::computed:
+        fields.computed_frames.push_back(frame_number);
+        return;
+    case Cnr3LiveRecoveryHoleOutcome::adopted_skipped:
+        fields.adopted_skipped_frames.push_back(frame_number);
+        return;
+    case Cnr3LiveRecoveryHoleOutcome::adopted_post_compute_loser:
+        fields.post_compute_loser_frames.push_back(frame_number);
+        return;
+    case Cnr3LiveRecoveryHoleOutcome::none:
+    default:
+        return;
+    }
+}
+
+Cnr3DiagPlanTraceResultFields cnr3_diag_plantrace_make_cache_hit_result() {
+    Cnr3DiagPlanTraceResultFields fields{};
+    fields.outcome = Cnr3DiagPlanTraceOutcome::returned_cache_hit;
+    return fields;
+}
+
+Cnr3DiagPlanTraceResultFields cnr3_diag_plantrace_make_computed_result(
+    int frame_number,
+    Cnr3Status store_status
+) {
+    Cnr3DiagPlanTraceResultFields fields{};
+    fields.outcome = Cnr3DiagPlanTraceOutcome::returned_computed;
+    cnr3_diag_plantrace_add_store_result_frame(fields, frame_number, store_status);
+
+    return fields;
+}
+
+Cnr3DiagPlanTraceResultFields cnr3_diag_plantrace_make_recovery_result(
+    int frame_number,
+    Cnr3LiveRecoveryBranch recovery_branch,
+    int recovery_floor_frame,
+    Cnr3LiveRecoveryHoleOutcome floor_outcome,
+    const Cnr3CacheRecoverySearchPlan& recovery_plan,
+    const std::vector<Cnr3LiveRecoveryHoleOutcome>& hole_outcomes,
+    Cnr3Status target_store_status
+) {
+    Cnr3DiagPlanTraceResultFields fields{};
+    fields.outcome = Cnr3DiagPlanTraceOutcome::returned_recovered;
+
+    if (recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+        cnr3_diag_plantrace_add_recovery_outcome_frame(
+            fields,
+            recovery_floor_frame,
+            floor_outcome
+        );
+    }
+
+    const std::size_t hole_count = recovery_plan.hole_frame_numbers.size();
+    for (std::size_t i = 0U; i < hole_count; ++i) {
+        const Cnr3LiveRecoveryHoleOutcome outcome =
+            i < hole_outcomes.size() ? hole_outcomes[i] : Cnr3LiveRecoveryHoleOutcome::none;
+        cnr3_diag_plantrace_add_recovery_outcome_frame(
+            fields,
+            recovery_plan.hole_frame_numbers[i],
+            outcome
+        );
+    }
+
+    cnr3_diag_plantrace_add_store_result_frame(fields, frame_number, target_store_status);
+    return fields;
+}
+
+#endif
+
 std::string cnr3_join_frame_numbers_for_kdt(
     const std::vector<int>& frame_numbers
 ) {
@@ -1017,6 +1116,12 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
 #if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
     cnr3_diag_dsum09_observe_lookup_ref_acquired(data.dsum09_return_transfer);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    const Cnr3DiagPlanTraceTick plantrace_enter_tick =
+        request_data->plantrace_ar_all_enter_tick;
+    const Cnr3DiagPlanTraceResultFields plantrace_result_fields =
+        cnr3_diag_plantrace_make_cache_hit_result();
+#endif
     const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
         frame_data,
         data.output_cache
@@ -1053,6 +1158,15 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
         true
     );
     cnr3_diag_dsum09_observe_lookup_ref_transferred(data.dsum09_return_transfer);
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    cnr3_diag_plantrace_observe_result(
+        data.dsum_plantrace,
+        n,
+        plantrace_enter_tick,
+        cnr3_diag_plantrace_sample_tick(),
+        plantrace_result_fields
+    );
 #endif
     return returned_cache_ref.transfer_to_caller();
 }
@@ -1260,6 +1374,15 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
 
     const int predecessor_frame_for_trace = request_data->predecessor_frame;
     (void)returned_cached_winner;
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    const Cnr3DiagPlanTraceTick plantrace_enter_tick =
+        request_data->plantrace_ar_all_enter_tick;
+    const Cnr3DiagPlanTraceResultFields plantrace_result_fields =
+        cnr3_diag_plantrace_make_computed_result(
+            n,
+            store_status
+        );
+#endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
     cnr3_diag_dsum13_observe_compute_completion(data.dsum13_recalculation, n, 0);
@@ -1288,6 +1411,16 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
         process_summary,
         store_as_checkpoint
     );
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    cnr3_diag_plantrace_observe_result(
+        data.dsum_plantrace,
+        n,
+        plantrace_enter_tick,
+        cnr3_diag_plantrace_sample_tick(),
+        plantrace_result_fields
+    );
+#endif
 
     return return_frame;
 }
@@ -2048,6 +2181,20 @@ const VSFrame* cnr3_complete_live_recovery(
     const Cnr3Status target_store_status_for_trace = target_store_status;
     const std::size_t pin_list_size_before_discharge =
         request_data->pin_list.pin_count();
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    const Cnr3DiagPlanTraceTick plantrace_enter_tick =
+        request_data->plantrace_ar_all_enter_tick;
+    const Cnr3DiagPlanTraceResultFields plantrace_result_fields =
+        cnr3_diag_plantrace_make_recovery_result(
+            n,
+            recovery_branch_for_trace,
+            recovery_floor_frame_for_trace,
+            floor_outcome_for_trace,
+            recovery_plan_for_trace,
+            hole_outcomes_for_trace,
+            target_store_status_for_trace
+        );
+#endif
 
     const Cnr3Status discard_status = cnr3_discard_frame_data_with_cache(
         frame_data,
@@ -2082,6 +2229,16 @@ const VSFrame* cnr3_complete_live_recovery(
         target_store_as_checkpoint_for_trace,
         target_store_status_for_trace
     );
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    cnr3_diag_plantrace_observe_result(
+        data.dsum_plantrace,
+        n,
+        plantrace_enter_tick,
+        cnr3_diag_plantrace_sample_tick(),
+        plantrace_result_fields
+    );
+#endif
 
     return return_frame;
 }
@@ -2272,6 +2429,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
     cnr3_diag_dsum13_observe_compute_completion(data.dsum13_recalculation, n, 0);
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    const Cnr3DiagPlanTraceTick plantrace_enter_tick =
+        request_data->plantrace_ar_all_enter_tick;
+    const Cnr3DiagPlanTraceResultFields plantrace_result_fields =
+        cnr3_diag_plantrace_make_computed_result(
+            n,
+            store_status
+        );
+#endif
 
     cnr3_trace_live_frame0_fresh_start(
         data,
@@ -2306,6 +2472,15 @@ const VSFrame* cnr3_complete_live_frame0_fresh_start(
         data.dsum07_temp_output_lifecycle
     );
 #endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    cnr3_diag_plantrace_observe_result(
+        data.dsum_plantrace,
+        n,
+        plantrace_enter_tick,
+        cnr3_diag_plantrace_sample_tick(),
+        plantrace_result_fields
+    );
+#endif
     return output_frame;
 }
 const VSFrame* cnr3_arAllFramesReady(
@@ -2316,6 +2491,11 @@ const VSFrame* cnr3_arAllFramesReady(
     VSCore* core,
     const VSAPI* vsapi
 ) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    const Cnr3DiagPlanTraceTick plantrace_ar_all_enter_tick =
+        cnr3_diag_plantrace_sample_tick();
+#endif
+
     Cnr3LiveGetFrameFrameData* request_data =
         static_cast<Cnr3LiveGetFrameFrameData*>(*frame_data);
 
@@ -2327,6 +2507,10 @@ const VSFrame* cnr3_arAllFramesReady(
         );
         return nullptr;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    request_data->plantrace_ar_all_enter_tick = plantrace_ar_all_enter_tick;
+#endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     cnr3_diag_dsum01_observe_ar_all_frames_ready(

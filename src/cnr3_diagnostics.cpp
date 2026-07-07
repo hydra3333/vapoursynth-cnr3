@@ -2,9 +2,15 @@
 #include "cnr3_build_config.h"
 #include "cnr3_cache_core.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -12,6 +18,49 @@ namespace {
         const char* text
     ) noexcept {
         return (text != nullptr) ? text : "(null)";
+    }
+
+
+    [[nodiscard]] bool cnr3_diag_frame_in_plantrace_window(
+        int frame_number
+    ) noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+        return frame_number >= CNR3_DIAG_DSUM_PLANTRACE_FROM_FRAME &&
+            frame_number <= CNR3_DIAG_DSUM_PLANTRACE_TO_FRAME;
+#else
+        (void)frame_number;
+        return false;
+#endif
+    }
+
+    [[nodiscard]] bool cnr3_diag_plantrace_frame_is_checkpoint(
+        int frame_number
+    ) noexcept {
+        return frame_number == 0 ||
+            (frame_number > 0 && (frame_number % CNR3_CACHE_CHECKPOINT_INTERVAL) == 0);
+    }
+
+    [[nodiscard]] std::uint64_t cnr3_diag_decimal_digits_u64(
+        std::uint64_t value
+    ) noexcept {
+        std::uint64_t digits = 1;
+
+        while (value >= 10U) {
+            value /= 10U;
+            ++digits;
+        }
+
+        return digits;
+    }
+
+    [[nodiscard]] std::uint64_t cnr3_diag_abs_int_as_u64(
+        int value
+    ) noexcept {
+        if (value >= 0) {
+            return static_cast<std::uint64_t>(value);
+        }
+
+        return static_cast<std::uint64_t>(-(static_cast<long long>(value)));
     }
 
     void cnr3_diag_saturating_increment(
@@ -286,6 +335,696 @@ void cnr3_diag_write_line(
 void cnr3_diag_flush_stderr() noexcept {
     std::fflush(stderr);
 }
+
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+namespace {
+
+    [[nodiscard]] const char* cnr3_diag_plantrace_phase_name(
+        Cnr3DiagPlanTracePhase phase
+    ) noexcept {
+        switch (phase) {
+        case Cnr3DiagPlanTracePhase::open:
+            return "O";
+        case Cnr3DiagPlanTracePhase::result:
+            return "R";
+        }
+
+        return "?";
+    }
+
+    [[nodiscard]] const char* cnr3_diag_plantrace_strategy_name(
+        Cnr3DiagPlanTraceStrategy strategy
+    ) noexcept {
+        switch (strategy) {
+        case Cnr3DiagPlanTraceStrategy::cache_hit:
+            return "CACHE_HIT";
+        case Cnr3DiagPlanTraceStrategy::frame0:
+            return "FRAME0";
+        case Cnr3DiagPlanTraceStrategy::predecessor_present:
+            return "PRED_PRESENT";
+        case Cnr3DiagPlanTraceStrategy::recovery_exact:
+            return "RECOVERY_EXACT";
+        case Cnr3DiagPlanTraceStrategy::recovery_floor:
+            return "RECOVERY_FLOOR";
+        case Cnr3DiagPlanTraceStrategy::none:
+        default:
+            return "NONE";
+        }
+    }
+
+    [[nodiscard]] const char* cnr3_diag_plantrace_outcome_name(
+        Cnr3DiagPlanTraceOutcome outcome
+    ) noexcept {
+        switch (outcome) {
+        case Cnr3DiagPlanTraceOutcome::returned_cache_hit:
+            return "RETURNED_CACHE_HIT";
+        case Cnr3DiagPlanTraceOutcome::returned_computed:
+            return "RETURNED_COMPUTED";
+        case Cnr3DiagPlanTraceOutcome::returned_recovered:
+            return "RETURNED_RECOVERED";
+        case Cnr3DiagPlanTraceOutcome::none:
+        default:
+            return "NONE";
+        }
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_unsigned(
+        std::uint64_t value,
+        int width
+    ) {
+        char text[64] = {};
+        std::snprintf(
+            text,
+            sizeof(text),
+            "%0*llu",
+            width,
+            static_cast<unsigned long long>(value)
+        );
+        text[sizeof(text) - 1U] = '\0';
+        return std::string{text};
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_key_frame(
+        int frame_number,
+        int width
+    ) {
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return "<none>";
+        }
+
+        return cnr3_diag_plantrace_format_unsigned(
+            static_cast<std::uint64_t>(frame_number),
+            width
+        );
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_role_frame(
+        int frame_number,
+        bool include_checkpoint_marker
+    ) {
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return "<none>";
+        }
+
+        std::string text = std::to_string(frame_number);
+
+        if (include_checkpoint_marker &&
+            cnr3_diag_plantrace_frame_is_checkpoint(frame_number)) {
+            text += "*";
+        }
+
+        return text;
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_frame_list(
+        const std::vector<int>& frames
+    ) {
+        std::string text{"["};
+
+        for (std::size_t i = 0U; i < frames.size(); ++i) {
+            if (i != 0U) {
+                text += ",";
+            }
+
+            text += cnr3_diag_plantrace_format_role_frame(frames[i], true);
+        }
+
+        text += "]";
+        return text;
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_single_frame_list(
+        int frame_number
+    ) {
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return "[]";
+        }
+
+        return cnr3_diag_plantrace_format_frame_list(
+            std::vector<int>{ frame_number }
+        );
+    }
+
+    void cnr3_diag_plantrace_add_code(
+        std::vector<std::pair<int, std::string>>& codes,
+        int frame_number,
+        char code
+    ) {
+        if (!cnr3_frame_number_is_valid(frame_number)) {
+            return;
+        }
+
+        for (auto& entry : codes) {
+            if (entry.first == frame_number) {
+                if (entry.second.find(code) == std::string::npos) {
+                    entry.second += code;
+                }
+                return;
+            }
+        }
+
+        codes.push_back(std::make_pair(frame_number, std::string(1U, code)));
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_codes(
+        std::vector<std::pair<int, std::string>> codes
+    ) {
+        std::sort(
+            codes.begin(),
+            codes.end(),
+            [](const auto& left, const auto& right) noexcept {
+                return left.first < right.first;
+            }
+        );
+
+        std::string text{"["};
+
+        for (std::size_t i = 0U; i < codes.size(); ++i) {
+            if (i != 0U) {
+                text += ",";
+            }
+
+            text += cnr3_diag_plantrace_format_role_frame(codes[i].first, true);
+            text += "=";
+            text += codes[i].second;
+        }
+
+        text += "]";
+        return text;
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_open_codes(
+        const Cnr3DiagPlanTraceOpenFields& open
+    ) {
+        std::vector<std::pair<int, std::string>> codes{};
+
+        cnr3_diag_plantrace_add_code(codes, open.target_frame, 'T');
+        cnr3_diag_plantrace_add_code(codes, open.predecessor_frame, 'P');
+        cnr3_diag_plantrace_add_code(codes, open.anchor_frame, 'A');
+        cnr3_diag_plantrace_add_code(codes, open.floor_frame, 'F');
+
+        for (const int frame : open.hole_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'H');
+        }
+        for (const int frame : open.source_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'S');
+        }
+        for (const int frame : open.pinned_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'N');
+        }
+
+        return cnr3_diag_plantrace_format_codes(std::move(codes));
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_result_codes(
+        const Cnr3DiagPlanTraceResultFields& result
+    ) {
+        std::vector<std::pair<int, std::string>> codes{};
+
+        for (const int frame : result.computed_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'C');
+        }
+        for (const int frame : result.adopted_skipped_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'K');
+        }
+        for (const int frame : result.post_compute_loser_frames) {
+            cnr3_diag_plantrace_add_code(codes, frame, 'L');
+        }
+
+        return cnr3_diag_plantrace_format_codes(std::move(codes));
+    }
+
+    [[nodiscard]] std::string cnr3_diag_plantrace_format_utc_ms(
+        long long epoch_ms
+    ) {
+        const std::time_t epoch_seconds =
+            static_cast<std::time_t>(epoch_ms / 1000LL);
+        int millisecond_part = static_cast<int>(epoch_ms % 1000LL);
+
+        if (millisecond_part < 0) {
+            millisecond_part += 1000;
+        }
+
+        std::tm utc_tm{};
+#if defined(_WIN32)
+        gmtime_s(&utc_tm, &epoch_seconds);
+#else
+        gmtime_r(&epoch_seconds, &utc_tm);
+#endif
+
+        char text[40] = {};
+        std::snprintf(
+            text,
+            sizeof(text),
+            "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+            utc_tm.tm_year + 1900,
+            utc_tm.tm_mon + 1,
+            utc_tm.tm_mday,
+            utc_tm.tm_hour,
+            utc_tm.tm_min,
+            utc_tm.tm_sec,
+            millisecond_part
+        );
+        text[sizeof(text) - 1U] = '\0';
+        return std::string{text};
+    }
+
+    [[nodiscard]] long long cnr3_diag_plantrace_utc_ms_for_tick(
+        Cnr3DiagPlanTraceTick tick,
+        Cnr3DiagPlanTraceTick anchor_tick,
+        long long anchor_epoch_ms
+    ) noexcept {
+        if (tick >= anchor_tick) {
+            return anchor_epoch_ms +
+                static_cast<long long>((tick - anchor_tick) / 1000000ULL);
+        }
+
+        return anchor_epoch_ms -
+            static_cast<long long>((anchor_tick - tick) / 1000000ULL);
+    }
+
+    [[nodiscard]] int cnr3_diag_plantrace_frame_width() noexcept {
+        const std::uint64_t from_abs = cnr3_diag_abs_int_as_u64(
+            CNR3_DIAG_DSUM_PLANTRACE_FROM_FRAME
+        );
+        const std::uint64_t to_abs = cnr3_diag_abs_int_as_u64(
+            CNR3_DIAG_DSUM_PLANTRACE_TO_FRAME
+        );
+        const std::uint64_t max_abs = from_abs > to_abs ? from_abs : to_abs;
+        const std::uint64_t digits = cnr3_diag_decimal_digits_u64(max_abs);
+        return static_cast<int>(digits > 8U ? digits : 8U);
+    }
+
+    [[nodiscard]] std::uint64_t cnr3_diag_plantrace_window_frame_count() noexcept {
+        if (CNR3_DIAG_DSUM_PLANTRACE_TO_FRAME < CNR3_DIAG_DSUM_PLANTRACE_FROM_FRAME) {
+            return 0U;
+        }
+
+        return static_cast<std::uint64_t>(
+            CNR3_DIAG_DSUM_PLANTRACE_TO_FRAME -
+            CNR3_DIAG_DSUM_PLANTRACE_FROM_FRAME + 1
+        );
+    }
+
+    [[nodiscard]] int cnr3_diag_plantrace_action_seq_width() noexcept {
+        const std::uint64_t max_records =
+            2ULL * cnr3_diag_plantrace_window_frame_count();
+        const std::uint64_t digits = cnr3_diag_decimal_digits_u64(max_records);
+        return static_cast<int>(digits > 8U ? digits : 8U);
+    }
+
+    void cnr3_diag_plantrace_write_line(
+        Cnr3InstanceId instance_id,
+        const std::string& text
+    ) noexcept {
+        cnr3_diag_write_line(
+            instance_id,
+            Cnr3DiagnosticLevel::info,
+            "DSUM-PLANTRACE",
+            text.c_str(),
+            Cnr3StderrFlushPolicy::flush
+        );
+    }
+
+    void cnr3_diag_plantrace_write_legend(
+        Cnr3InstanceId instance_id
+    ) noexcept {
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend phase    O = plan_open"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend phase    R = plan_result"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend strategy CACHE_HIT / FRAME0 / PRED_PRESENT / RECOVERY_EXACT / RECOVERY_FLOOR   (O)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend outcome  RETURNED_CACHE_HIT / RETURNED_COMPUTED / RETURNED_RECOVERED  (R; FAILED: 3c.2)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   target                   the requested output frame N"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   predecessor              frame N-1 used as the compute base (PRED_PRESENT)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   anchor                   recovery start frame with a present output (RECOVERY_EXACT)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   floor                    fresh-start base frame when no anchor exists (RECOVERY_FLOOR)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   holes                    absent output frames the plan will compute/fill"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   sources                  source frames queued for fetch ([N] for non-recovery branches)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-item   pinned                   frames this plan pinned as its compute base"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend R-item   computed                 frames computed and stored this plan"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend R-item   adopted_skipped          frames found already present; pinned, compute skipped"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend R-item   post_compute_discarded   frames computed then discarded (lost the race)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-code   T = target        P = predecessor   A = anchor   F = floor"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend O-code   H = hole          S = source        N = pinned"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend R-code   C = computed      K = adopted_skipped"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend R-code   L = post_compute_discarded          N = none"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend glyph    *  checkpoint-grid frame (rides on a frame number in a role list or codes)"
+        );
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] legend codes    per-frame composed roles/outcomes, e.g. codes=[6=PN,7=TS] or codes=[120=K,121=C]"
+        );
+    }
+
+    void cnr3_diag_plantrace_write_record(
+        Cnr3InstanceId instance_id,
+        const Cnr3DiagPlanTraceRecord& record,
+        Cnr3DiagPlanTraceTick anchor_tick,
+        long long anchor_epoch_ms,
+        int frame_width,
+        int action_seq_width
+    ) noexcept {
+        try {
+            const long long enter_epoch_ms = cnr3_diag_plantrace_utc_ms_for_tick(
+                record.enter_tick,
+                anchor_tick,
+                anchor_epoch_ms
+            );
+            const long long exit_epoch_ms = cnr3_diag_plantrace_utc_ms_for_tick(
+                record.exit_tick,
+                anchor_tick,
+                anchor_epoch_ms
+            );
+            const double run_ms =
+                record.exit_tick >= record.enter_tick
+                ? static_cast<double>(record.exit_tick - record.enter_tick) / 1000000.0
+                : 0.0;
+
+            const std::string enter_tick_text = cnr3_diag_plantrace_format_unsigned(
+                record.enter_tick,
+                20
+            );
+            const std::string exit_tick_text = cnr3_diag_plantrace_format_unsigned(
+                record.exit_tick,
+                20
+            );
+            const std::string seq_text = cnr3_diag_plantrace_format_unsigned(
+                record.action_seq,
+                action_seq_width
+            );
+            const std::string frame_text = cnr3_diag_plantrace_format_key_frame(
+                record.frame_number,
+                frame_width
+            );
+            const std::string enter_utc = cnr3_diag_plantrace_format_utc_ms(enter_epoch_ms);
+            const std::string exit_utc = cnr3_diag_plantrace_format_utc_ms(exit_epoch_ms);
+            char run_text[48] = {};
+            std::snprintf(run_text, sizeof(run_text), "%.3f", run_ms);
+            run_text[sizeof(run_text) - 1U] = '\0';
+
+            std::string line{"[DSUM-PLANTRACE] "};
+            line += cnr3_diag_plantrace_phase_name(record.phase);
+            line += " enter_tick=";
+            line += enter_tick_text;
+            line += " seq=";
+            line += seq_text;
+            line += " frame=";
+            line += frame_text;
+            line += " exit_tick=";
+            line += exit_tick_text;
+
+            if (record.phase == Cnr3DiagPlanTracePhase::open) {
+                line += " strategy=";
+                line += cnr3_diag_plantrace_strategy_name(record.open.strategy);
+                line += " enter_utc=";
+                line += enter_utc;
+                line += " exit_utc=";
+                line += exit_utc;
+                line += " run_ms=";
+                line += run_text;
+                line += " target=";
+                line += cnr3_diag_plantrace_format_single_frame_list(record.open.target_frame);
+                line += " predecessor=";
+                line += cnr3_diag_plantrace_format_single_frame_list(record.open.predecessor_frame);
+                line += " anchor=";
+                line += cnr3_diag_plantrace_format_single_frame_list(record.open.anchor_frame);
+                line += " floor=";
+                line += cnr3_diag_plantrace_format_single_frame_list(record.open.floor_frame);
+                line += " holes=";
+                line += cnr3_diag_plantrace_format_frame_list(record.open.hole_frames);
+                line += " sources=";
+                line += cnr3_diag_plantrace_format_frame_list(record.open.source_frames);
+                line += " pinned=";
+                line += cnr3_diag_plantrace_format_frame_list(record.open.pinned_frames);
+                line += " codes=";
+                line += cnr3_diag_plantrace_open_codes(record.open);
+                cnr3_diag_plantrace_write_line(instance_id, line);
+                return;
+            }
+
+            line += " outcome=";
+            line += cnr3_diag_plantrace_outcome_name(record.result.outcome);
+            line += " enter_utc=";
+            line += enter_utc;
+            line += " exit_utc=";
+            line += exit_utc;
+            line += " run_ms=";
+            line += run_text;
+            line += " computed=";
+            line += cnr3_diag_plantrace_format_frame_list(record.result.computed_frames);
+            line += " adopted_skipped=";
+            line += cnr3_diag_plantrace_format_frame_list(record.result.adopted_skipped_frames);
+            line += " post_compute_discarded=";
+            line += cnr3_diag_plantrace_format_frame_list(record.result.post_compute_loser_frames);
+            line += " codes=";
+            line += cnr3_diag_plantrace_result_codes(record.result);
+            cnr3_diag_plantrace_write_line(instance_id, line);
+        }
+        catch (...) {
+            cnr3_diag_plantrace_write_line(
+                instance_id,
+                "[DSUM-PLANTRACE] formatting_error"
+            );
+        }
+    }
+
+} // namespace
+
+Cnr3DiagPlanTraceTick cnr3_diag_plantrace_sample_tick() noexcept {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return static_cast<Cnr3DiagPlanTraceTick>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()
+    );
+}
+
+void cnr3_diag_plantrace_observe_open(
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    Cnr3DiagPlanTraceTick exit_tick,
+    const Cnr3DiagPlanTraceOpenFields& fields
+) noexcept {
+    if (!cnr3_diag_frame_in_plantrace_window(frame_number)) {
+        return;
+    }
+
+    Cnr3DiagPlanTraceRecord record{};
+    record.phase = Cnr3DiagPlanTracePhase::open;
+    record.frame_number = frame_number;
+    record.enter_tick = enter_tick;
+    record.exit_tick = exit_tick;
+    record.open = fields;
+
+    try {
+        std::lock_guard<std::mutex> lock(buffer.mutex);
+
+        if (!buffer.time_anchor_set) {
+            const auto system_now = std::chrono::system_clock::now().time_since_epoch();
+            buffer.system_anchor_epoch_ms = static_cast<long long>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(system_now).count()
+            );
+            buffer.steady_anchor_tick = enter_tick;
+            buffer.time_anchor_set = true;
+        }
+
+        if (buffer.records.capacity() == 0U) {
+            buffer.records.reserve(
+                static_cast<std::size_t>(2ULL * cnr3_diag_plantrace_window_frame_count())
+            );
+        }
+
+        record.action_seq = ++buffer.next_action_seq;
+        buffer.records.push_back(std::move(record));
+    }
+    catch (...) {
+        std::lock_guard<std::mutex> lock(buffer.mutex);
+        buffer.reserve_failed = true;
+    }
+}
+
+void cnr3_diag_plantrace_observe_result(
+    Cnr3DiagPlanTraceBuffer& buffer,
+    int frame_number,
+    Cnr3DiagPlanTraceTick enter_tick,
+    Cnr3DiagPlanTraceTick exit_tick,
+    const Cnr3DiagPlanTraceResultFields& fields
+) noexcept {
+    if (!cnr3_diag_frame_in_plantrace_window(frame_number)) {
+        return;
+    }
+
+    Cnr3DiagPlanTraceRecord record{};
+    record.phase = Cnr3DiagPlanTracePhase::result;
+    record.frame_number = frame_number;
+    record.enter_tick = enter_tick;
+    record.exit_tick = exit_tick;
+    record.result = fields;
+
+    try {
+        std::lock_guard<std::mutex> lock(buffer.mutex);
+
+        if (!buffer.time_anchor_set) {
+            const auto system_now = std::chrono::system_clock::now().time_since_epoch();
+            buffer.system_anchor_epoch_ms = static_cast<long long>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(system_now).count()
+            );
+            buffer.steady_anchor_tick = enter_tick;
+            buffer.time_anchor_set = true;
+        }
+
+        if (buffer.records.capacity() == 0U) {
+            buffer.records.reserve(
+                static_cast<std::size_t>(2ULL * cnr3_diag_plantrace_window_frame_count())
+            );
+        }
+
+        record.action_seq = ++buffer.next_action_seq;
+        buffer.records.push_back(std::move(record));
+    }
+    catch (...) {
+        std::lock_guard<std::mutex> lock(buffer.mutex);
+        buffer.reserve_failed = true;
+    }
+}
+
+#endif
+
+#if defined(CNR3_DIAG_PRINT_DSUM_PLANTRACE)
+
+void cnr3_diag_plantrace_write_clean_end_dump_to_stderr(
+    Cnr3InstanceId instance_id,
+    Cnr3DiagPlanTraceBuffer& buffer
+) noexcept {
+    std::vector<Cnr3DiagPlanTraceRecord> records{};
+    Cnr3DiagPlanTraceTick anchor_tick = 0;
+    long long anchor_epoch_ms = 0;
+    bool reserve_failed = false;
+    bool already_dumped = false;
+
+    try {
+        std::lock_guard<std::mutex> lock(buffer.mutex);
+        already_dumped = buffer.dumped;
+
+        if (!buffer.dumped) {
+            records = buffer.records;
+            anchor_tick = buffer.steady_anchor_tick;
+            anchor_epoch_ms = buffer.system_anchor_epoch_ms;
+            reserve_failed = buffer.reserve_failed;
+            buffer.dumped = true;
+        }
+    }
+    catch (...) {
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] snapshot_error"
+        );
+        return;
+    }
+
+    if (already_dumped) {
+        return;
+    }
+
+    const int frame_width = cnr3_diag_plantrace_frame_width();
+    const int action_seq_width = cnr3_diag_plantrace_action_seq_width();
+    const std::string record_count = std::to_string(records.size());
+
+    cnr3_diag_plantrace_write_line(
+        instance_id,
+        std::string{"[DSUM-PLANTRACE] BEGIN schema=3c1v1 instance="} +
+        std::to_string(instance_id.value) +
+        " window=[" + std::to_string(CNR3_DIAG_DSUM_PLANTRACE_FROM_FRAME) +
+        "," + std::to_string(CNR3_DIAG_DSUM_PLANTRACE_TO_FRAME) +
+        "] records=" + record_count
+    );
+
+    cnr3_diag_plantrace_write_legend(instance_id);
+
+    if (reserve_failed) {
+        cnr3_diag_plantrace_write_line(
+            instance_id,
+            "[DSUM-PLANTRACE] warning reserve_or_append_failed records_may_be_incomplete"
+        );
+    }
+
+    for (const Cnr3DiagPlanTraceRecord& record : records) {
+        cnr3_diag_plantrace_write_record(
+            instance_id,
+            record,
+            anchor_tick,
+            anchor_epoch_ms,
+            frame_width,
+            action_seq_width
+        );
+    }
+
+    cnr3_diag_plantrace_write_line(
+        instance_id,
+        std::string{"[DSUM-PLANTRACE] END   schema=3c1v1 instance="} +
+        std::to_string(instance_id.value) +
+        " records=" + record_count +
+        " truncated=" + (reserve_failed ? "1" : "0")
+    );
+    cnr3_diag_flush_stderr();
+}
+#endif
 
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)

@@ -18,6 +18,133 @@
 
 namespace {
 
+
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+
+Cnr3DiagPlanTraceStrategy cnr3_diag_plantrace_strategy_from_request(
+    const Cnr3LiveGetFrameFrameData& request_data
+) noexcept {
+    switch (request_data.branch) {
+    case Cnr3LiveGetFrameBranch::cache_hit_return:
+        return Cnr3DiagPlanTraceStrategy::cache_hit;
+    case Cnr3LiveGetFrameBranch::frame0_fresh_start:
+        return Cnr3DiagPlanTraceStrategy::frame0;
+    case Cnr3LiveGetFrameBranch::predecessor_present_compute:
+        return Cnr3DiagPlanTraceStrategy::predecessor_present;
+    case Cnr3LiveGetFrameBranch::recovery:
+        return request_data.recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start
+            ? Cnr3DiagPlanTraceStrategy::recovery_floor
+            : Cnr3DiagPlanTraceStrategy::recovery_exact;
+    case Cnr3LiveGetFrameBranch::none:
+    default:
+        return Cnr3DiagPlanTraceStrategy::none;
+    }
+}
+
+Cnr3DiagPlanTraceOpenFields cnr3_diag_plantrace_make_open_fields(
+    const Cnr3LiveGetFrameFrameData& request_data
+) {
+    Cnr3DiagPlanTraceOpenFields fields{};
+    fields.strategy = cnr3_diag_plantrace_strategy_from_request(request_data);
+    fields.target_frame = request_data.requested_frame;
+
+    if (request_data.branch == Cnr3LiveGetFrameBranch::predecessor_present_compute ||
+        request_data.branch == Cnr3LiveGetFrameBranch::recovery) {
+        fields.predecessor_frame = request_data.predecessor_frame;
+    }
+
+    if (request_data.branch == Cnr3LiveGetFrameBranch::recovery) {
+        fields.hole_frames = request_data.recovery_plan.hole_frame_numbers;
+
+        if (request_data.recovery_branch == Cnr3LiveRecoveryBranch::exact_anchor &&
+            request_data.recovery_plan.anchor_found) {
+            fields.anchor_frame = request_data.recovery_plan.anchor_frame_number;
+            if (cnr3_frame_number_is_valid(fields.anchor_frame)) {
+                fields.pinned_frames.push_back(fields.anchor_frame);
+            }
+        }
+        else if (request_data.recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+            fields.floor_frame = request_data.recovery_floor_frame;
+        }
+    }
+
+    if (!request_data.source_request_frame_numbers.empty()) {
+        fields.source_frames = request_data.source_request_frame_numbers;
+    }
+    else if (request_data.source_requested &&
+        cnr3_frame_number_is_valid(request_data.requested_frame)) {
+        fields.source_frames.push_back(request_data.requested_frame);
+    }
+
+    if (request_data.branch == Cnr3LiveGetFrameBranch::cache_hit_return &&
+        request_data.cache_hit_pin_taken) {
+        fields.pinned_frames.push_back(request_data.requested_frame);
+    }
+    else if (request_data.branch == Cnr3LiveGetFrameBranch::predecessor_present_compute &&
+        request_data.predecessor_pin_taken) {
+        fields.pinned_frames.push_back(request_data.predecessor_frame);
+    }
+
+    return fields;
+}
+
+class Cnr3ArInitialPlanTraceGuard {
+public:
+    Cnr3ArInitialPlanTraceGuard(
+        Cnr3FilterData& filter_data,
+        int requested_frame,
+        void** frame_data_slot
+    ) noexcept
+        : data_(filter_data),
+        requested_frame_(requested_frame),
+        frame_data_(frame_data_slot),
+        initial_frame_data_was_null_(
+            frame_data_slot != nullptr && *frame_data_slot == nullptr
+        ),
+        enter_tick_(cnr3_diag_plantrace_sample_tick()) {}
+
+    ~Cnr3ArInitialPlanTraceGuard() noexcept {
+        if (!initial_frame_data_was_null_ || frame_data_ == nullptr || *frame_data_ == nullptr) {
+            return;
+        }
+
+        const auto* const request_data =
+            static_cast<const Cnr3LiveGetFrameFrameData*>(*frame_data_);
+
+        if (request_data == nullptr ||
+            request_data->branch == Cnr3LiveGetFrameBranch::none ||
+            request_data->requested_frame != requested_frame_ ||
+            !request_data->source_requested) {
+            return;
+        }
+
+        try {
+            cnr3_diag_plantrace_observe_open(
+                data_.dsum_plantrace,
+                requested_frame_,
+                enter_tick_,
+                cnr3_diag_plantrace_sample_tick(),
+                cnr3_diag_plantrace_make_open_fields(*request_data)
+            );
+        }
+        catch (...) {
+        }
+    }
+
+    Cnr3ArInitialPlanTraceGuard(const Cnr3ArInitialPlanTraceGuard&) = delete;
+    Cnr3ArInitialPlanTraceGuard& operator=(const Cnr3ArInitialPlanTraceGuard&) = delete;
+
+private:
+    Cnr3FilterData& data_;
+    int requested_frame_ = CNR3_INVALID_FRAME_NUMBER;
+    void** frame_data_ = nullptr;
+    bool initial_frame_data_was_null_ = false;
+    Cnr3DiagPlanTraceTick enter_tick_ = 0;
+};
+
+#endif
+
 Cnr3Status cnr3_delete_unpublished_frame_data(
     Cnr3LiveGetFrameFrameData* request_data,
     Cnr3OutputCacheCore& output_cache
@@ -612,6 +739,10 @@ const VSFrame* cnr3_arInitial(
     const VSAPI* vsapi
 ) {
     (void)core;
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+    Cnr3ArInitialPlanTraceGuard plantrace_guard{data, n, frame_data};
+#endif
 
     if (frame_data == nullptr || *frame_data != nullptr) {
         cnr3_set_filter_error(

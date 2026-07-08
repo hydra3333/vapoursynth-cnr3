@@ -19,6 +19,7 @@
 #include "cnr3_diagnostics.h"
 #include "cnr3_frame_processing.h"
 #include "cnr3_instance_config.h"
+#include "cnr3_memory_diagnostics.h"
 #include "cnr3_owned_frame_ref.h"
 #include "cnr3_response_tables.h"
 
@@ -42,6 +43,9 @@ struct Cnr3FilterData {
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
     Cnr3DiagDsum01RequestOrderStats dsum01_request_order{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
+    Cnr3MemoryStats dsum02_memory{};
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
     Cnr3DiagDsum03RecoverySearchStats dsum03_recovery_search{};

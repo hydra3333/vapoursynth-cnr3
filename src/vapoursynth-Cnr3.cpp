@@ -153,6 +153,7 @@
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 
+#include <cstdio>
 #include <new>
 
 namespace {
@@ -395,6 +396,41 @@ void VS_CC cnr3_free_filter(
     );
 #endif
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
+    cnr3_memory_record_and_print_snapshot(
+        data->dsum02_memory,
+        data->config.instance_id,
+        "before cache clear",
+        false
+    );
+#endif
+
+    const Cnr3Status teardown_clear_status = data->output_cache.clear();
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
+    char post_cleanup_label[96]{};
+    std::snprintf(
+        post_cleanup_label,
+        sizeof(post_cleanup_label),
+        "after cache clear (clear=%s)",
+        cnr3_status_name(teardown_clear_status)
+    );
+
+    cnr3_memory_record_and_print_snapshot(
+        data->dsum02_memory,
+        data->config.instance_id,
+        post_cleanup_label,
+        false
+    );
+
+    cnr3_memory_print_summary(
+        data->dsum02_memory,
+        data->config.instance_id
+    );
+#endif
+
+    (void)teardown_clear_status;
+
     if (data->source != nullptr && vsapi != nullptr) {
         vsapi->freeNode(data->source);
         data->source = nullptr;
@@ -466,6 +502,15 @@ void VS_CC cnr3_create_filter(
         );
         return;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
+    cnr3_memory_record_and_print_snapshot(
+        data->dsum02_memory,
+        data->config.instance_id,
+        "at cnr3_create (baseline)",
+        true
+    );
+#endif
 
     VSFilterDependency dependencies[] = {
         { source, rpGeneral }

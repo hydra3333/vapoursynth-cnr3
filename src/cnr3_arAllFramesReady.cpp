@@ -3041,6 +3041,27 @@ const VSFrame* cnr3_arAllFramesReady(
     );
 #endif
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
+    if (CNR3_MEMORY_DIAG_FRAME_INTERVAL > 0 &&
+        n > 0 &&
+        (n % CNR3_MEMORY_DIAG_FRAME_INTERVAL) == 0) {
+        char periodic_label[64]{};
+        std::snprintf(
+            periodic_label,
+            sizeof(periodic_label),
+            "frame=%d",
+            n
+        );
+
+        cnr3_memory_record_and_print_snapshot(
+            data.dsum02_memory,
+            data.config.instance_id,
+            periodic_label,
+            false
+        );
+    }
+#endif
+
     switch (request_data->branch) {
     case Cnr3LiveGetFrameBranch::cache_hit_return:
         return cnr3_get_frame_live_cache_hit_return(

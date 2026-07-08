@@ -458,7 +458,7 @@ void cnr3_cache_prune_diagnostic_write_summary(
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "bytes_evicted", stats.bytes_evicted);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "checkpoint_prunes", stats.checkpoint_prunes);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "hot_zone_rejected", stats.hot_zone_rejected);
-    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "frames_evicted_then_re_requested", stats.frames_evicted_then_re_requested);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "frames_recently_evicted_then_re_requested", stats.frames_recently_evicted_then_re_requested);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-10", "D-SUM-10", "frames_re_requested_repeatedly", stats.frames_re_requested_repeatedly);
     cnr3_cache_diag_write_size_row(instance_id, "D-SUM-10", "D-SUM-10", "ring_capacity", stats.ring_capacity);
     cnr3_cache_diag_write_int_row(instance_id, "D-SUM-10", "D-SUM-10", "checkpoint_search_bound_B", stats.checkpoint_search_bound_B);

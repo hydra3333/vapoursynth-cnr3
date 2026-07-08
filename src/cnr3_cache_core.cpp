@@ -2316,9 +2316,20 @@ void Cnr3OutputCacheCore::observe_lookup_miss_rechurn_locked(
         return;
     }
 
-    cnr3_cache_diag_saturating_increment(
-        prune_diag_stats_.frames_evicted_then_re_requested
-    );
+    std::uint64_t eviction_gap =
+        prune_diag_stats_.total_evicted_records >= newest_eviction_sequence
+        ? prune_diag_stats_.total_evicted_records - newest_eviction_sequence
+        : 0U;
+
+    if (eviction_gap == 0U) {
+        eviction_gap = 1U;
+    }
+
+    if (eviction_gap <= CNR3_PRUNE_RECHURN_MAX_EVICTION_GAP) {
+        cnr3_cache_diag_saturating_increment(
+            prune_diag_stats_.frames_recently_evicted_then_re_requested
+        );
+    }
 
     std::size_t top_index = prune_diag_stats_.top_thrasher_count;
     for (std::size_t i = 0U; i < prune_diag_stats_.top_thrasher_count; ++i) {
@@ -2359,15 +2370,6 @@ void Cnr3OutputCacheCore::observe_lookup_miss_rechurn_locked(
             prune_diag_stats_.top_thrashers[lowest_index] =
                 Cnr3CachePruneDiagnosticTopThrashEntry{ frame_number, 1U };
         }
-    }
-
-    std::uint64_t eviction_gap =
-        prune_diag_stats_.total_evicted_records >= newest_eviction_sequence
-        ? prune_diag_stats_.total_evicted_records - newest_eviction_sequence
-        : 0U;
-
-    if (eviction_gap == 0U) {
-        eviction_gap = 1U;
     }
 
     std::size_t gap_bin = 6U;

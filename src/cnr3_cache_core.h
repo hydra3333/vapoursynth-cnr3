@@ -167,6 +167,16 @@ inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production
 inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
     CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
 
+// Recency bound for the prune-rechurn counter, in EVICTION-COUNT units (not frame numbers).
+// A re-fetched frame counts as "recently evicted" only if <= this many evictions occurred since it was dropped.
+// Proof data under TINY-100 showed evict-then-refetch events clustering into two populations:
+// recovery-local events at <= 50 and far-revisit events at >= 101, with 51-100 empirically empty across
+// S9/S9c/S9d/S9e. Three times BACK_RADIUS gives 45 under TINY-100 and 150 under NORMAL, sitting in that
+// valley: it catches recovery-local refetches while rejecting far-revisit noise. Expressed from BACK_RADIUS
+// so the bound profiles automatically.
+inline constexpr std::uint64_t CNR3_PRUNE_RECHURN_MAX_EVICTION_GAP =
+    static_cast<std::uint64_t>(CNR3_CACHE_HOT_ZONE_BACK_RADIUS) * 3U;
+
 /*
     Hot-zone count. MAX_HOT_ZONES scales with concurrent distinct access
     regions, not thread count.

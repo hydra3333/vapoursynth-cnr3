@@ -581,7 +581,7 @@ namespace {
         stats.bytes_evicted = 6U * 4096U;
         stats.checkpoint_prunes = 1;
         stats.hot_zone_rejected = 4;
-        stats.frames_evicted_then_re_requested = 3;
+        stats.frames_recently_evicted_then_re_requested = 3;
         stats.frames_re_requested_repeatedly = 1;
         stats.total_evicted_records = 6;
         stats.ring_live_count = 6;

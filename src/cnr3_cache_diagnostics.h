@@ -176,7 +176,7 @@ struct Cnr3CachePruneDiagnosticStats {
     std::uint64_t checkpoint_prunes = 0;
     std::uint64_t hot_zone_rejected = 0;
 
-    std::uint64_t frames_evicted_then_re_requested = 0;
+    std::uint64_t frames_recently_evicted_then_re_requested = 0;
     std::uint64_t frames_re_requested_repeatedly = 0;
 
     std::vector<Cnr3CachePruneDiagnosticRingEntry> recently_evicted_ring{};

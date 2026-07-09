@@ -16,7 +16,7 @@ copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_
 
 REM The TEST id MUST coincide with the test uncommented inside the vpy
 REM set "test="
-set "test=TESTING_L1"
+set "test=TESTING_L2"
 if /I "%test%" NEQ "" (
     set "vpy_ending=_%test%"
 ) else (
@@ -41,16 +41,15 @@ pause
 goto :eof
 
 :vspipe_only
+echo entered :vspipe_only
 del "%log%" >NUL 2>&1
 del "%findstr_log%" >NUL 2>&1
-echo.
 echo findstr /C:"####" "%vpy%" 2>>"%findstr_log%" 1>&2
 findstr /C:"####" "%vpy%" 2>>"%findstr_log%" 1>&2
 echo findstr /C:"####" "%vpy%" 2>>"%log%" 1>&2
 findstr /C:"####" "%vpy%" 2>>"%log%" 1>&2
-echo findstr /C:"####" "%vpy%"
-findstr /C:"####" "%vpy%"
-echo.
+REM echo findstr /C:"####" "%vpy%"
+REM findstr /C:"####" "%vpy%"
 REM echo. 2>>"%log%" 1>&2
 REM echo ========================================== 2>>"%log%" 1>&2
 REM echo vspipe info 2>>"%log%" 1>&2
@@ -67,7 +66,7 @@ echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %rrr
 "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %rrr% --container y4m "%vpy%" NUL 2>>"%log%" 1>&2
 @echo off
 echo. 2>>"%log%" 1>&2
-dir "%log%"
+REM dir "%log%"
 echo. 2>>"%log%" 1>&2
 echo Running %findstr_cmd% 2>>"%findstr_log%" 1>&2
 echo Running %findstr_cmd%
@@ -78,6 +77,7 @@ echo.
 echo type "%findstr_log%"
 type "%findstr_log%"
 echo.
+echo exiting :vspipe_only
 goto :eof
 
 :vspipe_encode

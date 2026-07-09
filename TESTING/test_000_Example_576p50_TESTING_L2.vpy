@@ -18,7 +18,7 @@ clip = core.bs.VideoSource(source_filename)
 # Original video length — authoritative, CNR3-independent target for the end-of-clip
 # (EOF) scenarios below. Captured from the SOURCE clip BEFORE any field detection or
 # CNR3 is applied, so it reflects the real video on disk and never depends on the
-# field-split Release filter Release reweave round-trip being frame-count-correct.
+# field-split -> filter -> reweave round-trip being frame-count-correct.
 SOURCE_FRAME_COUNT = clip.num_frames
 
 # ============================================================================
@@ -29,7 +29,7 @@ SOURCE_FRAME_COUNT = clip.num_frames
 
 SplitResult = Tuple[str, vs.VideoNode, Optional[vs.VideoNode]]
 
-def split_into_fields(clip: vs.VideoNode) Release SplitResult:
+def split_into_fields(clip: vs.VideoNode) -> SplitResult:
     """
     Inspect a clip's field order and separate it into same-parity field streams.
     Returns:       a 3-tuple: (scan_tag, first, second)
@@ -48,8 +48,8 @@ def split_into_fields(clip: vs.VideoNode) Release SplitResult:
     then passing all three return values (or replacements for first/second)
     to reweave_fields().
     SeparateFields output ordering:
-        TFF: [T0, B0, T1, B1, T2, B2, ...]  Release first=offsets[0], second=offsets[1]
-        BFF: [B0, T0, B1, T1, B2, T2, ...]  Release first=offsets[0], second=offsets[1]
+        TFF: [T0, B0, T1, B1, T2, B2, ...]  -> first=offsets[0], second=offsets[1]
+        BFF: [B0, T0, B1, T1, B2, T2, ...]  -> first=offsets[0], second=offsets[1]
     The variable names "first" and "second" reflect position in the separated
     stream, not top/bottom.  reweave_fields() uses the scan_tag to reconstruct
     the correct field order, so the caller never needs to track tff explicitly.
@@ -70,7 +70,7 @@ def reweave_fields(
     scan_tag: str,
     first: vs.VideoNode,
     second: Optional[vs.VideoNode],
-) Release vs.VideoNode:
+) -> vs.VideoNode:
     """
     Reweave two and processed field streams separated by "split_into_fields"
     back into a full-height interlaced clip, or return the processed
@@ -117,7 +117,7 @@ def reweave_fields(
 def denoise_across_scan_type(
     clip: vs.VideoNode,
     my_function: Callable[[vs.VideoNode], vs.VideoNode],
-) Release vs.VideoNode:
+) -> vs.VideoNode:
     """
     All-in-one scan-type-aware wrapper: detect progressive vs interlaced, apply
     `my_function` correctly for that scan type, and return a clip in the same
@@ -179,7 +179,7 @@ def denoise_across_scan_type(
 # pool might produce, serialised by -r 1 — not actual parallel races.
 # ============================================================================
 
-def shuffle_requests_in_zones(clip: vs.VideoNode, zone_size: int, clip_size: int) Release vs.VideoNode:
+def shuffle_requests_in_zones(clip: vs.VideoNode, zone_size: int, clip_size: int) -> vs.VideoNode:
     """Reorder request order WITHIN moving zones (no frame missed or repeated),
     reproducing the out-of-order arrival a pool of `zone_size` workers might
     produce. NOTE: zone_size must be >= 3 to actually reorder; at 1 or 2 the
@@ -213,7 +213,7 @@ def assemble_jump_segments(
     segment_length: int,
     shuffle_in_zones: bool,
     zone_size: int,
-) Release Tuple[vs.VideoNode, int]:
+) -> Tuple[vs.VideoNode, int]:
     """Build a test clip by jumping to each frame in `jump_to_frames`, taking a
     `segment_length`-frame segment from each, optionally shuffling request order
     within zones, then splicing the segments. Returns (clip, total_frame_count).
@@ -243,8 +243,8 @@ def assemble_jump_segments(
 
 # --------------------------------------------------------------------------------------------------------------
 # MAIN: detect scan type, apply CNR3 (per field stream if interlaced), reweave.
-# Progressive Release ONE CNR3 instance (clean recovery behaviour; PRIMARY test path).
-# Interlaced  Release TWO CNR3 instances on the field streams, then reweave (LATER pass).
+# Progressive -> ONE CNR3 instance (clean recovery behaviour; PRIMARY test path).
+# Interlaced  -> TWO CNR3 instances on the field streams, then reweave (LATER pass).
 # --------------------------------------------------------------------------------------------------------------
 # Check if PROGRESSIVE or INTERLACED and return a tag and split the fields if need be
 tag, first, second = split_into_fields(clip)
@@ -302,13 +302,13 @@ else:           # INTERLACED source
 #   NOTE: this jump is intentionally SMALL. It is the only way to land inside the
 #   bound and prove EXACT recovery (anchor found, holes filled, NO floor reset).
 #   The realistic large jumps are S5..S8.
-#   Proves: output[44] absent Release search finds anchor at 29 within the bound Release exact fill 30..44 Release 45.
+#   Proves: output[44] absent -> search finds anchor at 29 within the bound -> exact fill 30..44 -> 45.
 #   Dev-trace watch: recovery entered, start point ~29 (within bound), holes walked; NO floor flag.
 #clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 45], segment_length=30, shuffle_in_zones=False, zone_size=1)
 
 # ---------- HOT-ZONE MOVE THEN FAR JUMP (the bound; floor reset is NOT from frame 0) ----------
 # *** SCENARIO S5 — sweep 0..59, then jump far to 2000.  (segment 60 = bound + a small margin)
-#   Proves: output[1999] absent, floor=1950, nothing present in [1950,1999] Release FLOOR
+#   Proves: output[1999] absent, floor=1950, nothing present in [1950,1999] -> FLOOR
 #           FRESH-START at 1950 (NOT frame 0), then walk forward to 2000.
 #   Dev-trace watch: recovery entered, search reaches floor, floor fresh-start ~1950,
 #           FLOOR-APPROXIMATION FLAG SET; reconstruction bounded to ~50 frames.
@@ -425,34 +425,34 @@ clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jum
 # math (an off-by-one in the implementation is exactly what these can expose).
 
 # *** SCENARIO B1 — frame-0 clamp: jump straight to frame 40 from cold (N=40 < BACK_RADIUS=50).
-#   Probes: floor = max(0, 40-50) clamps to 0, so the floor IS frame 0 Release a genuine
+#   Probes: floor = max(0, 40-50) clamps to 0, so the floor IS frame 0 -> a genuine
 #           FRAME-0 fresh-start fires. This is the "frame 0 only reached when N<B" case.
 #   Dev-trace watch: recovery entered, floor=0, frame-0 fresh-start, flag SET; fill 1..39 then 40.
 #clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[40], segment_length=15, shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO B2 — bound straddle (a PAIR: run each, compare). Warm 0..9, then one far jump.
-#   B2a target 58: nearest real output (9) is at gap 49 Release INSIDE the bound (floor=8) Release EXACT recovery.
-#   B2b target 61: nearest real output (9) is at gap 52 Release OUTSIDE the bound (floor=11) Release FLOOR reset.
+#   B2a target 58: nearest real output (9) is at gap 49 -> INSIDE the bound (floor=8) -> EXACT recovery.
+#   B2b target 61: nearest real output (9) is at gap 52 -> OUTSIDE the bound (floor=11) -> FLOOR reset.
 #   Proves: the bound crossover sits at ~50 (49 finds the anchor; 52 does not). They differ only by 3.
-#   Dev-trace watch: B2a Release anchor=9, NO floor flag.  B2b Release floor=11, anchor=FLOOR, flag SET.
+#   Dev-trace watch: B2a -> anchor=9, NO floor flag.  B2b -> floor=11, anchor=FLOOR, flag SET.
 #clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 58], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B2a (inside)
 #clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 61], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B2b (outside)
 
 # *** SCENARIO B3 — backward re-request: process 0..100, then a segment starting back at 50.
-#   Probes: frame 50 was already produced AND is a checkpoint (multiple of 10) Release CACHE-HIT
+#   Probes: frame 50 was already produced AND is a checkpoint (multiple of 10) -> CACHE-HIT
 #           direct return on the backward request; following frames (51..) may be evicted
-#           non-checkpoints Release short recoveries. Tests the cache-hit path + backward seeks.
+#           non-checkpoints -> short recoveries. Tests the cache-hit path + backward seeks.
 #   Dev-trace watch: at the jump, frame 50 = CACHE-HIT (present); mixed present / short-recovery after.
 #clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 50], segment_length=101, shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO B4 — heavy out-of-order: in-zone shuffle with a WIDE zone (20) over 100 frames.
-#   Probes: deep reordering within a 20-frame window Release many predecessors absent at request
-#           time Release frequent short recoveries, all within the warm region (no floor reset).
+#   Probes: deep reordering within a 20-frame window -> many predecessors absent at request
+#           time -> frequent short recoveries, all within the warm region (no floor reset).
 #   Dev-trace watch: frequent EXACT in-zone recoveries; NO floor flag; no unbounded growth.
 #clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=100, shuffle_in_zones=True, zone_size=20)
 
 # *** SCENARIO B5 — hot-zone cap / churn: 7 distinct jump regions (MAX_HOT_ZONES is 5).
-#   Probes: more distinct active regions than hot zones Release hot-zone EVICTION must occur; each
+#   Probes: more distinct active regions than hot zones -> hot-zone EVICTION must occur; each
 #           jump still bounds its own recovery. Tests the hot-zone cap and eviction behaviour.
 #   Dev-trace watch: a bounded recovery at each of the 7 jumps; hot-zone count caps at 5 with
 #           evictions; floor flag where a region is cold; per-jump cost stays bounded.
@@ -470,7 +470,7 @@ clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jum
 # *** SCENARIO B6 — in-sequence run INTO EOF: ~30 frames in order ending exactly on the last frame.
 #   (segment_length 60 > 30 so the min(...) clamp trims the segment to land on the final frame.)
 #   Probes: during normal sequential fetch near the end, the forward hot-zone span and the
-#           prune calc reach PAST the last frame Release must clamp to EOF, not compute / index into
+#           prune calc reach PAST the last frame -> must clamp to EOF, not compute / index into
 #           out-of-range frames.
 #   Dev-trace watch: in-order to the last frame; forward hot-zone span CLAMPED to the last frame
 #           (no window into frames > last); prune handles the boundary; NO floor flag.

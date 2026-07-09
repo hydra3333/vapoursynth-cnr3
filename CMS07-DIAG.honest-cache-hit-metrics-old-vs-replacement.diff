@@ -1,0 +1,28 @@
+--- handover_docs/CMS07-DIAG.honest-cache-hit-metrics.patch	2026-07-09 18:45:26.000000000 +0000
++++ CMS07-DIAG.honest-cache-hit-metrics.patch	2026-07-09 10:44:51.143054993 +0000
+@@ -113,10 +113,10 @@
+      void observe_lookup_ref_released_by_cache_core() const noexcept;
+      void observe_lookup_ref_transferred() const noexcept;
+ diff --git a/src/cnr3_cache_diagnostics.cpp b/src/cnr3_cache_diagnostics.cpp
+-index a925f26..0d2c918 100644
++index a925f26..66c9db2 100644
+ --- a/src/cnr3_cache_diagnostics.cpp
+ +++ b/src/cnr3_cache_diagnostics.cpp
+-@@ -297,11 +297,18 @@ void cnr3_cache_ownership_diagnostic_write_summary(
++@@ -297,11 +297,24 @@ void cnr3_cache_ownership_diagnostic_write_summary(
+          "D-SUM-04",
+          "[DSUM-SUMMARY] D-SUM-04 note: pin-list record/discharge fields are consciously narrowed out in DIAG.2b"
+      );
+@@ -132,6 +132,12 @@
+      cnr3_cache_diag_write_int_row(instance_id, "D-SUM-04", "D-SUM-04", "total_pin_count_crosscheck", stats.total_pin_count_crosscheck);
+ +    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_queries_total", stats.cache_lookup_queries_total);
+ +    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_hits", stats.cache_lookup_hits);
+++    cnr3_cache_diag_write_uint64_row(
+++        instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_misses",
+++        stats.cache_lookup_queries_total >= stats.cache_lookup_hits
+++            ? (stats.cache_lookup_queries_total - stats.cache_lookup_hits)
+++            : 0U);   // derived; the else-branch is unreachable when the two increments are placed correctly
+++                     // (query++ before the find, hit++ on the found branch) -- reaching it signals a placement bug.
+      cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
+      cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
+      cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);

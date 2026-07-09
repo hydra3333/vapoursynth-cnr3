@@ -1,7 +1,12 @@
-# CNR3 — PATCH SCOPE: HONEST CACHE-HIT METRICS — per-frame branch rows + true lookup hit-rate
+# CNR3 — PATCH SCOPE v3: HONEST CACHE-HIT METRICS — per-frame branch rows + true lookup hit-rate
 
 **From:** designer/reviewer (W3D), via coordinator (W3X), to coder (W3C).
-**Status:** PROPOSAL. Confirm-before-patch. Verify every claim COLD against live `src/` (file:line).
+**Status (v3, 2026-07-09):** ALL rows now delivered. The v1 patch was implemented and designer-reviewed/APPROVED;
+v2 flagged the one omitted derived `cache_lookup_misses` emission row as OUTSTANDING; v3 records that row as
+DELIVERED in the replacement patch. The change is complete and ready for BUILD + PROOF: the coordinator applies
+the single replacement patch, runs the canonical 4-way (R-PROCESS-26; expect 56/56 unchanged), and the designer
+runs the L1/L2 harness proofs against the section-1.2 oracle before commit. Verify every claim COLD against live
+`src/` (file:line). Marker: CMS07-DIAG.honest-cache-hit-metrics.
 **One commit.** Scope: (Part 1) fix the misleading health ratio #1 with three honest per-frame rows (health-block
 arithmetic only, ZERO new counters); (Part 2) add a true cache-lookup hit-rate, which requires TWO new D-SUM-04
 counters at the two lookup entry points. Diagnostic-only; no cache algorithm, pixel path, or returned-frame change.
@@ -90,14 +95,25 @@ method calling a cnr3_cache_ownership_diagnostic_observe_* helper; no raw increm
 ### 2.3 Emission (D-SUM-04 summary) + health row
 D-SUM-04 summary adds three rows (queries, hits, derived misses):
 ```
-cache_lookup_queries_total     <value>
-cache_lookup_hits              <value>
-cache_lookup_misses            <queries - hits>   (derived at emission; guard queries >= hits, else emit both raw
-                                                    and flag — that would indicate a placement bug)
+cache_lookup_queries_total     <value>     [DELIVERED]
+cache_lookup_hits              <value>     [DELIVERED]
+cache_lookup_misses            <queries - hits>     [DELIVERED — derived, underflow-guarded]
 ```
+The misses row sits immediately AFTER the cache_lookup_hits row in the D-SUM-04 emission
+(cnr3_cache_diagnostics.cpp), mirroring the existing write_uint64_row rows, under the same D-SUM-04 gate.
+Derived, NO new stored counter, underflow-guarded:
+```cpp
+cnr3_cache_diag_write_uint64_row(
+    instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_misses",
+    stats.cache_lookup_queries_total >= stats.cache_lookup_hits
+        ? (stats.cache_lookup_queries_total - stats.cache_lookup_hits)
+        : 0U);   // derived; the else-branch is unreachable when the two increments are placed correctly
+                 // (query++ before the find, hit++ on the found branch) — reaching it signals a placement bug.
+```
+This makes the section 2.4 invariant (hits + misses == queries_total) a PRINTED line.
 Health block adds ONE row (gated on D-SUM-04 compute+print like the other rows are gated on their families):
 ```
-cache_lookup_hit_rate_percent = cache_lookup_hits / cache_lookup_queries_total     ("n/a" when queries == 0)
+cache_lookup_hit_rate_percent = cache_lookup_hits / cache_lookup_queries_total     ("n/a" when queries == 0)   [DELIVERED]
 ```
 Provenance comment + footnote: "all lookups at the two cache lookup entry points, ALL contexts (top-level and
 recovery-walk probes counted uniformly); the per-context decomposition is the A1 tool's job. Distinct from

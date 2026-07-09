@@ -430,16 +430,24 @@ void VS_CC cnr3_free_filter(
 #endif
 
 #if \
+    defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE) || \
     defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER) || \
     defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) || \
     defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN) || \
     defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    const Cnr3CacheOwnershipDiagnosticStats dsum04_ownership_balance_snapshot =
+        data->output_cache.ownership_diagnostic_stats();
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
     const Cnr3CachePruneDiagnosticStats dsum10_prune_eviction_snapshot =
         data->output_cache.prune_diagnostic_stats();
 #endif
     cnr3_diag_write_derived_health_summary_to_stderr(
         data->config.instance_id
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        , &dsum04_ownership_balance_snapshot
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
         , &data->dsum09_return_transfer
 #endif

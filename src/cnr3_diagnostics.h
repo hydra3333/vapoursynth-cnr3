@@ -98,11 +98,13 @@ void cnr3_diag_write_line(
 void cnr3_diag_flush_stderr() noexcept;
 
 #if \
+    defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE) || \
     defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER) || \
     defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) || \
     defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN) || \
     defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
 
+struct Cnr3CacheOwnershipDiagnosticStats;
 struct Cnr3CachePruneDiagnosticStats;
 
 #endif
@@ -874,6 +876,9 @@ void cnr3_diag_write_health_mean_row(
 
 void cnr3_diag_write_derived_health_summary_to_stderr(
     Cnr3InstanceId instance_id
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    , const Cnr3CacheOwnershipDiagnosticStats* dsum04_ownership_balance
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
     , const Cnr3DiagDsum09ReturnTransferStats* dsum09_return_transfer
 #endif

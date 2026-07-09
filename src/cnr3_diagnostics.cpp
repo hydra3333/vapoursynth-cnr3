@@ -2435,6 +2435,7 @@ void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
 
 
 #if \
+    defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE) || \
     defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER) || \
     defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) || \
     defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN) || \
@@ -2575,6 +2576,9 @@ void cnr3_diag_write_health_mean_row(
 
 void cnr3_diag_write_derived_health_summary_to_stderr(
     Cnr3InstanceId instance_id
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    , const Cnr3CacheOwnershipDiagnosticStats* dsum04_ownership_balance
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
     , const Cnr3DiagDsum09ReturnTransferStats* dsum09_return_transfer
 #endif
@@ -2614,16 +2618,42 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
     );
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
-    // cache_hit_and_supplied_percent = frames_cache_hit / frames_total.
+    // pred_returned_from_cache_percent = frames_pred_present / frames_total.
+    // Source raw counters: D-SUM-12 recovery-plan summary (frames_pred_present, frames_total).
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "pred_returned_from_cache_percent",
+        dsum12.frames_pred_present,
+        dsum12.frames_total
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "pred_returned_from_cache_percent", "D-SUM-12");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    // current_frame_returned_from_cache_percent = frames_cache_hit / frames_total.
     // Source raw counters: D-SUM-12 recovery-plan summary (frames_cache_hit, frames_total).
     cnr3_diag_write_health_ratio_row(
         instance_id,
-        "cache_hit_and_supplied_percent",
+        "current_frame_returned_from_cache_percent",
         dsum12.frames_cache_hit,
         dsum12.frames_total
     );
 #else
-    cnr3_diag_write_health_disabled_row(instance_id, "cache_hit_and_supplied_percent", "D-SUM-12");
+    cnr3_diag_write_health_disabled_row(instance_id, "current_frame_returned_from_cache_percent", "D-SUM-12");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    // cache_hit_percent = (frames_pred_present + frames_cache_hit) / frames_total.
+    // Source raw counters: D-SUM-12 recovery-plan summary (frames_pred_present, frames_cache_hit, frames_total).
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "cache_hit_percent",
+        dsum12.frames_pred_present + dsum12.frames_cache_hit,
+        dsum12.frames_total
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "cache_hit_percent", "D-SUM-12");
 #endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
@@ -2692,6 +2722,20 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
     cnr3_diag_write_health_disabled_row(instance_id, "frames_per_prune_event", "D-SUM-10");
 #endif
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE) && defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+    // cache_lookup_hit_rate_percent = cache_lookup_hits / cache_lookup_queries_total.
+    // Source raw counters: D-SUM-04 ownership-balance summary (cache_lookup_hits, cache_lookup_queries_total).
+    // This is the true lookup hit rate across both lookup entry points, not lookup_refs_acquired.
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "cache_lookup_hit_rate_percent",
+        dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_hits : 0U,
+        dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_queries_total : 0U
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "cache_lookup_hit_rate_percent", "D-SUM-04");
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION) && defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
     // recalc_multiple_vs_recalced_frames_percent = frames_recalculated_multiple_times / (frames_recalculated_once + frames_recalculated_multiple_times).
     // Source raw counters: D-SUM-13 recalculation summary; denominator is distinct frames, not recalculation event count.
@@ -2725,7 +2769,12 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
     cnr3_diag_write_text_line(
         instance_id,
         "D-SUM-HEALTH",
-        "[DSUM-HEALTH] note: ratios are derived from the raw D-SUM family counters above; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
+        "[DSUM-HEALTH] note: ratios are derived from raw D-SUM family counters above; cache_hit_percent <- D-SUM-12 (frames_pred_present + frames_cache_hit) / frames_total."
+    );
+    cnr3_diag_write_text_line(
+        instance_id,
+        "D-SUM-HEALTH",
+        "[DSUM-HEALTH] note: cache_lookup_hit_rate_percent <- D-SUM-04 cache_lookup_hits / cache_lookup_queries_total; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
     );
     cnr3_diag_write_text_line(
         instance_id,

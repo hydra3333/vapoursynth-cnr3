@@ -1375,6 +1375,8 @@ private:
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
     void observe_pin_acquired_locked() noexcept;
     void observe_pin_released_locked() noexcept;
+    void observe_cache_lookup_query_locked() const noexcept;
+    void observe_cache_lookup_hit_locked() const noexcept;
     void observe_lookup_ref_acquired_locked() const noexcept;
     void observe_lookup_ref_released_by_cache_core() const noexcept;
     void observe_lookup_ref_transferred() const noexcept;

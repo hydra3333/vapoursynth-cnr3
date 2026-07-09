@@ -1916,6 +1916,14 @@ void Cnr3OutputCacheCore::observe_pin_released_locked() noexcept {
     cnr3_cache_ownership_diagnostic_observe_pin_released(ownership_diag_stats_);
 }
 
+void Cnr3OutputCacheCore::observe_cache_lookup_query_locked() const noexcept {
+    cnr3_cache_ownership_diagnostic_observe_cache_lookup_query(ownership_diag_stats_);
+}
+
+void Cnr3OutputCacheCore::observe_cache_lookup_hit_locked() const noexcept {
+    cnr3_cache_ownership_diagnostic_observe_cache_lookup_hit(ownership_diag_stats_);
+}
+
 void Cnr3OutputCacheCore::observe_lookup_ref_acquired_locked() const noexcept {
     cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(ownership_diag_stats_);
 }
@@ -3777,6 +3785,10 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
         return Cnr3Status::invariant_violation;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_cache_lookup_query_locked();
+#endif
+
     const auto frame_index_it = frame_index_.find(frame_number);
 
     if (frame_index_it == frame_index_.end()) {
@@ -3785,6 +3797,10 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
 #endif
         return Cnr3Status::not_found;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_cache_lookup_hit_locked();
+#endif
 
     const std::size_t slot_position = frame_index_it->second;
 
@@ -3867,6 +3883,10 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
         return Cnr3Status::invariant_violation;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_cache_lookup_query_locked();
+#endif
+
     const auto frame_index_it = frame_index_.find(frame_number);
 
     if (frame_index_it == frame_index_.end()) {
@@ -3875,6 +3895,10 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
 #endif
         return Cnr3Status::not_found;
     }
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    observe_cache_lookup_hit_locked();
+#endif
 
     const std::size_t slot_position = frame_index_it->second;
 

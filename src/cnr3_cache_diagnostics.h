@@ -65,17 +65,19 @@ struct Cnr3CacheHotZoneDiagnosticStats {
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
 
 /*
-    D-SUM-04 ownership-balance diagnostic state.
+    D-SUM-04 ownership-balance and lookup-rate diagnostic state.
 
-    DIAG.2b deliberately observes two narrow cache-core balances only:
-    slot pins and lookup-ref handoff. It does not claim a global VSFrame
-    ownership balance; pin-list record/discharge fields are consciously
-    narrowed out to avoid double-counting AS4 discharge paths.
+    DIAG.2b deliberately observes narrow cache-core balances: slot pins
+    and lookup-ref handoff. The lookup query/hit counters are diagnostic
+    rates only; they do not claim a global VSFrame ownership balance.
 */
 struct Cnr3CacheOwnershipDiagnosticStats {
     std::uint64_t pins_acquired = 0;
     std::uint64_t pins_released = 0;
     int total_pin_count_crosscheck = 0;
+
+    std::uint64_t cache_lookup_queries_total = 0;
+    std::uint64_t cache_lookup_hits = 0;
 
     std::uint64_t lookup_refs_acquired = 0;
     std::uint64_t lookup_refs_released_by_cache_core = 0;
@@ -353,6 +355,18 @@ inline void cnr3_cache_ownership_diagnostic_observe_pin_released(
     Cnr3CacheOwnershipDiagnosticStats& stats
 ) noexcept {
     cnr3_cache_diag_saturating_increment(stats.pins_released);
+}
+
+inline void cnr3_cache_ownership_diagnostic_observe_cache_lookup_query(
+    Cnr3CacheOwnershipDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_saturating_increment(stats.cache_lookup_queries_total);
+}
+
+inline void cnr3_cache_ownership_diagnostic_observe_cache_lookup_hit(
+    Cnr3CacheOwnershipDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_saturating_increment(stats.cache_lookup_hits);
 }
 
 inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(

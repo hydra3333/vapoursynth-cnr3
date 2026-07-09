@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.derived-health-ratios";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.honest-cache-hit-metrics";
 
 /*
     CMS07-P.11C.2 live scene-change default.
@@ -198,16 +198,16 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //          disable compute and/or print for this diagnostic.
 // Gate Description:
 //  ID: D-SUM-04
-//  Name: Ownership / pin / lookup-ref balance summary
+//  Name: Ownership / pin / lookup-ref balance and lookup hit-rate summary
 //  Purpose: Shows whether ownership-sensitive mechanisms balanced, catching leaks, missing
-//           releases, missing transfers, double-release symptoms, and pin-list discharge bugs.
+//           releases, missing transfers, double-release symptoms, and lookup asymmetry.
 //  Activation condition: Add as soon as ownership, pin, or lookup-reference machinery exists.
-//  Likely collection: Count at pin/unpin, lookup addref/release/transfer, pin-list
-//                     record/discharge, and ownership handoff points.
-//  Field definitions: pins_acquired, pins_released, pin_balance, lookup_refs_acquired,
-//                     lookup_refs_released, lookup_refs_transferred, lookup_ref_balance,
-//                     pin_list_records, pin_list_discharges, pin_list_balance,
-//                     ownership_errors.
+//  Likely collection: Count at pin/unpin, lookup query/hit, lookup addref/release/transfer,
+//                     pin-list record/discharge, and ownership handoff points.
+//  Field definitions: pins_acquired, pins_released, pin_balance, cache_lookup_queries_total,
+//                     cache_lookup_hits, lookup_refs_acquired, lookup_refs_released,
+//                     lookup_refs_transferred, lookup_ref_balance, pin_list_records,
+//                     pin_list_discharges, pin_list_balance, ownership_errors.
 //  Human interpretation: pin_balance and lookup_ref_balance must be zero after drain;
 //                        acquired == released + transferred is the lookup-ref invariant.
 #define CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE 1

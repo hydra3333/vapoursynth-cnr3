@@ -297,11 +297,24 @@ void cnr3_cache_ownership_diagnostic_write_summary(
         "D-SUM-04",
         "[DSUM-SUMMARY] D-SUM-04 note: pin-list record/discharge fields are consciously narrowed out in DIAG.2b"
     );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04 note: cache_lookup_* counts both add-ref lookup and pin lookup entry points; lookup_refs_acquired counts add-ref ownership only"
+    );
 
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_acquired", stats.pins_acquired);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_released", stats.pins_released);
     cnr3_cache_diag_write_int64_row(instance_id, "D-SUM-04", "D-SUM-04", "pin_balance", pin_balance);
     cnr3_cache_diag_write_int_row(instance_id, "D-SUM-04", "D-SUM-04", "total_pin_count_crosscheck", stats.total_pin_count_crosscheck);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_queries_total", stats.cache_lookup_queries_total);
+    cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_hits", stats.cache_lookup_hits);
+    cnr3_cache_diag_write_uint64_row(
+        instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_misses",
+        stats.cache_lookup_queries_total >= stats.cache_lookup_hits
+            ? (stats.cache_lookup_queries_total - stats.cache_lookup_hits)
+            : 0U);   // derived; the else-branch is unreachable when the two increments are placed correctly
+                     // (query++ before the find, hit++ on the found branch) -- reaching it signals a placement bug.
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);

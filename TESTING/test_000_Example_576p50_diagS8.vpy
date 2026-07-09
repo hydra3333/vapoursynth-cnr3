@@ -334,7 +334,7 @@ else:           # INTERLACED source
 #   Proves: combined jumping + out-of-order arrival within each segment.
 #   Dev-trace watch: bounded recovery per bounce AND correct predecessor handling for the
 #           in-zone shuffle; no unbounded growth; floor flag only where genuinely cold.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=True,  zone_size=8)
+clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=True,  zone_size=8)
 
 # *** SCENARIO S9 — cache-overflow + REVISIT thrash: distinct regions beyond hot-zone cap, then RETURN to pruned regions.
 #   Purpose: force pruning between jumps (D-SUM-10 ring/prune) AND revisit evicted regions so they must RECOMPUTE
@@ -378,7 +378,7 @@ else:           # INTERLACED source
 # *** SCENARIO S9e — recency positive control: revisit a JUST-evicted region.
 #   Under TINY-100, this lands evict-then-refetch events in the recovery-local population.
 #   Expect frames_recently_evicted_then_re_requested > 0. -r 1.
-clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)    ####
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)    ####
 
 # ------------------------------- BOUNDARY / STRESS (B1..B7) ---------------------------------
 # These poke the EDGES of the bound / clamp / hot-zone cap. The dev-trace reveals

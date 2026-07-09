@@ -2433,6 +2433,311 @@ void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
 
 #endif
 
+
+#if \
+    defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER) || \
+    defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) || \
+    defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN) || \
+    defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+
+namespace {
+
+    void cnr3_diag_write_health_text_row(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        const char* value
+    ) noexcept {
+        char message[256] = {};
+
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-HEALTH] %-44s %s",
+            label != nullptr ? label : "(null)",
+            value != nullptr ? value : "(null)"
+        );
+
+        if (written < 0) {
+            cnr3_diag_write_line(
+                instance_id,
+                Cnr3DiagnosticLevel::error,
+                "D-SUM-HEALTH",
+                "[DSUM-HEALTH] formatting_error",
+                Cnr3StderrFlushPolicy::no_flush
+            );
+            return;
+        }
+
+        message[sizeof(message) - 1U] = '\0';
+        cnr3_diag_write_line(
+            instance_id,
+            Cnr3DiagnosticLevel::info,
+            "D-SUM-HEALTH",
+            message,
+            Cnr3StderrFlushPolicy::no_flush
+        );
+    }
+
+    void cnr3_diag_write_health_double_row(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        double value
+    ) noexcept {
+        char message[256] = {};
+
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-HEALTH] %-44s %.3f",
+            label != nullptr ? label : "(null)",
+            value
+        );
+
+        if (written < 0) {
+            cnr3_diag_write_line(
+                instance_id,
+                Cnr3DiagnosticLevel::error,
+                "D-SUM-HEALTH",
+                "[DSUM-HEALTH] formatting_error",
+                Cnr3StderrFlushPolicy::no_flush
+            );
+            return;
+        }
+
+        message[sizeof(message) - 1U] = '\0';
+        cnr3_diag_write_line(
+            instance_id,
+            Cnr3DiagnosticLevel::info,
+            "D-SUM-HEALTH",
+            message,
+            Cnr3StderrFlushPolicy::no_flush
+        );
+    }
+
+    void cnr3_diag_write_health_disabled_row(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        const char* source_family
+    ) noexcept {
+        char value[64] = {};
+
+        const int written = std::snprintf(
+            value,
+            sizeof(value),
+            "(source %s disabled)",
+            source_family != nullptr ? source_family : "D-SUM-??"
+        );
+
+        if (written < 0) {
+            cnr3_diag_write_health_text_row(instance_id, label, "(source D-SUM-?? disabled)");
+            return;
+        }
+
+        value[sizeof(value) - 1U] = '\0';
+        cnr3_diag_write_health_text_row(instance_id, label, value);
+    }
+
+} // namespace
+
+void cnr3_diag_write_health_ratio_row(
+    Cnr3InstanceId instance_id,
+    const char* label,
+    std::uint64_t numerator,
+    std::uint64_t denominator
+) noexcept {
+    if (denominator == 0U) {
+        cnr3_diag_write_health_text_row(instance_id, label, "n/a");
+        return;
+    }
+
+    const double value =
+        (static_cast<double>(numerator) * 100.0) /
+        static_cast<double>(denominator);
+    cnr3_diag_write_health_double_row(instance_id, label, value);
+}
+
+void cnr3_diag_write_health_mean_row(
+    Cnr3InstanceId instance_id,
+    const char* label,
+    std::uint64_t numerator,
+    std::uint64_t denominator
+) noexcept {
+    if (denominator == 0U) {
+        cnr3_diag_write_health_text_row(instance_id, label, "n/a");
+        return;
+    }
+
+    const double value =
+        static_cast<double>(numerator) /
+        static_cast<double>(denominator);
+    cnr3_diag_write_health_double_row(instance_id, label, value);
+}
+
+void cnr3_diag_write_derived_health_summary_to_stderr(
+    Cnr3InstanceId instance_id
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    , const Cnr3DiagDsum09ReturnTransferStats* dsum09_return_transfer
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    , const Cnr3CachePruneDiagnosticStats* dsum10_prune_eviction
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    , const Cnr3DiagDsum12RecoveryPlanStats* dsum12_recovery_plan
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+    , const Cnr3DiagDsum13RecalculationStats* dsum13_recalculation
+#endif
+) noexcept {
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER) && defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
+    const Cnr3DiagDsum09ReturnTransferSnapshot dsum09 =
+        dsum09_return_transfer != nullptr
+        ? cnr3_diag_dsum09_snapshot_return_transfer(*dsum09_return_transfer)
+        : Cnr3DiagDsum09ReturnTransferSnapshot{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    const Cnr3DiagDsum12RecoveryPlanSnapshot dsum12 =
+        dsum12_recovery_plan != nullptr
+        ? cnr3_diag_dsum12_snapshot_recovery_plan(*dsum12_recovery_plan)
+        : Cnr3DiagDsum12RecoveryPlanSnapshot{};
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION) && defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+    const Cnr3DiagDsum13RecalculationSnapshot dsum13 =
+        dsum13_recalculation != nullptr
+        ? cnr3_diag_dsum13_snapshot_recalculation(*dsum13_recalculation)
+        : Cnr3DiagDsum13RecalculationSnapshot{};
+#endif
+
+    cnr3_diag_write_text_line(
+        instance_id,
+        "D-SUM-HEALTH",
+        "[DSUM-HEALTH] derived health ratios"
+    );
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    // cache_hit_and_supplied_percent = frames_cache_hit / frames_total.
+    // Source raw counters: D-SUM-12 recovery-plan summary (frames_cache_hit, frames_total).
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "cache_hit_and_supplied_percent",
+        dsum12.frames_cache_hit,
+        dsum12.frames_total
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "cache_hit_and_supplied_percent", "D-SUM-12");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    // cache_miss_recovery_plan_percent = (frames_recovered_exact + frames_recovered_floor) / frames_total.
+    // Source raw counters: D-SUM-12 recovery-plan summary (frames_recovered_exact, frames_recovered_floor, frames_total).
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "cache_miss_recovery_plan_percent",
+        dsum12.frames_recovered_exact + dsum12.frames_recovered_floor,
+        dsum12.frames_total
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "cache_miss_recovery_plan_percent", "D-SUM-12");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    // recovery_plan_holes_filled_percent = holes_filled / holes_identified.
+    // Source raw counters: D-SUM-12 recovery-plan summary (holes_filled, holes_identified).
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "recovery_plan_holes_filled_percent",
+        dsum12.holes_filled,
+        dsum12.holes_identified
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "recovery_plan_holes_filled_percent", "D-SUM-12");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER) && defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER)
+    // return_to_vs_success_percent = return_transfer_succeeded / return_transfer_attempted.
+    // Source raw counters: D-SUM-09 return-transfer summary (return_transfer_succeeded, return_transfer_attempted).
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "return_to_vs_success_percent",
+        dsum09.return_transfer_succeeded,
+        dsum09.return_transfer_attempted
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "return_to_vs_success_percent", "D-SUM-09");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION) && defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+    // recent_rechurn_vs_evicted_percent = frames_recently_evicted_then_re_requested / frames_evicted.
+    // Source raw counters: D-SUM-10 cache summary (frames_recently_evicted_then_re_requested, frames_evicted).
+    // Numerator is recency-gated (gap <= 3*BACK_RADIUS) by the prune-rechurn recency-gate fix.
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "recent_rechurn_vs_evicted_percent",
+        dsum10_prune_eviction != nullptr ? dsum10_prune_eviction->frames_recently_evicted_then_re_requested : 0U,
+        dsum10_prune_eviction != nullptr ? dsum10_prune_eviction->frames_evicted : 0U
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "recent_rechurn_vs_evicted_percent", "D-SUM-10");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION) && defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION)
+    // frames_per_prune_event = frames_evicted / prune_events_triggered.
+    // Source raw counters: D-SUM-10 cache summary (frames_evicted, prune_events_triggered); this is an average, not a percent.
+    cnr3_diag_write_health_mean_row(
+        instance_id,
+        "frames_per_prune_event",
+        dsum10_prune_eviction != nullptr ? dsum10_prune_eviction->frames_evicted : 0U,
+        dsum10_prune_eviction != nullptr ? dsum10_prune_eviction->prune_events_triggered : 0U
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "frames_per_prune_event", "D-SUM-10");
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION) && defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+    // recalc_multiple_vs_recalced_frames_percent = frames_recalculated_multiple_times / (frames_recalculated_once + frames_recalculated_multiple_times).
+    // Source raw counters: D-SUM-13 recalculation summary; denominator is distinct frames, not recalculation event count.
+    const std::uint64_t recalculated_distinct_frames =
+        dsum13.frames_recalculated_once + dsum13.frames_recalculated_multiple_times;
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "recalc_multiple_vs_recalced_frames_percent",
+        dsum13.frames_recalculated_multiple_times,
+        recalculated_distinct_frames
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "recalc_multiple_vs_recalced_frames_percent", "D-SUM-13");
+#endif
+
+#if \
+    defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION) && defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION) && \
+    defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN) && defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN)
+    // recalced_frames_vs_total_percent = (frames_recalculated_once + frames_recalculated_multiple_times) / frames_total.
+    // Source raw counters: D-SUM-13 distinct-frame buckets and D-SUM-12 frames_total; not recalculated_frame_count events.
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "recalced_frames_vs_total_percent",
+        recalculated_distinct_frames,
+        dsum12.frames_total
+    );
+#else
+    cnr3_diag_write_health_disabled_row(instance_id, "recalced_frames_vs_total_percent", "D-SUM-13/D-SUM-12");
+#endif
+
+    cnr3_diag_write_text_line(
+        instance_id,
+        "D-SUM-HEALTH",
+        "[DSUM-HEALTH] note: ratios are derived from the raw D-SUM family counters above; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
+    );
+    cnr3_diag_write_text_line(
+        instance_id,
+        "D-SUM-HEALTH",
+        "[DSUM-HEALTH] note: n/a = denominator was zero (the phenomenon did not occur), distinct from a 0% rate."
+    );
+
+    cnr3_diag_flush_stderr();
+}
+
+#endif
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
 
 namespace {

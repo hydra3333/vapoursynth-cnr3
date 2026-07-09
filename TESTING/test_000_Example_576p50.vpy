@@ -287,7 +287,7 @@ else:           # INTERLACED source
 # *** SCENARIO S2 — in-order, 120 frames (lays down checkpoints at the 10-frame cadence, the hot-zone tracks the wavefront).
 #   Dev-trace watch: (1) in-order throughout; checkpoints recorded; NO floor flag.
 #                    (2) the hot-zone travelling along in about the right place tracking with the wavefront
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=120, shuffle_in_zones=False, zone_size=1)
+clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=120, shuffle_in_zones=False, zone_size=1)
 
 # ---------- OUT-OF-ORDER ARRIVAL WITHIN A ZONE (short recovery; sequence, not concurrency) ----------
 # *** SCENARIO S3 — in-zone shuffle, 120 frames, zone 5.
@@ -334,7 +334,51 @@ else:           # INTERLACED source
 #   Proves: combined jumping + out-of-order arrival within each segment.
 #   Dev-trace watch: bounded recovery per bounce AND correct predecessor handling for the
 #           in-zone shuffle; no unbounded growth; floor flag only where genuinely cold.
-clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=True,  zone_size=8)
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=True,  zone_size=8)
+
+# *** SCENARIO S9 — cache-overflow + REVISIT thrash: distinct regions beyond hot-zone cap, then RETURN to pruned regions.
+#   Purpose: force pruning between jumps (D-SUM-10 ring/prune) AND revisit evicted regions so they must RECOMPUTE
+#   (D-SUM-13 recalculation/thrash). Best run under CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY (ceiling 100).
+#   6 distinct forward regions (> MAX_HOT_ZONES) then revisit 0/1000/2000 after they've been pruned. -r 1.
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 500, 1000, 1500, 2000, 2500, 0, 1000, 2000], segment_length=150, shuffle_in_zones=False, zone_size=1)
+
+# *** SCENARIO S9b — as S9 but with in-zone shuffle (prune/thrash + arrival-disorder recovery, hardest combined case).
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 500, 1000, 1500, 2000, 2500, 0, 1000, 2000], segment_length=150, shuffle_in_zones=True,  zone_size=8)
+
+# *** SCENARIO S9c — over-prune probe: single contiguous 250-frame run, in-zone shuffle, NO jumps.
+#   Under TINY-100 (ceiling 100, back_radius 15) a shuffle span well inside back_radius should yield
+#   ~zero frames_evicted_then_re_requested. Any non-zero => something pruned inside the protected window.
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=250, shuffle_in_zones=True, zone_size=5)
+
+# *** SCENARIO S9d — disjoint jumps, no revisit, no overlap: isolates whether evict-then-re-request
+#   is purely an artifact of RE-REQUESTING an evicted range. Each 250 segment is a fresh region,
+#   spaced > segment_length apart so ranges (and their rebuild-lookback) never intersect; no target repeats.
+#   Prediction: frames_evicted_then_re_requested == 0 (only cold-forward eviction, nothing ever asked twice).
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 1000, 2000, 3000, 1500, 500], segment_length=250, shuffle_in_zones=True, zone_size=5)
+
+# *** SCENARIO S9e — recency positive control: revisit a JUST-evicted region so eviction_gap <= Z.
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 5], segment_length=120, shuffle_in_zones=False, zone_size=1)
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 95], segment_length=100, shuffle_in_zones=False, zone_size=1)
+
+# S9e attempt 1: minimal overflow, immediate revisit
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments( clip_denoised_base, jump_to_frames=[0, 0], segment_length=108, shuffle_in_zones=False, zone_size=1 )
+
+# S9e attempt 2: minimal overflow, near-start revisit
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 4], segment_length=108, shuffle_in_zones=False, zone_size=1)
+
+# S9e attempt 3: slightly larger overflow, still close revisit
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 4],segment_length=112,shuffle_in_zones=False,zone_size=1)
+
+# S9e attempt 3: slightly larger overflow, still close revisit
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 4],segment_length=112,shuffle_in_zones=False,zone_size=1)
+
+# S9e attempt 4: controlled just-evicted revisit
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=112,shuffle_in_zones=False,zone_size=1)
+
+# *** SCENARIO S9e — recency positive control: revisit a JUST-evicted region.
+#   Under TINY-100, this lands evict-then-refetch events in the recovery-local population.
+#   Expect frames_recently_evicted_then_re_requested > 0. -r 1.
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)    ####
 
 # ------------------------------- BOUNDARY / STRESS (B1..B7) ---------------------------------
 # These poke the EDGES of the bound / clamp / hot-zone cap. The dev-trace reveals

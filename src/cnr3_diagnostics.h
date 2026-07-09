@@ -97,6 +97,16 @@ void cnr3_diag_write_line(
 */
 void cnr3_diag_flush_stderr() noexcept;
 
+#if \
+    defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER) || \
+    defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) || \
+    defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN) || \
+    defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+
+struct Cnr3CachePruneDiagnosticStats;
+
+#endif
+
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
 
@@ -837,6 +847,45 @@ cnr3_diag_dsum13_snapshot_recalculation(
 void cnr3_diag_dsum13_write_recalculation_summary_to_stderr(
     Cnr3InstanceId instance_id,
     const Cnr3DiagDsum13RecalculationStats& stats
+) noexcept;
+
+#endif
+
+
+#if \
+    defined(CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER) || \
+    defined(CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION) || \
+    defined(CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN) || \
+    defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+
+void cnr3_diag_write_health_ratio_row(
+    Cnr3InstanceId instance_id,
+    const char* label,
+    std::uint64_t numerator,
+    std::uint64_t denominator
+) noexcept;
+
+void cnr3_diag_write_health_mean_row(
+    Cnr3InstanceId instance_id,
+    const char* label,
+    std::uint64_t numerator,
+    std::uint64_t denominator
+) noexcept;
+
+void cnr3_diag_write_derived_health_summary_to_stderr(
+    Cnr3InstanceId instance_id
+#if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
+    , const Cnr3DiagDsum09ReturnTransferStats* dsum09_return_transfer
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+    , const Cnr3CachePruneDiagnosticStats* dsum10_prune_eviction
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    , const Cnr3DiagDsum12RecoveryPlanStats* dsum12_recovery_plan
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
+    , const Cnr3DiagDsum13RecalculationStats* dsum13_recalculation
+#endif
 ) noexcept;
 
 #endif

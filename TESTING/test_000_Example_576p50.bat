@@ -3,7 +3,8 @@ REM set "rrr="
 set "rrr=-r 1"
 REM echo.
 
-set "vs_root=D:\TEST\Vapoursynth_x64_R76"
+set "top_root=D:\TEST"
+set "vs_root=%top_root%\Vapoursynth_x64_R76"
 
 cd /D "%vs_root%"
 
@@ -14,20 +15,22 @@ copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_
 copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.pdb "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
 
 REM The TEST id MUST coincide with the test uncommented inside the vpy
-REM set "test=S8"
+REM set "test=S9e"
 set "test="
 if /I "%test%" NEQ "" (
     set "vpy_ending=_%test%"
 ) else (
     set "vpy_ending="
 )
-set "log=%vs_root%\run_log%vpy_ending%.txt"
-set "findstr_log=%vs_root%\run_findstr%vpy_ending%.txt"
 set "vpy=%vs_root%\test_000_Example_576p50%vpy_ending%.vpy"
-set "mp4=%vs_root%\test_000_Example_576p50_RESULT%vpy_ending%.mp4"
+
+set "log=%top_root%\run_log%vpy_ending%.txt"
+set "findstr_log=%top_root%\run_findstr%vpy_ending%.txt"
+set "mp4=%top_root%\test_000_Example_576p50_RESULT%vpy_ending%.mp4"
 
 REM set "findstr_cmd=findstr /C:"[DSUM10-" /C:"[DSUM-SUMMARY]" /C:"[DSUM11" "%log%""
-set "findstr_cmd=findstr /C:"[DSUM-SUMMARY]" /C:"[DSUM10-" /C:"[DSUM11" "%log%""
+REM set "findstr_cmd=findstr /C:"[DSUM-SUMMARY]" /C:"[DSUM10-" /C:"[DSUM11" "%log%""
+set "findstr_cmd=ECHO."
 
 call :vspipe_only
 REM call :vspipe_encode
@@ -57,6 +60,7 @@ echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %rrr
 "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %rrr% --container y4m "%vpy%" NUL 2>>"%log%" 1>&2
 @echo off
 echo. 2>>"%log%" 1>&2
+dir "%log%"
 REM echo. 2>>"%log%" 1>&2
 REM echo Running %findstr_cmd% 2>>"%findstr_log%" 1>&2
 REM echo Running %findstr_cmd%

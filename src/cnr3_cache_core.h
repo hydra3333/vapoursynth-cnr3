@@ -167,6 +167,17 @@ inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production
 inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
     CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
 
+/*
+    Diagnostic-only cache lookup counting policy. It selects which lookup
+    probes contribute to D-SUM-04 intent-counted hit-rate metrics; it must not
+    affect cache lookup, pin, store, or recovery control flow.
+*/
+enum class Cnr3LookupCountPolicy {
+    none,
+    full,
+    hit_only
+};
+
 // Recency bound for the prune-rechurn counter, in EVICTION-COUNT units (not frame numbers).
 // A re-fetched frame counts as "recently evicted" only if <= this many evictions occurred since it was dropped.
 // Proof data under TINY-100 showed evict-then-refetch events clustering into two populations:
@@ -924,7 +935,8 @@ public:
         Cnr3OwnedFrameRef frame,
         bool is_checkpoint,
         Cnr3CachePinList& pin_list,
-        Cnr3CacheAs2StoreRecordSummary& out_summary
+        Cnr3CacheAs2StoreRecordSummary& out_summary,
+        Cnr3LookupCountPolicy duplicate_count_policy = Cnr3LookupCountPolicy::none
     );
 
     /*
@@ -1213,7 +1225,8 @@ public:
     [[nodiscard]] Cnr3Status lookup_frame_and_add_ref(
         int frame_number,
         const VSAPI* vsapi,
-        Cnr3OwnedFrameRef& out_frame
+        Cnr3OwnedFrameRef& out_frame,
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
     ) const;
 
     /*
@@ -1234,7 +1247,8 @@ public:
     */
     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin(
         int frame_number,
-        Cnr3CachePinList& pin_list
+        Cnr3CachePinList& pin_list,
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
     );
 
     /*
@@ -1452,7 +1466,8 @@ private:
     [[nodiscard]] Cnr3Status store_owned_frame_locked(
         int frame_number,
         Cnr3OwnedFrameRef& frame,
-        bool is_checkpoint
+        bool is_checkpoint,
+        Cnr3LookupCountPolicy duplicate_count_policy = Cnr3LookupCountPolicy::none
     );
 
 
@@ -1468,7 +1483,8 @@ private:
         Cnr3OwnedFrameRef& frame,
         bool is_checkpoint,
         Cnr3CachePinList& pin_list,
-        Cnr3CacheAs2StoreRecordSummary& out_summary
+        Cnr3CacheAs2StoreRecordSummary& out_summary,
+        Cnr3LookupCountPolicy duplicate_count_policy = Cnr3LookupCountPolicy::none
     );
 
     /*
@@ -1665,7 +1681,8 @@ private:
     [[nodiscard]] Cnr3Status lookup_frame_and_add_ref_locked(
         int frame_number,
         const VSAPI* vsapi,
-        const VSFrame** out_acquired_frame
+        const VSFrame** out_acquired_frame,
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
     ) const;
 
     /*
@@ -1681,7 +1698,8 @@ private:
     */
     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin_locked(
         int frame_number,
-        Cnr3CachePinList& pin_list
+        Cnr3CachePinList& pin_list,
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
     );
 
     /*
@@ -1695,7 +1713,8 @@ private:
     */
     [[nodiscard]] Cnr3Status pin_frame_locked(
         int frame_number,
-        Cnr3CacheSlotPinToken& out_pin_token
+        Cnr3CacheSlotPinToken& out_pin_token,
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
     );
 
     /*

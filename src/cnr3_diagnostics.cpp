@@ -2725,15 +2725,35 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE) && defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
     // cache_lookup_hit_rate_percent = cache_lookup_hits / cache_lookup_queries_total.
     // Source raw counters: D-SUM-04 ownership-balance summary (cache_lookup_hits, cache_lookup_queries_total).
-    // This is the true lookup hit rate across both lookup entry points, not lookup_refs_acquired.
+    // This is the intent-counted probe hit rate, not lookup_refs_acquired.
     cnr3_diag_write_health_ratio_row(
         instance_id,
         "cache_lookup_hit_rate_percent",
         dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_hits : 0U,
         dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_queries_total : 0U
     );
+
+    const std::uint64_t cache_lookup_misses =
+        (
+            dsum04_ownership_balance != nullptr &&
+            dsum04_ownership_balance->cache_lookup_queries_total >= dsum04_ownership_balance->cache_lookup_hits
+        )
+        ? (
+            dsum04_ownership_balance->cache_lookup_queries_total -
+            dsum04_ownership_balance->cache_lookup_hits
+        )
+        : 0U;
+    // cache_lookup_misses_percent = cache_lookup_misses / cache_lookup_queries_total.
+    // Complements cache_lookup_hit_rate_percent; when live, the two sum to 100.000.
+    cnr3_diag_write_health_ratio_row(
+        instance_id,
+        "cache_lookup_misses_percent",
+        cache_lookup_misses,
+        dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_queries_total : 0U
+    );
 #else
     cnr3_diag_write_health_disabled_row(instance_id, "cache_lookup_hit_rate_percent", "D-SUM-04");
+    cnr3_diag_write_health_disabled_row(instance_id, "cache_lookup_misses_percent", "D-SUM-04");
 #endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION) && defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
@@ -2774,7 +2794,7 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
     cnr3_diag_write_text_line(
         instance_id,
         "D-SUM-HEALTH",
-        "[DSUM-HEALTH] note: cache_lookup_hit_rate_percent <- D-SUM-04 cache_lookup_hits / cache_lookup_queries_total; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
+        "[DSUM-HEALTH] note: cache_lookup_hit_rate_percent and cache_lookup_misses_percent use D-SUM-04 intent-counted probes; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
     );
     cnr3_diag_write_text_line(
         instance_id,

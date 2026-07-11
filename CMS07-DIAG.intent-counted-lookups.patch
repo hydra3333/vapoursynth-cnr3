@@ -1,0 +1,554 @@
+diff --git a/src/cnr3_arAllFramesReady.cpp b/src/cnr3_arAllFramesReady.cpp
+index 43931e2..9bb2a53 100644
+--- a/src/cnr3_arAllFramesReady.cpp
++++ b/src/cnr3_arAllFramesReady.cpp
+@@ -1761,7 +1761,8 @@ const VSFrame* cnr3_complete_live_recovery(
+ 
+         const Cnr3Status floor_adopt_status = data.output_cache.lookup_frame_and_record_pin(
+             floor_frame,
+-            request_data->pin_list
++            request_data->pin_list,
++            Cnr3LookupCountPolicy::hit_only
+         );
+ 
+         if (cnr3_status_is_ok(floor_adopt_status)) {
+@@ -2034,7 +2035,8 @@ const VSFrame* cnr3_complete_live_recovery(
+ 
+         const Cnr3Status adopt_status = data.output_cache.lookup_frame_and_record_pin(
+             hole_frame,
+-            request_data->pin_list
++            request_data->pin_list,
++            Cnr3LookupCountPolicy::hit_only
+         );
+ 
+         if (cnr3_status_is_ok(adopt_status)) {
+diff --git a/src/cnr3_arInitial.cpp b/src/cnr3_arInitial.cpp
+index 2128400..8ff720a 100644
+--- a/src/cnr3_arInitial.cpp
++++ b/src/cnr3_arInitial.cpp
+@@ -910,7 +910,11 @@ const VSFrame* cnr3_arInitial(
+         atomic find-and-pin that also records the pin for the activation gap.
+     */
+     const Cnr3Status cache_hit_pin_status =
+-        data.output_cache.lookup_frame_and_record_pin(n, request_data->pin_list);
++        data.output_cache.lookup_frame_and_record_pin(
++            n,
++            request_data->pin_list,
++            Cnr3LookupCountPolicy::hit_only
++        );
+ 
+     if (cnr3_status_is_ok(cache_hit_pin_status)) {
+         return cnr3_publish_live_cache_hit_return(
+@@ -962,7 +966,8 @@ const VSFrame* cnr3_arInitial(
+     const Cnr3Status predecessor_pin_status =
+         data.output_cache.lookup_frame_and_record_pin(
+             request_data->predecessor_frame,
+-            request_data->pin_list
++            request_data->pin_list,
++            Cnr3LookupCountPolicy::full
+         );
+ 
+     if (cnr3_status_is_ok(predecessor_pin_status)) {
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 92ec0c1..817bedf 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -32,7 +32,7 @@
+     This string is for human diagnostics and build identification only. It must
+     not be used for control flow.
+ */
+-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.honest-cache-hit-metrics";
++inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.intent-counted-lookups";
+ 
+ /*
+     CMS07-P.11C.2 live scene-change default.
+diff --git a/src/cnr3_cache_core.cpp b/src/cnr3_cache_core.cpp
+index c063b79..7824236 100644
+--- a/src/cnr3_cache_core.cpp
++++ b/src/cnr3_cache_core.cpp
+@@ -25,6 +25,32 @@ static_assert(
+ 
+ namespace {
+ 
++    [[nodiscard]] bool cnr3_lookup_count_policy_counts_query_before_find(
++        Cnr3LookupCountPolicy policy
++    ) noexcept {
++        return policy == Cnr3LookupCountPolicy::full;
++    }
++
++    [[nodiscard]] bool cnr3_lookup_count_policy_counts_hit(
++        Cnr3LookupCountPolicy policy
++    ) noexcept {
++        return
++            policy == Cnr3LookupCountPolicy::full ||
++            policy == Cnr3LookupCountPolicy::hit_only;
++    }
++
++    [[nodiscard]] bool cnr3_lookup_count_policy_counts_query_on_hit(
++        Cnr3LookupCountPolicy policy
++    ) noexcept {
++        return policy == Cnr3LookupCountPolicy::hit_only;
++    }
++
++    [[nodiscard]] bool cnr3_lookup_count_policy_counts_duplicate_hit(
++        Cnr3LookupCountPolicy policy
++    ) noexcept {
++        return policy == Cnr3LookupCountPolicy::hit_only;
++    }
++
+     [[nodiscard]] bool cnr3_prune_candidate_distance_order_before(
+         Cnr3PruneCandidateDistanceOrderEntry left,
+         Cnr3PruneCandidateDistanceOrderEntry right
+@@ -755,7 +781,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin(
+     Cnr3OwnedFrameRef frame,
+     bool is_checkpoint,
+     Cnr3CachePinList& pin_list,
+-    Cnr3CacheAs2StoreRecordSummary& out_summary
++    Cnr3CacheAs2StoreRecordSummary& out_summary,
++    Cnr3LookupCountPolicy duplicate_count_policy
+ ) {
+     out_summary = Cnr3CacheAs2StoreRecordSummary{};
+ 
+@@ -792,7 +819,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin(
+             frame,
+             is_checkpoint,
+             pin_list,
+-            out_summary
++            out_summary,
++            duplicate_count_policy
+         );
+     }
+ 
+@@ -1068,7 +1096,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+                     frame,
+                     is_checkpoint,
+                     *pin_list,
+-                    as2_summary
++                    as2_summary,
++                    Cnr3LookupCountPolicy::hit_only
+                 );
+ 
+             out_summary.as2_summary = as2_summary;
+@@ -1110,7 +1139,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
+             out_summary.store_status = store_owned_frame_locked(
+                 stored_frame_number,
+                 frame,
+-                is_checkpoint
++                is_checkpoint,
++                Cnr3LookupCountPolicy::hit_only
+             );
+ 
+             if (
+@@ -1589,7 +1619,8 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_b
+ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+     int frame_number,
+     const VSAPI* vsapi,
+-    Cnr3OwnedFrameRef& out_frame
++    Cnr3OwnedFrameRef& out_frame,
++    Cnr3LookupCountPolicy count_policy
+ ) const {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -1612,7 +1643,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+         status = lookup_frame_and_add_ref_locked(
+             frame_number,
+             vsapi,
+-            &acquired_frame
++            &acquired_frame,
++            count_policy
+         );
+     }
+ 
+@@ -1651,7 +1683,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+ 
+ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
+     int frame_number,
+-    Cnr3CachePinList& pin_list
++    Cnr3CachePinList& pin_list,
++    Cnr3LookupCountPolicy count_policy
+ ) {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -1665,7 +1698,7 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
+ 
+     const std::lock_guard<std::mutex> lock(cache_mutex_);
+ 
+-    return lookup_frame_and_record_pin_locked(frame_number, pin_list);
++    return lookup_frame_and_record_pin_locked(frame_number, pin_list, count_policy);
+ }
+ 
+ Cnr3Status Cnr3OutputCacheCore::unpin_frame(
+@@ -2693,7 +2726,8 @@ Cnr3Status Cnr3OutputCacheCore::store_checkpoint_owned_frame_locked(
+ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
+     int frame_number,
+     Cnr3OwnedFrameRef& frame,
+-    bool is_checkpoint
++    bool is_checkpoint,
++    Cnr3LookupCountPolicy duplicate_count_policy
+ ) {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -2710,6 +2744,13 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
+     const auto existing_frame_index_it = frame_index_.find(frame_number);
+ 
+     if (existing_frame_index_it != frame_index_.end()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
++            observe_cache_lookup_query_locked();
++            observe_cache_lookup_hit_locked();
++        }
++#endif
++
+         const std::size_t existing_slot_position = existing_frame_index_it->second;
+ 
+         if (existing_slot_position >= slots_.size()) {
+@@ -2813,7 +2854,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+     Cnr3OwnedFrameRef& frame,
+     bool is_checkpoint,
+     Cnr3CachePinList& pin_list,
+-    Cnr3CacheAs2StoreRecordSummary& out_summary
++    Cnr3CacheAs2StoreRecordSummary& out_summary,
++    Cnr3LookupCountPolicy duplicate_count_policy
+ ) {
+     out_summary = Cnr3CacheAs2StoreRecordSummary{};
+ 
+@@ -2835,6 +2877,13 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+     bool existing_slot_was_checkpoint = false;
+ 
+     if (existing_slot_found) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
++            observe_cache_lookup_query_locked();
++            observe_cache_lookup_hit_locked();
++        }
++#endif
++
+         const std::size_t existing_slot_position = existing_frame_index_it->second;
+ 
+         if (existing_slot_position >= slots_.size()) {
+@@ -2855,7 +2904,12 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+     }
+ 
+     const Cnr3Status store_status =
+-        store_owned_frame_locked(frame_number, frame, is_checkpoint);
++        store_owned_frame_locked(
++            frame_number,
++            frame,
++            is_checkpoint,
++            Cnr3LookupCountPolicy::none
++        );
+ 
+     if (store_status == Cnr3Status::ok) {
+         out_summary.inserted_new_slot = true;
+@@ -2899,7 +2953,11 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+         to discharge, including duplicate stores.
+     */
+     Cnr3CacheSlotPinToken pin_token{};
+-    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token);
++    const Cnr3Status pin_status = pin_frame_locked(
++        frame_number,
++        pin_token,
++        Cnr3LookupCountPolicy::none
++    );
+ 
+     if (!cnr3_status_is_ok(pin_status)) {
+         return pin_status;
+@@ -3604,9 +3662,26 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+     bool anchor_is_checkpoint = false;
+ 
+     for (int candidate_frame = upper_bound; candidate_frame >= lower_bound; --candidate_frame) {
++        const bool candidate_is_rechecked_predecessor =
++            candidate_frame == upper_bound;
++
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (!candidate_is_rechecked_predecessor) {
++            observe_cache_lookup_query_locked();
++        }
++#endif
++
+         const auto index_it = frame_index_.find(candidate_frame);
+ 
+         if (index_it != frame_index_.end()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++            if (candidate_is_rechecked_predecessor) {
++                observe_cache_lookup_query_locked();
++            }
++
++            observe_cache_lookup_hit_locked();
++#endif
++
+             const std::size_t slot_index = index_it->second;
+ 
+             if (slot_index >= slots_.size()) {
+@@ -3681,7 +3756,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
+ 
+     const Cnr3Status record_status = lookup_frame_and_record_pin_locked(
+         out_plan.anchor_frame_number,
+-        pin_list
++        pin_list,
++        Cnr3LookupCountPolicy::none
+     );
+ 
+     if (!cnr3_status_is_ok(record_status)) {
+@@ -3765,7 +3841,8 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_b
+ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+     int frame_number,
+     const VSAPI* vsapi,
+-    const VSFrame** out_acquired_frame
++    const VSFrame** out_acquired_frame,
++    Cnr3LookupCountPolicy count_policy
+ ) const {
+     if (out_acquired_frame == nullptr) {
+         return Cnr3Status::invalid_argument;
+@@ -3786,7 +3863,9 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+     }
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+-    observe_cache_lookup_query_locked();
++    if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
++        observe_cache_lookup_query_locked();
++    }
+ #endif
+ 
+     const auto frame_index_it = frame_index_.find(frame_number);
+@@ -3799,7 +3878,13 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+     }
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+-    observe_cache_lookup_hit_locked();
++    if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
++        observe_cache_lookup_query_locked();
++    }
++
++    if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
++        observe_cache_lookup_hit_locked();
++    }
+ #endif
+ 
+     const std::size_t slot_position = frame_index_it->second;
+@@ -3841,11 +3926,12 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+ 
+ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
+     int frame_number,
+-    Cnr3CachePinList& pin_list
++    Cnr3CachePinList& pin_list,
++    Cnr3LookupCountPolicy count_policy
+ ) {
+     Cnr3CacheSlotPinToken pin_token{};
+ 
+-    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token);
++    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token, count_policy);
+ 
+     if (!cnr3_status_is_ok(pin_status)) {
+         return pin_status;
+@@ -3869,7 +3955,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
+ 
+ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     int frame_number,
+-    Cnr3CacheSlotPinToken& out_pin_token
++    Cnr3CacheSlotPinToken& out_pin_token,
++    Cnr3LookupCountPolicy count_policy
+ ) {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -3884,7 +3971,9 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     }
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+-    observe_cache_lookup_query_locked();
++    if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
++        observe_cache_lookup_query_locked();
++    }
+ #endif
+ 
+     const auto frame_index_it = frame_index_.find(frame_number);
+@@ -3897,7 +3986,13 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     }
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+-    observe_cache_lookup_hit_locked();
++    if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
++        observe_cache_lookup_query_locked();
++    }
++
++    if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
++        observe_cache_lookup_hit_locked();
++    }
+ #endif
+ 
+     const std::size_t slot_position = frame_index_it->second;
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index a6f2002..22d638f 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -167,6 +167,17 @@ inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production
+ inline constexpr int CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS =
+     CNR3_CACHE_HOT_ZONE_BACK_RADIUS;
+ 
++/*
++    Diagnostic-only cache lookup counting policy. It selects which lookup
++    probes contribute to D-SUM-04 intent-counted hit-rate metrics; it must not
++    affect cache lookup, pin, store, or recovery control flow.
++*/
++enum class Cnr3LookupCountPolicy {
++    none,
++    full,
++    hit_only
++};
++
+ // Recency bound for the prune-rechurn counter, in EVICTION-COUNT units (not frame numbers).
+ // A re-fetched frame counts as "recently evicted" only if <= this many evictions occurred since it was dropped.
+ // Proof data under TINY-100 showed evict-then-refetch events clustering into two populations:
+@@ -924,7 +935,8 @@ public:
+         Cnr3OwnedFrameRef frame,
+         bool is_checkpoint,
+         Cnr3CachePinList& pin_list,
+-        Cnr3CacheAs2StoreRecordSummary& out_summary
++        Cnr3CacheAs2StoreRecordSummary& out_summary,
++        Cnr3LookupCountPolicy duplicate_count_policy = Cnr3LookupCountPolicy::none
+     );
+ 
+     /*
+@@ -1213,7 +1225,8 @@ public:
+     [[nodiscard]] Cnr3Status lookup_frame_and_add_ref(
+         int frame_number,
+         const VSAPI* vsapi,
+-        Cnr3OwnedFrameRef& out_frame
++        Cnr3OwnedFrameRef& out_frame,
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+     ) const;
+ 
+     /*
+@@ -1234,7 +1247,8 @@ public:
+     */
+     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin(
+         int frame_number,
+-        Cnr3CachePinList& pin_list
++        Cnr3CachePinList& pin_list,
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+     );
+ 
+     /*
+@@ -1452,7 +1466,8 @@ private:
+     [[nodiscard]] Cnr3Status store_owned_frame_locked(
+         int frame_number,
+         Cnr3OwnedFrameRef& frame,
+-        bool is_checkpoint
++        bool is_checkpoint,
++        Cnr3LookupCountPolicy duplicate_count_policy = Cnr3LookupCountPolicy::none
+     );
+ 
+ 
+@@ -1468,7 +1483,8 @@ private:
+         Cnr3OwnedFrameRef& frame,
+         bool is_checkpoint,
+         Cnr3CachePinList& pin_list,
+-        Cnr3CacheAs2StoreRecordSummary& out_summary
++        Cnr3CacheAs2StoreRecordSummary& out_summary,
++        Cnr3LookupCountPolicy duplicate_count_policy = Cnr3LookupCountPolicy::none
+     );
+ 
+     /*
+@@ -1665,7 +1681,8 @@ private:
+     [[nodiscard]] Cnr3Status lookup_frame_and_add_ref_locked(
+         int frame_number,
+         const VSAPI* vsapi,
+-        const VSFrame** out_acquired_frame
++        const VSFrame** out_acquired_frame,
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+     ) const;
+ 
+     /*
+@@ -1681,7 +1698,8 @@ private:
+     */
+     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin_locked(
+         int frame_number,
+-        Cnr3CachePinList& pin_list
++        Cnr3CachePinList& pin_list,
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+     );
+ 
+     /*
+@@ -1695,7 +1713,8 @@ private:
+     */
+     [[nodiscard]] Cnr3Status pin_frame_locked(
+         int frame_number,
+-        Cnr3CacheSlotPinToken& out_pin_token
++        Cnr3CacheSlotPinToken& out_pin_token,
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+     );
+ 
+     /*
+diff --git a/src/cnr3_cache_diagnostics.cpp b/src/cnr3_cache_diagnostics.cpp
+index 66c9db2..e3253db 100644
+--- a/src/cnr3_cache_diagnostics.cpp
++++ b/src/cnr3_cache_diagnostics.cpp
+@@ -300,7 +300,7 @@ void cnr3_cache_ownership_diagnostic_write_summary(
+     cnr3_cache_diag_write_text_line(
+         instance_id,
+         "D-SUM-04",
+-        "[DSUM-SUMMARY] D-SUM-04 note: cache_lookup_* counts both add-ref lookup and pin lookup entry points; lookup_refs_acquired counts add-ref ownership only"
++        "[DSUM-SUMMARY] D-SUM-04 note: cache_lookup_* counts intent-counted probes only; lookup_refs_acquired counts add-ref ownership only"
+     );
+ 
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "pins_acquired", stats.pins_acquired);
+@@ -313,8 +313,7 @@ void cnr3_cache_ownership_diagnostic_write_summary(
+         instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_misses",
+         stats.cache_lookup_queries_total >= stats.cache_lookup_hits
+             ? (stats.cache_lookup_queries_total - stats.cache_lookup_hits)
+-            : 0U);   // derived; the else-branch is unreachable when the two increments are placed correctly
+-                     // (query++ before the find, hit++ on the found branch) -- reaching it signals a placement bug.
++            : 0U);   // derived; else-branch means a policy-counted hit was not paired with a query.
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);
+diff --git a/src/cnr3_diagnostics.cpp b/src/cnr3_diagnostics.cpp
+index 57a0918..757b658 100644
+--- a/src/cnr3_diagnostics.cpp
++++ b/src/cnr3_diagnostics.cpp
+@@ -2725,15 +2725,35 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE) && defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+     // cache_lookup_hit_rate_percent = cache_lookup_hits / cache_lookup_queries_total.
+     // Source raw counters: D-SUM-04 ownership-balance summary (cache_lookup_hits, cache_lookup_queries_total).
+-    // This is the true lookup hit rate across both lookup entry points, not lookup_refs_acquired.
++    // This is the intent-counted probe hit rate, not lookup_refs_acquired.
+     cnr3_diag_write_health_ratio_row(
+         instance_id,
+         "cache_lookup_hit_rate_percent",
+         dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_hits : 0U,
+         dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_queries_total : 0U
+     );
++
++    const std::uint64_t cache_lookup_misses =
++        (
++            dsum04_ownership_balance != nullptr &&
++            dsum04_ownership_balance->cache_lookup_queries_total >= dsum04_ownership_balance->cache_lookup_hits
++        )
++        ? (
++            dsum04_ownership_balance->cache_lookup_queries_total -
++            dsum04_ownership_balance->cache_lookup_hits
++        )
++        : 0U;
++    // cache_lookup_misses_percent = cache_lookup_misses / cache_lookup_queries_total.
++    // Complements cache_lookup_hit_rate_percent; when live, the two sum to 100.000.
++    cnr3_diag_write_health_ratio_row(
++        instance_id,
++        "cache_lookup_misses_percent",
++        cache_lookup_misses,
++        dsum04_ownership_balance != nullptr ? dsum04_ownership_balance->cache_lookup_queries_total : 0U
++    );
+ #else
+     cnr3_diag_write_health_disabled_row(instance_id, "cache_lookup_hit_rate_percent", "D-SUM-04");
++    cnr3_diag_write_health_disabled_row(instance_id, "cache_lookup_misses_percent", "D-SUM-04");
+ #endif
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION) && defined(CNR3_DIAG_PRINT_DSUM13_RECALCULATION)
+@@ -2774,7 +2794,7 @@ void cnr3_diag_write_derived_health_summary_to_stderr(
+     cnr3_diag_write_text_line(
+         instance_id,
+         "D-SUM-HEALTH",
+-        "[DSUM-HEALTH] note: cache_lookup_hit_rate_percent <- D-SUM-04 cache_lookup_hits / cache_lookup_queries_total; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
++        "[DSUM-HEALTH] note: cache_lookup_hit_rate_percent and cache_lookup_misses_percent use D-SUM-04 intent-counted probes; recent_rechurn_vs_evicted_percent <- D-SUM-10 frames_recently_evicted_then_re_requested / frames_evicted."
+     );
+     cnr3_diag_write_text_line(
+         instance_id,

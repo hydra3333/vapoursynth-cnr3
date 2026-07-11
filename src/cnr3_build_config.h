@@ -32,7 +32,7 @@
     This string is for human diagnostics and build identification only. It must
     not be used for control flow.
 */
-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.honest-cache-hit-metrics";
+inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.intent-counted-lookups";
 
 /*
     CMS07-P.11C.2 live scene-change default.

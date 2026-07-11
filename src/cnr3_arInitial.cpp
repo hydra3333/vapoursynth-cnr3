@@ -910,7 +910,11 @@ const VSFrame* cnr3_arInitial(
         atomic find-and-pin that also records the pin for the activation gap.
     */
     const Cnr3Status cache_hit_pin_status =
-        data.output_cache.lookup_frame_and_record_pin(n, request_data->pin_list);
+        data.output_cache.lookup_frame_and_record_pin(
+            n,
+            request_data->pin_list,
+            Cnr3LookupCountPolicy::hit_only
+        );
 
     if (cnr3_status_is_ok(cache_hit_pin_status)) {
         return cnr3_publish_live_cache_hit_return(
@@ -962,7 +966,8 @@ const VSFrame* cnr3_arInitial(
     const Cnr3Status predecessor_pin_status =
         data.output_cache.lookup_frame_and_record_pin(
             request_data->predecessor_frame,
-            request_data->pin_list
+            request_data->pin_list,
+            Cnr3LookupCountPolicy::full
         );
 
     if (cnr3_status_is_ok(predecessor_pin_status)) {

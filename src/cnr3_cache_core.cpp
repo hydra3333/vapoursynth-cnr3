@@ -25,6 +25,32 @@ static_assert(
 
 namespace {
 
+    [[nodiscard]] bool cnr3_lookup_count_policy_counts_query_before_find(
+        Cnr3LookupCountPolicy policy
+    ) noexcept {
+        return policy == Cnr3LookupCountPolicy::full;
+    }
+
+    [[nodiscard]] bool cnr3_lookup_count_policy_counts_hit(
+        Cnr3LookupCountPolicy policy
+    ) noexcept {
+        return
+            policy == Cnr3LookupCountPolicy::full ||
+            policy == Cnr3LookupCountPolicy::hit_only;
+    }
+
+    [[nodiscard]] bool cnr3_lookup_count_policy_counts_query_on_hit(
+        Cnr3LookupCountPolicy policy
+    ) noexcept {
+        return policy == Cnr3LookupCountPolicy::hit_only;
+    }
+
+    [[nodiscard]] bool cnr3_lookup_count_policy_counts_duplicate_hit(
+        Cnr3LookupCountPolicy policy
+    ) noexcept {
+        return policy == Cnr3LookupCountPolicy::hit_only;
+    }
+
     [[nodiscard]] bool cnr3_prune_candidate_distance_order_before(
         Cnr3PruneCandidateDistanceOrderEntry left,
         Cnr3PruneCandidateDistanceOrderEntry right
@@ -755,7 +781,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin(
     Cnr3OwnedFrameRef frame,
     bool is_checkpoint,
     Cnr3CachePinList& pin_list,
-    Cnr3CacheAs2StoreRecordSummary& out_summary
+    Cnr3CacheAs2StoreRecordSummary& out_summary,
+    Cnr3LookupCountPolicy duplicate_count_policy
 ) {
     out_summary = Cnr3CacheAs2StoreRecordSummary{};
 
@@ -792,7 +819,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin(
             frame,
             is_checkpoint,
             pin_list,
-            out_summary
+            out_summary,
+            duplicate_count_policy
         );
     }
 
@@ -1068,7 +1096,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
                     frame,
                     is_checkpoint,
                     *pin_list,
-                    as2_summary
+                    as2_summary,
+                    Cnr3LookupCountPolicy::hit_only
                 );
 
             out_summary.as2_summary = as2_summary;
@@ -1110,7 +1139,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_prune_impl(
             out_summary.store_status = store_owned_frame_locked(
                 stored_frame_number,
                 frame,
-                is_checkpoint
+                is_checkpoint,
+                Cnr3LookupCountPolicy::hit_only
             );
 
             if (
@@ -1589,7 +1619,8 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_b
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     int frame_number,
     const VSAPI* vsapi,
-    Cnr3OwnedFrameRef& out_frame
+    Cnr3OwnedFrameRef& out_frame,
+    Cnr3LookupCountPolicy count_policy
 ) const {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -1612,7 +1643,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
         status = lookup_frame_and_add_ref_locked(
             frame_number,
             vsapi,
-            &acquired_frame
+            &acquired_frame,
+            count_policy
         );
     }
 
@@ -1651,7 +1683,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
 
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
     int frame_number,
-    Cnr3CachePinList& pin_list
+    Cnr3CachePinList& pin_list,
+    Cnr3LookupCountPolicy count_policy
 ) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -1665,7 +1698,7 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
 
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    return lookup_frame_and_record_pin_locked(frame_number, pin_list);
+    return lookup_frame_and_record_pin_locked(frame_number, pin_list, count_policy);
 }
 
 Cnr3Status Cnr3OutputCacheCore::unpin_frame(
@@ -2693,7 +2726,8 @@ Cnr3Status Cnr3OutputCacheCore::store_checkpoint_owned_frame_locked(
 Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
     int frame_number,
     Cnr3OwnedFrameRef& frame,
-    bool is_checkpoint
+    bool is_checkpoint,
+    Cnr3LookupCountPolicy duplicate_count_policy
 ) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -2710,6 +2744,13 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
     const auto existing_frame_index_it = frame_index_.find(frame_number);
 
     if (existing_frame_index_it != frame_index_.end()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
+            observe_cache_lookup_query_locked();
+            observe_cache_lookup_hit_locked();
+        }
+#endif
+
         const std::size_t existing_slot_position = existing_frame_index_it->second;
 
         if (existing_slot_position >= slots_.size()) {
@@ -2813,7 +2854,8 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
     Cnr3OwnedFrameRef& frame,
     bool is_checkpoint,
     Cnr3CachePinList& pin_list,
-    Cnr3CacheAs2StoreRecordSummary& out_summary
+    Cnr3CacheAs2StoreRecordSummary& out_summary,
+    Cnr3LookupCountPolicy duplicate_count_policy
 ) {
     out_summary = Cnr3CacheAs2StoreRecordSummary{};
 
@@ -2835,6 +2877,13 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
     bool existing_slot_was_checkpoint = false;
 
     if (existing_slot_found) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
+            observe_cache_lookup_query_locked();
+            observe_cache_lookup_hit_locked();
+        }
+#endif
+
         const std::size_t existing_slot_position = existing_frame_index_it->second;
 
         if (existing_slot_position >= slots_.size()) {
@@ -2855,7 +2904,12 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
     }
 
     const Cnr3Status store_status =
-        store_owned_frame_locked(frame_number, frame, is_checkpoint);
+        store_owned_frame_locked(
+            frame_number,
+            frame,
+            is_checkpoint,
+            Cnr3LookupCountPolicy::none
+        );
 
     if (store_status == Cnr3Status::ok) {
         out_summary.inserted_new_slot = true;
@@ -2899,7 +2953,11 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
         to discharge, including duplicate stores.
     */
     Cnr3CacheSlotPinToken pin_token{};
-    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token);
+    const Cnr3Status pin_status = pin_frame_locked(
+        frame_number,
+        pin_token,
+        Cnr3LookupCountPolicy::none
+    );
 
     if (!cnr3_status_is_ok(pin_status)) {
         return pin_status;
@@ -3604,9 +3662,26 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
     bool anchor_is_checkpoint = false;
 
     for (int candidate_frame = upper_bound; candidate_frame >= lower_bound; --candidate_frame) {
+        const bool candidate_is_rechecked_predecessor =
+            candidate_frame == upper_bound;
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (!candidate_is_rechecked_predecessor) {
+            observe_cache_lookup_query_locked();
+        }
+#endif
+
         const auto index_it = frame_index_.find(candidate_frame);
 
         if (index_it != frame_index_.end()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+            if (candidate_is_rechecked_predecessor) {
+                observe_cache_lookup_query_locked();
+            }
+
+            observe_cache_lookup_hit_locked();
+#endif
+
             const std::size_t slot_index = index_it->second;
 
             if (slot_index >= slots_.size()) {
@@ -3681,7 +3756,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
 
     const Cnr3Status record_status = lookup_frame_and_record_pin_locked(
         out_plan.anchor_frame_number,
-        pin_list
+        pin_list,
+        Cnr3LookupCountPolicy::none
     );
 
     if (!cnr3_status_is_ok(record_status)) {
@@ -3765,7 +3841,8 @@ Cnr3Status Cnr3OutputCacheCore::remove_unpinned_checkpoints_above_retain_count_b
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     int frame_number,
     const VSAPI* vsapi,
-    const VSFrame** out_acquired_frame
+    const VSFrame** out_acquired_frame,
+    Cnr3LookupCountPolicy count_policy
 ) const {
     if (out_acquired_frame == nullptr) {
         return Cnr3Status::invalid_argument;
@@ -3786,7 +3863,9 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     }
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
-    observe_cache_lookup_query_locked();
+    if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
+        observe_cache_lookup_query_locked();
+    }
 #endif
 
     const auto frame_index_it = frame_index_.find(frame_number);
@@ -3799,7 +3878,13 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     }
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
-    observe_cache_lookup_hit_locked();
+    if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
+        observe_cache_lookup_query_locked();
+    }
+
+    if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
+        observe_cache_lookup_hit_locked();
+    }
 #endif
 
     const std::size_t slot_position = frame_index_it->second;
@@ -3841,11 +3926,12 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
 
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
     int frame_number,
-    Cnr3CachePinList& pin_list
+    Cnr3CachePinList& pin_list,
+    Cnr3LookupCountPolicy count_policy
 ) {
     Cnr3CacheSlotPinToken pin_token{};
 
-    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token);
+    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token, count_policy);
 
     if (!cnr3_status_is_ok(pin_status)) {
         return pin_status;
@@ -3869,7 +3955,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
 
 Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     int frame_number,
-    Cnr3CacheSlotPinToken& out_pin_token
+    Cnr3CacheSlotPinToken& out_pin_token,
+    Cnr3LookupCountPolicy count_policy
 ) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -3884,7 +3971,9 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     }
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
-    observe_cache_lookup_query_locked();
+    if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
+        observe_cache_lookup_query_locked();
+    }
 #endif
 
     const auto frame_index_it = frame_index_.find(frame_number);
@@ -3897,7 +3986,13 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     }
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
-    observe_cache_lookup_hit_locked();
+    if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
+        observe_cache_lookup_query_locked();
+    }
+
+    if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
+        observe_cache_lookup_hit_locked();
+    }
 #endif
 
     const std::size_t slot_position = frame_index_it->second;

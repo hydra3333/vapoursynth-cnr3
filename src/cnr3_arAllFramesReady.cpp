@@ -1761,7 +1761,8 @@ const VSFrame* cnr3_complete_live_recovery(
 
         const Cnr3Status floor_adopt_status = data.output_cache.lookup_frame_and_record_pin(
             floor_frame,
-            request_data->pin_list
+            request_data->pin_list,
+            Cnr3LookupCountPolicy::hit_only
         );
 
         if (cnr3_status_is_ok(floor_adopt_status)) {
@@ -2034,7 +2035,8 @@ const VSFrame* cnr3_complete_live_recovery(
 
         const Cnr3Status adopt_status = data.output_cache.lookup_frame_and_record_pin(
             hole_frame,
-            request_data->pin_list
+            request_data->pin_list,
+            Cnr3LookupCountPolicy::hit_only
         );
 
         if (cnr3_status_is_ok(adopt_status)) {

@@ -62,6 +62,21 @@ struct Cnr3CacheHotZoneDiagnosticStats {
     std::uint64_t frames_rejected_from_prune_due_to_hot_zone = 0;
 };
 
+/*
+    D-SUM-04 frame-lifecycle origin tag.
+
+    The five live origins intentionally mirror the current source's production
+    shapes. Unspecified is the silent default for selftest and untagged routes.
+*/
+enum class Cnr3FrameLifecycleOrigin {
+    unspecified,
+    frame0_fresh_start,
+    floor_fresh_start,
+    ordinary_target,
+    recovery_hole,
+    recovery_target
+};
+
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
 
 /*
@@ -76,6 +91,15 @@ struct Cnr3CacheLookupSiteDiagnosticStats {
     std::uint64_t looks_counted = 0;
     std::uint64_t hits_counted = 0;
     std::uint64_t misses_counted = 0;
+};
+
+struct Cnr3FrameLifecycleOriginDiagnosticStats {
+    std::uint64_t total = 0;
+    std::uint64_t frame0_fresh_start = 0;
+    std::uint64_t floor_fresh_start = 0;
+    std::uint64_t ordinary_target = 0;
+    std::uint64_t recovery_hole = 0;
+    std::uint64_t recovery_target = 0;
 };
 
 struct Cnr3CacheOwnershipDiagnosticStats {
@@ -97,6 +121,12 @@ struct Cnr3CacheOwnershipDiagnosticStats {
     Cnr3CacheLookupSiteDiagnosticStats site8a_plain_store_duplicate_check{};
     Cnr3CacheLookupSiteDiagnosticStats site8b_as2_store_duplicate_check{};
     Cnr3CacheLookupSiteDiagnosticStats site9_duplicate_winner_reacquire{};
+
+    Cnr3FrameLifecycleOriginDiagnosticStats lifecycle_bailed_before_compute{};
+    Cnr3FrameLifecycleOriginDiagnosticStats lifecycle_frames_computed{};
+    Cnr3FrameLifecycleOriginDiagnosticStats lifecycle_bailed_after_compute_duplicate{};
+    Cnr3FrameLifecycleOriginDiagnosticStats lifecycle_computed_but_returned_after_duplicate_store{};
+    Cnr3FrameLifecycleOriginDiagnosticStats lifecycle_frames_computed_and_stored{};
 
     std::uint64_t lookup_refs_acquired = 0;
     std::uint64_t lookup_refs_released_by_cache_core = 0;
@@ -412,6 +442,38 @@ inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_miss(
     cnr3_cache_diag_saturating_increment(stats.misses_counted);
 }
 
+inline void cnr3_cache_ownership_diagnostic_observe_frame_lifecycle_event(
+    Cnr3FrameLifecycleOriginDiagnosticStats& stats,
+    Cnr3FrameLifecycleOrigin origin
+) noexcept {
+    if (origin == Cnr3FrameLifecycleOrigin::unspecified) {
+        return;
+    }
+
+    cnr3_cache_diag_saturating_increment(stats.total);
+
+    switch (origin) {
+    case Cnr3FrameLifecycleOrigin::frame0_fresh_start:
+        cnr3_cache_diag_saturating_increment(stats.frame0_fresh_start);
+        break;
+    case Cnr3FrameLifecycleOrigin::floor_fresh_start:
+        cnr3_cache_diag_saturating_increment(stats.floor_fresh_start);
+        break;
+    case Cnr3FrameLifecycleOrigin::ordinary_target:
+        cnr3_cache_diag_saturating_increment(stats.ordinary_target);
+        break;
+    case Cnr3FrameLifecycleOrigin::recovery_hole:
+        cnr3_cache_diag_saturating_increment(stats.recovery_hole);
+        break;
+    case Cnr3FrameLifecycleOrigin::recovery_target:
+        cnr3_cache_diag_saturating_increment(stats.recovery_target);
+        break;
+    case Cnr3FrameLifecycleOrigin::unspecified:
+    default:
+        break;
+    }
+}
+
 inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(
     Cnr3CacheOwnershipDiagnosticStats& stats
 ) noexcept {
@@ -579,11 +641,19 @@ inline void cnr3_cache_store_diagnostic_observe_store(
 #endif
 
 
+struct Cnr3DiagDsum07TempOutputLifecycleStats;
+
 #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
 
 void cnr3_cache_ownership_diagnostic_write_summary(
     Cnr3InstanceId instance_id,
     const Cnr3CacheOwnershipDiagnosticStats& stats
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    , const Cnr3DiagDsum07TempOutputLifecycleStats* dsum07_temp_output_lifecycle = nullptr
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    , const Cnr3CacheStoreDiagnosticStats* dsum08_cache_store = nullptr
+#endif
 ) noexcept;
 
 #endif

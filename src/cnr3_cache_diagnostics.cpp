@@ -379,6 +379,390 @@ namespace {
         cnr3_cache_diag_saturating_add(misses, stats.misses_counted);
     }
 
+    [[nodiscard]] std::uint64_t cnr3_cache_diag_lifecycle_bucket_sum(
+        const Cnr3FrameLifecycleOriginDiagnosticStats& stats
+    ) noexcept {
+        std::uint64_t total = 0;
+        cnr3_cache_diag_saturating_add(total, stats.frame0_fresh_start);
+        cnr3_cache_diag_saturating_add(total, stats.floor_fresh_start);
+        cnr3_cache_diag_saturating_add(total, stats.ordinary_target);
+        cnr3_cache_diag_saturating_add(total, stats.recovery_hole);
+        cnr3_cache_diag_saturating_add(total, stats.recovery_target);
+        return total;
+    }
+
+    void cnr3_cache_diag_write_lifecycle_value_line(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        std::uint64_t value,
+        const char* suffix
+    ) noexcept {
+        char message[640] = {};
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-SUMMARY] D-SUM-04     %-50s = %llu%s",
+            label != nullptr ? label : "(null)",
+            static_cast<unsigned long long>(value),
+            suffix != nullptr ? suffix : ""
+        );
+
+        if (written >= 0) {
+            message[sizeof(message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", message);
+        }
+    }
+
+    void cnr3_cache_diag_write_lifecycle_event(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        const Cnr3FrameLifecycleOriginDiagnosticStats& stats,
+        const char* purpose,
+        bool a_event,
+        bool x_event
+    ) noexcept {
+        char message[640] = {};
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-SUMMARY] D-SUM-04 %-62s total=%llu",
+            label != nullptr ? label : "(null)",
+            static_cast<unsigned long long>(stats.total)
+        );
+
+        if (written >= 0) {
+            message[sizeof(message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", message);
+        }
+
+        const char* impossible_for_a = "   (cannot occur for this event; printed to prove it)";
+        const char* impossible_for_x = "   (cannot occur for this event unless a new path is discovered)";
+
+        cnr3_cache_diag_write_lifecycle_value_line(
+            instance_id,
+            "of which frame0 fresh-start",
+            stats.frame0_fresh_start,
+            a_event ? impossible_for_a : ""
+        );
+        cnr3_cache_diag_write_lifecycle_value_line(
+            instance_id,
+            "of which floor fresh-start",
+            stats.floor_fresh_start,
+            x_event ? impossible_for_x : ""
+        );
+        cnr3_cache_diag_write_lifecycle_value_line(
+            instance_id,
+            "of which ordinary target",
+            stats.ordinary_target,
+            (a_event || x_event) ? (a_event ? impossible_for_a : impossible_for_x) : ""
+        );
+        cnr3_cache_diag_write_lifecycle_value_line(
+            instance_id,
+            "of which recovery hole",
+            stats.recovery_hole,
+            x_event ? impossible_for_x : ""
+        );
+        cnr3_cache_diag_write_lifecycle_value_line(
+            instance_id,
+            "of which recovery target",
+            stats.recovery_target,
+            (a_event || x_event) ? (a_event ? impossible_for_a : impossible_for_x) : ""
+        );
+
+        char purpose_message[768] = {};
+        const int purpose_written = std::snprintf(
+            purpose_message,
+            sizeof(purpose_message),
+            "[DSUM-SUMMARY] D-SUM-04    -> %s",
+            purpose != nullptr ? purpose : "no purpose text supplied."
+        );
+
+        if (purpose_written >= 0) {
+            purpose_message[sizeof(purpose_message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", purpose_message);
+        }
+    }
+
+    void cnr3_cache_diag_write_lifecycle_check(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        bool ok,
+        std::uint64_t left,
+        std::uint64_t right
+    ) noexcept {
+        char message[768] = {};
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-SUMMARY] D-SUM-04 lifecycle self-check: %s (%llu vs %llu) -> %s",
+            label != nullptr ? label : "unnamed check",
+            static_cast<unsigned long long>(left),
+            static_cast<unsigned long long>(right),
+            ok ? "OK" : "*** MISMATCH ***"
+        );
+
+        if (written >= 0) {
+            message[sizeof(message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", message);
+        }
+    }
+
+    void cnr3_cache_diag_write_lifecycle_expectation(
+        Cnr3InstanceId instance_id,
+        bool ok,
+        std::uint64_t computed_total,
+        std::uint64_t temporary_outputs_created
+    ) noexcept {
+        char message[768] = {};
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-SUMMARY] D-SUM-04 lifecycle expectation: frames_computed <= D-SUM-07 temporary_outputs_created (%llu <= %llu) -> %s%s",
+            static_cast<unsigned long long>(computed_total),
+            static_cast<unsigned long long>(temporary_outputs_created),
+            ok ? "OK" : "processing failures occurred",
+            computed_total == temporary_outputs_created ? "; equality on this clean run" : ""
+        );
+
+        if (written >= 0) {
+            message[sizeof(message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", message);
+        }
+    }
+
+    void cnr3_cache_diag_write_lifecycle_summary(
+        Cnr3InstanceId instance_id,
+        const Cnr3CacheOwnershipDiagnosticStats& stats
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        , const Cnr3DiagDsum07TempOutputLifecycleStats* dsum07_temp_output_lifecycle
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+        , const Cnr3CacheStoreDiagnosticStats* dsum08_cache_store
+#endif
+    ) noexcept {
+        const Cnr3FrameLifecycleOriginDiagnosticStats& a =
+            stats.lifecycle_bailed_before_compute;
+        const Cnr3FrameLifecycleOriginDiagnosticStats& b =
+            stats.lifecycle_frames_computed;
+        const Cnr3FrameLifecycleOriginDiagnosticStats& e =
+            stats.lifecycle_bailed_after_compute_duplicate;
+        const Cnr3FrameLifecycleOriginDiagnosticStats& x =
+            stats.lifecycle_computed_but_returned_after_duplicate_store;
+        const Cnr3FrameLifecycleOriginDiagnosticStats& f =
+            stats.lifecycle_frames_computed_and_stored;
+
+        cnr3_cache_diag_write_text_line(
+            instance_id,
+            "D-SUM-04",
+            "[DSUM-SUMMARY] D-SUM-04 frame lifecycle summary (each number is counted where the event happens; nothing is derived):"
+        );
+        cnr3_cache_diag_write_text_line(
+            instance_id,
+            "D-SUM-04",
+            "[DSUM-SUMMARY] D-SUM-04   computed = this activation produced the output frame itself, by full pixel processing or fresh-start copy; adopted frames are not computed"
+        );
+
+        cnr3_cache_diag_write_lifecycle_event(
+            instance_id,
+            "bailed_before_compute_since_already_in_cache",
+            a,
+            "before computing a recovery floor or hole, checked whether another activation had already produced it; when found, adopted it and skipped the work.",
+            true,
+            false
+        );
+        cnr3_cache_diag_write_lifecycle_event(
+            instance_id,
+            "frames_computed",
+            b,
+            "frames this activation actually produced, including full pixel outputs and copy-only fresh starts; later duplicate losers are still counted here.",
+            false,
+            false
+        );
+        cnr3_cache_diag_write_lifecycle_event(
+            instance_id,
+            "bailed_after_compute_because_another_activation_stored_it_first",
+            e,
+            "after this activation produced a frame, the store-time duplicate check found another activation's winner; this activation's copy was discarded.",
+            false,
+            false
+        );
+        cnr3_cache_diag_write_lifecycle_event(
+            instance_id,
+            "computed_but_returned_after_duplicate_store",
+            x,
+            "frame 0 produced a copy, store found an existing winner, and this activation returned its own copy rather than discarding it.",
+            false,
+            true
+        );
+        cnr3_cache_diag_write_lifecycle_event(
+            instance_id,
+            "frames_computed_and_stored",
+            f,
+            "frames this activation produced and successfully inserted into the cache as the stored winner.",
+            false,
+            false
+        );
+
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "bailed-before total equals its five origin buckets",
+            a.total == cnr3_cache_diag_lifecycle_bucket_sum(a),
+            a.total,
+            cnr3_cache_diag_lifecycle_bucket_sum(a)
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "frames-computed total equals its five origin buckets",
+            b.total == cnr3_cache_diag_lifecycle_bucket_sum(b),
+            b.total,
+            cnr3_cache_diag_lifecycle_bucket_sum(b)
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "discard-after-compute total equals its five origin buckets",
+            e.total == cnr3_cache_diag_lifecycle_bucket_sum(e),
+            e.total,
+            cnr3_cache_diag_lifecycle_bucket_sum(e)
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "returned-after-duplicate total equals its five origin buckets",
+            x.total == cnr3_cache_diag_lifecycle_bucket_sum(x),
+            x.total,
+            cnr3_cache_diag_lifecycle_bucket_sum(x)
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "computed-and-stored total equals its five origin buckets",
+            f.total == cnr3_cache_diag_lifecycle_bucket_sum(f),
+            f.total,
+            cnr3_cache_diag_lifecycle_bucket_sum(f)
+        );
+
+        const std::uint64_t terminal_total = f.total + e.total + x.total;
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "computed == stored + discarded + returned-after-duplicate",
+            b.total == terminal_total,
+            b.total,
+            terminal_total
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "frame0 computed == stored + discarded + returned-after-duplicate",
+            b.frame0_fresh_start ==
+                (f.frame0_fresh_start + e.frame0_fresh_start + x.frame0_fresh_start),
+            b.frame0_fresh_start,
+            f.frame0_fresh_start + e.frame0_fresh_start + x.frame0_fresh_start
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "floor computed == stored + discarded + returned-after-duplicate",
+            b.floor_fresh_start ==
+                (f.floor_fresh_start + e.floor_fresh_start + x.floor_fresh_start),
+            b.floor_fresh_start,
+            f.floor_fresh_start + e.floor_fresh_start + x.floor_fresh_start
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "ordinary computed == stored + discarded + returned-after-duplicate",
+            b.ordinary_target ==
+                (f.ordinary_target + e.ordinary_target + x.ordinary_target),
+            b.ordinary_target,
+            f.ordinary_target + e.ordinary_target + x.ordinary_target
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "recovery-hole computed == stored + discarded + returned-after-duplicate",
+            b.recovery_hole ==
+                (f.recovery_hole + e.recovery_hole + x.recovery_hole),
+            b.recovery_hole,
+            f.recovery_hole + e.recovery_hole + x.recovery_hole
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "recovery-target computed == stored + discarded + returned-after-duplicate",
+            b.recovery_target ==
+                (f.recovery_target + e.recovery_target + x.recovery_target),
+            b.recovery_target,
+            f.recovery_target + e.recovery_target + x.recovery_target
+        );
+
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "bail-before total equals site7a + site7b hits",
+            a.total ==
+                (stats.site7a_floor_adopt_bail_early.hits_counted +
+                    stats.site7b_hole_adopt_bail_early.hits_counted),
+            a.total,
+            stats.site7a_floor_adopt_bail_early.hits_counted +
+                stats.site7b_hole_adopt_bail_early.hits_counted
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "floor bail-before equals site7a hits",
+            a.floor_fresh_start == stats.site7a_floor_adopt_bail_early.hits_counted,
+            a.floor_fresh_start,
+            stats.site7a_floor_adopt_bail_early.hits_counted
+        );
+        cnr3_cache_diag_write_lifecycle_check(
+            instance_id,
+            "recovery-hole bail-before equals site7b hits",
+            a.recovery_hole == stats.site7b_hole_adopt_bail_early.hits_counted,
+            a.recovery_hole,
+            stats.site7b_hole_adopt_bail_early.hits_counted
+        );
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        if (dsum07_temp_output_lifecycle != nullptr) {
+            const Cnr3DiagDsum07TempOutputLifecycleSnapshot dsum07 =
+                cnr3_diag_dsum07_snapshot_temp_output_lifecycle(
+                    *dsum07_temp_output_lifecycle
+                );
+            cnr3_cache_diag_write_lifecycle_check(
+                instance_id,
+                "ordinary+recovery-target discard equals D-SUM-07 duplicate discard",
+                (e.ordinary_target + e.recovery_target) ==
+                    dsum07.duplicate_computed_but_discarded,
+                e.ordinary_target + e.recovery_target,
+                dsum07.duplicate_computed_but_discarded
+            );
+            cnr3_cache_diag_write_lifecycle_expectation(
+                instance_id,
+                b.total <= dsum07.temporary_outputs_created,
+                b.total,
+                dsum07.temporary_outputs_created
+            );
+        }
+#endif
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+        if (dsum08_cache_store != nullptr) {
+            const std::uint64_t production_stores =
+                dsum08_cache_store->stores_by_kind[0] +
+                dsum08_cache_store->stores_by_kind[1];
+            const std::uint64_t as2_stores =
+                dsum08_cache_store->stores_by_kind[2] +
+                dsum08_cache_store->stores_by_kind[3];
+            cnr3_cache_diag_write_lifecycle_check(
+                instance_id,
+                "stored frame0+ordinary+recovery-target equals D-SUM-08 production stores",
+                (f.frame0_fresh_start + f.ordinary_target + f.recovery_target) ==
+                    production_stores,
+                f.frame0_fresh_start + f.ordinary_target + f.recovery_target,
+                production_stores
+            );
+            cnr3_cache_diag_write_lifecycle_check(
+                instance_id,
+                "stored floor+recovery-hole equals D-SUM-08 AS2 stores",
+                (f.floor_fresh_start + f.recovery_hole) == as2_stores,
+                f.floor_fresh_start + f.recovery_hole,
+                as2_stores
+            );
+        }
+#endif
+    }
+
 #endif
 
 } // namespace
@@ -388,6 +772,12 @@ namespace {
 void cnr3_cache_ownership_diagnostic_write_summary(
     Cnr3InstanceId instance_id,
     const Cnr3CacheOwnershipDiagnosticStats& stats
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+    , const Cnr3DiagDsum07TempOutputLifecycleStats* dsum07_temp_output_lifecycle
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    , const Cnr3CacheStoreDiagnosticStats* dsum08_cache_store
+#endif
 ) noexcept {
     const std::uint64_t lookup_refs_released_or_transferred =
         stats.lookup_refs_released_by_cache_core + stats.lookup_refs_transferred;
@@ -625,6 +1015,17 @@ void cnr3_cache_ownership_diagnostic_write_summary(
             cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", selfcheck_message);
         }
     }
+
+    cnr3_cache_diag_write_lifecycle_summary(
+        instance_id,
+        stats
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        , dsum07_temp_output_lifecycle
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+        , dsum08_cache_store
+#endif
+    );
 
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);

@@ -807,6 +807,21 @@ public:
     [[nodiscard]] Cnr3CacheHotZoneDiagnosticStats hot_zone_diagnostic_stats() const;
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
     [[nodiscard]] Cnr3CacheOwnershipDiagnosticStats ownership_diagnostic_stats() const;
+    void observe_frame_lifecycle_bailed_before_compute(
+        Cnr3FrameLifecycleOrigin origin
+    ) const noexcept;
+    void observe_frame_lifecycle_computed(
+        Cnr3FrameLifecycleOrigin origin
+    ) const noexcept;
+    void observe_frame_lifecycle_bailed_after_compute_duplicate(
+        Cnr3FrameLifecycleOrigin origin
+    ) const noexcept;
+    void observe_frame_lifecycle_computed_returned_after_duplicate_store(
+        Cnr3FrameLifecycleOrigin origin
+    ) const noexcept;
+    void observe_frame_lifecycle_computed_and_stored(
+        Cnr3FrameLifecycleOrigin origin
+    ) const noexcept;
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
     [[nodiscard]] Cnr3CacheIntegrityDiagnosticStats cache_integrity_diagnostic_stats() const;
@@ -1419,6 +1434,10 @@ private:
     void observe_lookup_site_look_locked(Cnr3LookupSite site) const noexcept;
     void observe_lookup_site_hit_locked(Cnr3LookupSite site) const noexcept;
     void observe_lookup_site_miss_locked(Cnr3LookupSite site) const noexcept;
+    void observe_frame_lifecycle_event_locked(
+        Cnr3FrameLifecycleOriginDiagnosticStats& event_stats,
+        Cnr3FrameLifecycleOrigin origin
+    ) const noexcept;
     void observe_lookup_ref_acquired_locked() const noexcept;
     void observe_lookup_ref_released_by_cache_core() const noexcept;
     void observe_lookup_ref_transferred() const noexcept;

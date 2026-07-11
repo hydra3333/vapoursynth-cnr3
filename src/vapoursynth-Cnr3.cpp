@@ -336,9 +336,23 @@ void VS_CC cnr3_free_filter(
     );
 #endif
 #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    const Cnr3CacheOwnershipDiagnosticStats dsum04_ownership_balance_for_summary =
+        data->output_cache.ownership_diagnostic_stats();
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+    const Cnr3CacheStoreDiagnosticStats dsum08_cache_store_for_summary =
+        data->output_cache.cache_store_diagnostic_stats();
+#endif
     cnr3_cache_ownership_diagnostic_write_summary(
         data->config.instance_id,
-        data->output_cache.ownership_diagnostic_stats()
+        dsum04_ownership_balance_for_summary
+#if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
+        , &data->dsum07_temp_output_lifecycle
+#endif
+#if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
+        , &dsum08_cache_store_for_summary
+#endif
     );
 #endif
 #if defined(CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY)

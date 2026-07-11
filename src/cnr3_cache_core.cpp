@@ -649,6 +649,61 @@ Cnr3CacheOwnershipDiagnosticStats Cnr3OutputCacheCore::ownership_diagnostic_stat
     return ownership_diagnostic_stats_locked();
 }
 
+void Cnr3OutputCacheCore::observe_frame_lifecycle_bailed_before_compute(
+    Cnr3FrameLifecycleOrigin origin
+) const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    observe_frame_lifecycle_event_locked(
+        ownership_diag_stats_.lifecycle_bailed_before_compute,
+        origin
+    );
+}
+
+void Cnr3OutputCacheCore::observe_frame_lifecycle_computed(
+    Cnr3FrameLifecycleOrigin origin
+) const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    observe_frame_lifecycle_event_locked(
+        ownership_diag_stats_.lifecycle_frames_computed,
+        origin
+    );
+}
+
+void Cnr3OutputCacheCore::observe_frame_lifecycle_bailed_after_compute_duplicate(
+    Cnr3FrameLifecycleOrigin origin
+) const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    observe_frame_lifecycle_event_locked(
+        ownership_diag_stats_.lifecycle_bailed_after_compute_duplicate,
+        origin
+    );
+}
+
+void Cnr3OutputCacheCore::observe_frame_lifecycle_computed_returned_after_duplicate_store(
+    Cnr3FrameLifecycleOrigin origin
+) const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    observe_frame_lifecycle_event_locked(
+        ownership_diag_stats_.lifecycle_computed_but_returned_after_duplicate_store,
+        origin
+    );
+}
+
+void Cnr3OutputCacheCore::observe_frame_lifecycle_computed_and_stored(
+    Cnr3FrameLifecycleOrigin origin
+) const noexcept {
+    const std::lock_guard<std::mutex> lock(cache_mutex_);
+
+    observe_frame_lifecycle_event_locked(
+        ownership_diag_stats_.lifecycle_frames_computed_and_stored,
+        origin
+    );
+}
+
 #endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
@@ -2050,6 +2105,16 @@ void Cnr3OutputCacheCore::observe_lookup_site_miss_locked(
     }
 
     cnr3_cache_ownership_diagnostic_observe_lookup_site_miss(*site_stats);
+}
+
+void Cnr3OutputCacheCore::observe_frame_lifecycle_event_locked(
+    Cnr3FrameLifecycleOriginDiagnosticStats& event_stats,
+    Cnr3FrameLifecycleOrigin origin
+) const noexcept {
+    cnr3_cache_ownership_diagnostic_observe_frame_lifecycle_event(
+        event_stats,
+        origin
+    );
 }
 
 void Cnr3OutputCacheCore::observe_lookup_ref_acquired_locked() const noexcept {

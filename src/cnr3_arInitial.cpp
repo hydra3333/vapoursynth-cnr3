@@ -624,7 +624,8 @@ const VSFrame* cnr3_start_live_recovery(
             n,
             CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
             request_data->pin_list,
-            recovery_plan
+            recovery_plan,
+            true
         );
 
     if (!cnr3_status_is_ok(plan_status)) {
@@ -913,7 +914,8 @@ const VSFrame* cnr3_arInitial(
         data.output_cache.lookup_frame_and_record_pin(
             n,
             request_data->pin_list,
-            Cnr3LookupCountPolicy::hit_only
+            Cnr3LookupCountPolicy::hit_only,
+            Cnr3LookupSite::requested_frame
         );
 
     if (cnr3_status_is_ok(cache_hit_pin_status)) {
@@ -967,7 +969,8 @@ const VSFrame* cnr3_arInitial(
         data.output_cache.lookup_frame_and_record_pin(
             request_data->predecessor_frame,
             request_data->pin_list,
-            Cnr3LookupCountPolicy::full
+            Cnr3LookupCountPolicy::full,
+            Cnr3LookupSite::predecessor_fastpath
         );
 
     if (cnr3_status_is_ok(predecessor_pin_status)) {

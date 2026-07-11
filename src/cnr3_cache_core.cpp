@@ -51,6 +51,14 @@ namespace {
         return policy == Cnr3LookupCountPolicy::hit_only;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    [[nodiscard]] bool cnr3_lookup_site_is_specified(
+        Cnr3LookupSite site
+    ) noexcept {
+        return site != Cnr3LookupSite::unspecified;
+    }
+#endif
+
     [[nodiscard]] bool cnr3_prune_candidate_distance_order_before(
         Cnr3PruneCandidateDistanceOrderEntry left,
         Cnr3PruneCandidateDistanceOrderEntry right
@@ -1492,7 +1500,8 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass(
 Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
     int requested_frame,
     int max_back_radius,
-    Cnr3CacheRecoverySearchPlan& out_plan
+    Cnr3CacheRecoverySearchPlan& out_plan,
+    bool observe_lookup_site_breakdown
 ) const {
     out_plan = Cnr3CacheRecoverySearchPlan{};
 
@@ -1522,7 +1531,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
     return plan_bounded_recovery_search_locked(
         requested_frame,
         max_back_radius,
-        out_plan
+        out_plan,
+        observe_lookup_site_breakdown
     );
 }
 
@@ -1530,7 +1540,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
     int requested_frame,
     int max_back_radius,
     Cnr3CachePinList& pin_list,
-    Cnr3CacheRecoverySearchPlan& out_plan
+    Cnr3CacheRecoverySearchPlan& out_plan,
+    bool observe_lookup_site_breakdown
 ) {
     out_plan = Cnr3CacheRecoverySearchPlan{};
 
@@ -1567,7 +1578,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
         requested_frame,
         max_back_radius,
         pin_list,
-        out_plan
+        out_plan,
+        observe_lookup_site_breakdown
     );
 }
 
@@ -1620,7 +1632,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
     int frame_number,
     const VSAPI* vsapi,
     Cnr3OwnedFrameRef& out_frame,
-    Cnr3LookupCountPolicy count_policy
+    Cnr3LookupCountPolicy count_policy,
+    Cnr3LookupSite lookup_site
 ) const {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -1644,7 +1657,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
             frame_number,
             vsapi,
             &acquired_frame,
-            count_policy
+            count_policy,
+            lookup_site
         );
     }
 
@@ -1684,7 +1698,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
     int frame_number,
     Cnr3CachePinList& pin_list,
-    Cnr3LookupCountPolicy count_policy
+    Cnr3LookupCountPolicy count_policy,
+    Cnr3LookupSite lookup_site
 ) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -1698,7 +1713,7 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
 
     const std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    return lookup_frame_and_record_pin_locked(frame_number, pin_list, count_policy);
+    return lookup_frame_and_record_pin_locked(frame_number, pin_list, count_policy, lookup_site);
 }
 
 Cnr3Status Cnr3OutputCacheCore::unpin_frame(
@@ -1955,6 +1970,86 @@ void Cnr3OutputCacheCore::observe_cache_lookup_query_locked() const noexcept {
 
 void Cnr3OutputCacheCore::observe_cache_lookup_hit_locked() const noexcept {
     cnr3_cache_ownership_diagnostic_observe_cache_lookup_hit(ownership_diag_stats_);
+}
+
+Cnr3CacheLookupSiteDiagnosticStats* Cnr3OutputCacheCore::lookup_site_stats_locked(
+    Cnr3LookupSite site
+) const noexcept {
+    switch (site) {
+    case Cnr3LookupSite::requested_frame:
+        return &ownership_diag_stats_.site1_requested_frame_check;
+    case Cnr3LookupSite::predecessor_fastpath:
+        return &ownership_diag_stats_.site2_predecessor_fastpath;
+    case Cnr3LookupSite::recovery_walk:
+        return &ownership_diag_stats_.site3_recovery_walk;
+    case Cnr3LookupSite::hole_catalogue_scan:
+        return &ownership_diag_stats_.site4_hole_catalogue_scan;
+    case Cnr3LookupSite::anchor_repin:
+        return &ownership_diag_stats_.site5_anchor_repin;
+    case Cnr3LookupSite::reacquire_already_pinned:
+        return &ownership_diag_stats_.site6_reacquire_already_pinned;
+    case Cnr3LookupSite::floor_adopt:
+        return &ownership_diag_stats_.site7a_floor_adopt_bail_early;
+    case Cnr3LookupSite::hole_adopt:
+        return &ownership_diag_stats_.site7b_hole_adopt_bail_early;
+    case Cnr3LookupSite::plain_store_duplicate:
+        return &ownership_diag_stats_.site8a_plain_store_duplicate_check;
+    case Cnr3LookupSite::as2_store_duplicate:
+        return &ownership_diag_stats_.site8b_as2_store_duplicate_check;
+    case Cnr3LookupSite::duplicate_winner_reacquire:
+        return &ownership_diag_stats_.site9_duplicate_winner_reacquire;
+    case Cnr3LookupSite::unspecified:
+    default:
+        return nullptr;
+    }
+}
+
+void Cnr3OutputCacheCore::observe_lookup_site_invocation_locked(
+    Cnr3LookupSite site
+) const noexcept {
+    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
+
+    if (site_stats == nullptr) {
+        return;
+    }
+
+    cnr3_cache_ownership_diagnostic_observe_lookup_site_invocation(*site_stats);
+}
+
+void Cnr3OutputCacheCore::observe_lookup_site_look_locked(
+    Cnr3LookupSite site
+) const noexcept {
+    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
+
+    if (site_stats == nullptr) {
+        return;
+    }
+
+    cnr3_cache_ownership_diagnostic_observe_lookup_site_look(*site_stats);
+}
+
+void Cnr3OutputCacheCore::observe_lookup_site_hit_locked(
+    Cnr3LookupSite site
+) const noexcept {
+    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
+
+    if (site_stats == nullptr) {
+        return;
+    }
+
+    cnr3_cache_ownership_diagnostic_observe_lookup_site_hit(*site_stats);
+}
+
+void Cnr3OutputCacheCore::observe_lookup_site_miss_locked(
+    Cnr3LookupSite site
+) const noexcept {
+    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
+
+    if (site_stats == nullptr) {
+        return;
+    }
+
+    cnr3_cache_ownership_diagnostic_observe_lookup_site_miss(*site_stats);
 }
 
 void Cnr3OutputCacheCore::observe_lookup_ref_acquired_locked() const noexcept {
@@ -2741,13 +2836,21 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
         return Cnr3Status::invariant_violation;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
+        observe_lookup_site_invocation_locked(Cnr3LookupSite::plain_store_duplicate);
+    }
+#endif
+
     const auto existing_frame_index_it = frame_index_.find(frame_number);
 
     if (existing_frame_index_it != frame_index_.end()) {
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
         if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
             observe_cache_lookup_query_locked();
+            observe_lookup_site_look_locked(Cnr3LookupSite::plain_store_duplicate);
             observe_cache_lookup_hit_locked();
+            observe_lookup_site_hit_locked(Cnr3LookupSite::plain_store_duplicate);
         }
 #endif
 
@@ -2871,6 +2974,12 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
         return Cnr3Status::invariant_violation;
     }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
+        observe_lookup_site_invocation_locked(Cnr3LookupSite::as2_store_duplicate);
+    }
+#endif
+
     const auto existing_frame_index_it = frame_index_.find(frame_number);
     const bool existing_slot_found =
         existing_frame_index_it != frame_index_.end();
@@ -2880,7 +2989,9 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
         if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
             observe_cache_lookup_query_locked();
+            observe_lookup_site_look_locked(Cnr3LookupSite::as2_store_duplicate);
             observe_cache_lookup_hit_locked();
+            observe_lookup_site_hit_locked(Cnr3LookupSite::as2_store_duplicate);
         }
 #endif
 
@@ -3617,7 +3728,8 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
 Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
     int requested_frame,
     int max_back_radius,
-    Cnr3CacheRecoverySearchPlan& out_plan
+    Cnr3CacheRecoverySearchPlan& out_plan,
+    bool observe_lookup_site_breakdown
 ) const {
     out_plan.hole_frame_numbers.clear();
     out_plan.anchor_pin_recorded = false;
@@ -3666,8 +3778,15 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
             candidate_frame == upper_bound;
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (observe_lookup_site_breakdown) {
+            observe_lookup_site_invocation_locked(Cnr3LookupSite::recovery_walk);
+        }
+
         if (!candidate_is_rechecked_predecessor) {
             observe_cache_lookup_query_locked();
+            if (observe_lookup_site_breakdown) {
+                observe_lookup_site_look_locked(Cnr3LookupSite::recovery_walk);
+            }
         }
 #endif
 
@@ -3677,9 +3796,15 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
             if (candidate_is_rechecked_predecessor) {
                 observe_cache_lookup_query_locked();
+                if (observe_lookup_site_breakdown) {
+                    observe_lookup_site_look_locked(Cnr3LookupSite::recovery_walk);
+                }
             }
 
             observe_cache_lookup_hit_locked();
+            if (observe_lookup_site_breakdown) {
+                observe_lookup_site_hit_locked(Cnr3LookupSite::recovery_walk);
+            }
 #endif
 
             const std::size_t slot_index = index_it->second;
@@ -3699,6 +3824,12 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
             break;
         }
 
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (observe_lookup_site_breakdown && !candidate_is_rechecked_predecessor) {
+            observe_lookup_site_miss_locked(Cnr3LookupSite::recovery_walk);
+        }
+#endif
+
         if (candidate_frame == 0) {
             break;
         }
@@ -3713,6 +3844,12 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
     out_plan.anchor_is_checkpoint = anchor_is_checkpoint;
 
     for (int frame_number = anchor_frame + 1; frame_number < requested_frame; ++frame_number) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (observe_lookup_site_breakdown) {
+            observe_lookup_site_invocation_locked(Cnr3LookupSite::hole_catalogue_scan);
+        }
+#endif
+
         const auto index_it = frame_index_.find(frame_number);
 
         if (index_it == frame_index_.end()) {
@@ -3738,12 +3875,14 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
     int requested_frame,
     int max_back_radius,
     Cnr3CachePinList& pin_list,
-    Cnr3CacheRecoverySearchPlan& out_plan
+    Cnr3CacheRecoverySearchPlan& out_plan,
+    bool observe_lookup_site_breakdown
 ) {
     const Cnr3Status plan_status = plan_bounded_recovery_search_locked(
         requested_frame,
         max_back_radius,
-        out_plan
+        out_plan,
+        observe_lookup_site_breakdown
     );
 
     if (!cnr3_status_is_ok(plan_status)) {
@@ -3757,7 +3896,10 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
     const Cnr3Status record_status = lookup_frame_and_record_pin_locked(
         out_plan.anchor_frame_number,
         pin_list,
-        Cnr3LookupCountPolicy::none
+        Cnr3LookupCountPolicy::none,
+        observe_lookup_site_breakdown
+            ? Cnr3LookupSite::anchor_repin
+            : Cnr3LookupSite::unspecified
     );
 
     if (!cnr3_status_is_ok(record_status)) {
@@ -3842,7 +3984,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     int frame_number,
     const VSAPI* vsapi,
     const VSFrame** out_acquired_frame,
-    Cnr3LookupCountPolicy count_policy
+    Cnr3LookupCountPolicy count_policy,
+    Cnr3LookupSite lookup_site
 ) const {
     if (out_acquired_frame == nullptr) {
         return Cnr3Status::invalid_argument;
@@ -3863,14 +4006,24 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
     }
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    if (cnr3_lookup_site_is_specified(lookup_site)) {
+        observe_lookup_site_invocation_locked(lookup_site);
+    }
+
     if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
         observe_cache_lookup_query_locked();
+        observe_lookup_site_look_locked(lookup_site);
     }
 #endif
 
     const auto frame_index_it = frame_index_.find(frame_number);
 
     if (frame_index_it == frame_index_.end()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
+            observe_lookup_site_miss_locked(lookup_site);
+        }
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
         observe_lookup_miss_rechurn_locked(frame_number);
 #endif
@@ -3880,10 +4033,12 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
     if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
         observe_cache_lookup_query_locked();
+        observe_lookup_site_look_locked(lookup_site);
     }
 
     if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
         observe_cache_lookup_hit_locked();
+        observe_lookup_site_hit_locked(lookup_site);
     }
 #endif
 
@@ -3927,11 +4082,12 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
 Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
     int frame_number,
     Cnr3CachePinList& pin_list,
-    Cnr3LookupCountPolicy count_policy
+    Cnr3LookupCountPolicy count_policy,
+    Cnr3LookupSite lookup_site
 ) {
     Cnr3CacheSlotPinToken pin_token{};
 
-    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token, count_policy);
+    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token, count_policy, lookup_site);
 
     if (!cnr3_status_is_ok(pin_status)) {
         return pin_status;
@@ -3956,7 +4112,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
 Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     int frame_number,
     Cnr3CacheSlotPinToken& out_pin_token,
-    Cnr3LookupCountPolicy count_policy
+    Cnr3LookupCountPolicy count_policy,
+    Cnr3LookupSite lookup_site
 ) {
     if (!cnr3_frame_number_is_valid(frame_number)) {
         return Cnr3Status::invalid_argument;
@@ -3971,14 +4128,24 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
     }
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    if (cnr3_lookup_site_is_specified(lookup_site)) {
+        observe_lookup_site_invocation_locked(lookup_site);
+    }
+
     if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
         observe_cache_lookup_query_locked();
+        observe_lookup_site_look_locked(lookup_site);
     }
 #endif
 
     const auto frame_index_it = frame_index_.find(frame_number);
 
     if (frame_index_it == frame_index_.end()) {
+#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+        if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
+            observe_lookup_site_miss_locked(lookup_site);
+        }
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
         observe_lookup_miss_rechurn_locked(frame_number);
 #endif
@@ -3988,10 +4155,12 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
     if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
         observe_cache_lookup_query_locked();
+        observe_lookup_site_look_locked(lookup_site);
     }
 
     if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
         observe_cache_lookup_hit_locked();
+        observe_lookup_site_hit_locked(lookup_site);
     }
 #endif
 

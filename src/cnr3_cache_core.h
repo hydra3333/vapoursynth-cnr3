@@ -178,6 +178,26 @@ enum class Cnr3LookupCountPolicy {
     hit_only
 };
 
+/*
+    Diagnostic-only lookup-site tag for D-SUM-04 per-site breakdown output.
+    It is an observation label only; it must not affect cache lookup, pin,
+    store, recovery, or pixel control flow.
+*/
+enum class Cnr3LookupSite {
+    unspecified,
+    requested_frame,
+    predecessor_fastpath,
+    recovery_walk,
+    hole_catalogue_scan,
+    anchor_repin,
+    reacquire_already_pinned,
+    floor_adopt,
+    hole_adopt,
+    plain_store_duplicate,
+    as2_store_duplicate,
+    duplicate_winner_reacquire
+};
+
 // Recency bound for the prune-rechurn counter, in EVICTION-COUNT units (not frame numbers).
 // A re-fetched frame counts as "recently evicted" only if <= this many evictions occurred since it was dropped.
 // Proof data under TINY-100 showed evict-then-refetch events clustering into two populations:
@@ -1159,7 +1179,8 @@ public:
     [[nodiscard]] Cnr3Status plan_bounded_recovery_search(
         int requested_frame,
         int max_back_radius,
-        Cnr3CacheRecoverySearchPlan& out_plan
+        Cnr3CacheRecoverySearchPlan& out_plan,
+        bool observe_lookup_site_breakdown = false
     ) const;
 
     /*
@@ -1180,7 +1201,8 @@ public:
         int requested_frame,
         int max_back_radius,
         Cnr3CachePinList& pin_list,
-        Cnr3CacheRecoverySearchPlan& out_plan
+        Cnr3CacheRecoverySearchPlan& out_plan,
+        bool observe_lookup_site_breakdown = false
     );
 
     /*
@@ -1226,7 +1248,8 @@ public:
         int frame_number,
         const VSAPI* vsapi,
         Cnr3OwnedFrameRef& out_frame,
-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
     ) const;
 
     /*
@@ -1248,7 +1271,8 @@ public:
     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin(
         int frame_number,
         Cnr3CachePinList& pin_list,
-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
     );
 
     /*
@@ -1391,6 +1415,10 @@ private:
     void observe_pin_released_locked() noexcept;
     void observe_cache_lookup_query_locked() const noexcept;
     void observe_cache_lookup_hit_locked() const noexcept;
+    void observe_lookup_site_invocation_locked(Cnr3LookupSite site) const noexcept;
+    void observe_lookup_site_look_locked(Cnr3LookupSite site) const noexcept;
+    void observe_lookup_site_hit_locked(Cnr3LookupSite site) const noexcept;
+    void observe_lookup_site_miss_locked(Cnr3LookupSite site) const noexcept;
     void observe_lookup_ref_acquired_locked() const noexcept;
     void observe_lookup_ref_released_by_cache_core() const noexcept;
     void observe_lookup_ref_transferred() const noexcept;
@@ -1627,7 +1655,8 @@ private:
     [[nodiscard]] Cnr3Status plan_bounded_recovery_search_locked(
         int requested_frame,
         int max_back_radius,
-        Cnr3CacheRecoverySearchPlan& out_plan
+        Cnr3CacheRecoverySearchPlan& out_plan,
+        bool observe_lookup_site_breakdown = false
     ) const;
 
     /*
@@ -1641,7 +1670,8 @@ private:
         int requested_frame,
         int max_back_radius,
         Cnr3CachePinList& pin_list,
-        Cnr3CacheRecoverySearchPlan& out_plan
+        Cnr3CacheRecoverySearchPlan& out_plan,
+        bool observe_lookup_site_breakdown = false
     );
 
     /*
@@ -1682,7 +1712,8 @@ private:
         int frame_number,
         const VSAPI* vsapi,
         const VSFrame** out_acquired_frame,
-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
     ) const;
 
     /*
@@ -1699,7 +1730,8 @@ private:
     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin_locked(
         int frame_number,
         Cnr3CachePinList& pin_list,
-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
     );
 
     /*
@@ -1714,7 +1746,8 @@ private:
     [[nodiscard]] Cnr3Status pin_frame_locked(
         int frame_number,
         Cnr3CacheSlotPinToken& out_pin_token,
-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
+        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
     );
 
     /*
@@ -1781,6 +1814,10 @@ private:
     std::vector<Cnr3CacheHotZone> hot_zones_{};
     Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+    [[nodiscard]] Cnr3CacheLookupSiteDiagnosticStats* lookup_site_stats_locked(
+        Cnr3LookupSite site
+    ) const noexcept;
+
     mutable Cnr3CacheOwnershipDiagnosticStats ownership_diag_stats_{};
 #endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)

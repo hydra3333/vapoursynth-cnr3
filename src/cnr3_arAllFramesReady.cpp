@@ -1088,7 +1088,9 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
     const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
         request.frame_number,
         vsapi,
-        cached_winner_ref
+        cached_winner_ref,
+        Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite::duplicate_winner_reacquire
     );
 
     if (!cnr3_status_is_ok(lookup_status) || !cached_winner_ref.has_frame()) {
@@ -1191,7 +1193,9 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
     const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
         n,
         vsapi,
-        returned_cache_ref
+        returned_cache_ref,
+        Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite::reacquire_already_pinned
     );
 
     if (!cnr3_status_is_ok(lookup_status) || !returned_cache_ref.has_frame()) {
@@ -1350,7 +1354,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
     const Cnr3Status predecessor_status = data.output_cache.lookup_frame_and_add_ref(
         request_data->predecessor_frame,
         vsapi,
-        predecessor_compute_ref
+        predecessor_compute_ref,
+        Cnr3LookupCountPolicy::none,
+        Cnr3LookupSite::reacquire_already_pinned
     );
 
     if (!cnr3_status_is_ok(predecessor_status) ||
@@ -1762,7 +1768,8 @@ const VSFrame* cnr3_complete_live_recovery(
         const Cnr3Status floor_adopt_status = data.output_cache.lookup_frame_and_record_pin(
             floor_frame,
             request_data->pin_list,
-            Cnr3LookupCountPolicy::hit_only
+            Cnr3LookupCountPolicy::hit_only,
+            Cnr3LookupSite::floor_adopt
         );
 
         if (cnr3_status_is_ok(floor_adopt_status)) {
@@ -2036,7 +2043,8 @@ const VSFrame* cnr3_complete_live_recovery(
         const Cnr3Status adopt_status = data.output_cache.lookup_frame_and_record_pin(
             hole_frame,
             request_data->pin_list,
-            Cnr3LookupCountPolicy::hit_only
+            Cnr3LookupCountPolicy::hit_only,
+            Cnr3LookupSite::hole_adopt
         );
 
         if (cnr3_status_is_ok(adopt_status)) {
@@ -2068,7 +2076,9 @@ const VSFrame* cnr3_complete_live_recovery(
         const Cnr3Status predecessor_status = data.output_cache.lookup_frame_and_add_ref(
             hole_frame - 1,
             vsapi,
-            predecessor_compute_ref
+            predecessor_compute_ref,
+            Cnr3LookupCountPolicy::none,
+            Cnr3LookupSite::reacquire_already_pinned
         );
 
         if (!cnr3_status_is_ok(predecessor_status) ||
@@ -2378,7 +2388,9 @@ const VSFrame* cnr3_complete_live_recovery(
         data.output_cache.lookup_frame_and_add_ref(
             n - 1,
             vsapi,
-            target_predecessor_compute_ref
+            target_predecessor_compute_ref,
+            Cnr3LookupCountPolicy::none,
+            Cnr3LookupSite::reacquire_already_pinned
         );
 
     if (!cnr3_status_is_ok(target_predecessor_status) ||

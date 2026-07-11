@@ -1,0 +1,1118 @@
+diff --git a/src/cnr3_arAllFramesReady.cpp b/src/cnr3_arAllFramesReady.cpp
+index 9bb2a53..6c2eccf 100644
+--- a/src/cnr3_arAllFramesReady.cpp
++++ b/src/cnr3_arAllFramesReady.cpp
+@@ -1088,7 +1088,9 @@ Cnr3Status cnr3_store_live_output_frame_for_authoritative_return(
+     const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
+         request.frame_number,
+         vsapi,
+-        cached_winner_ref
++        cached_winner_ref,
++        Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite::duplicate_winner_reacquire
+     );
+ 
+     if (!cnr3_status_is_ok(lookup_status) || !cached_winner_ref.has_frame()) {
+@@ -1191,7 +1193,9 @@ const VSFrame* cnr3_get_frame_live_cache_hit_return(
+     const Cnr3Status lookup_status = data.output_cache.lookup_frame_and_add_ref(
+         n,
+         vsapi,
+-        returned_cache_ref
++        returned_cache_ref,
++        Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite::reacquire_already_pinned
+     );
+ 
+     if (!cnr3_status_is_ok(lookup_status) || !returned_cache_ref.has_frame()) {
+@@ -1350,7 +1354,9 @@ const VSFrame* cnr3_complete_live_predecessor_present_compute(
+     const Cnr3Status predecessor_status = data.output_cache.lookup_frame_and_add_ref(
+         request_data->predecessor_frame,
+         vsapi,
+-        predecessor_compute_ref
++        predecessor_compute_ref,
++        Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite::reacquire_already_pinned
+     );
+ 
+     if (!cnr3_status_is_ok(predecessor_status) ||
+@@ -1762,7 +1768,8 @@ const VSFrame* cnr3_complete_live_recovery(
+         const Cnr3Status floor_adopt_status = data.output_cache.lookup_frame_and_record_pin(
+             floor_frame,
+             request_data->pin_list,
+-            Cnr3LookupCountPolicy::hit_only
++            Cnr3LookupCountPolicy::hit_only,
++            Cnr3LookupSite::floor_adopt
+         );
+ 
+         if (cnr3_status_is_ok(floor_adopt_status)) {
+@@ -2036,7 +2043,8 @@ const VSFrame* cnr3_complete_live_recovery(
+         const Cnr3Status adopt_status = data.output_cache.lookup_frame_and_record_pin(
+             hole_frame,
+             request_data->pin_list,
+-            Cnr3LookupCountPolicy::hit_only
++            Cnr3LookupCountPolicy::hit_only,
++            Cnr3LookupSite::hole_adopt
+         );
+ 
+         if (cnr3_status_is_ok(adopt_status)) {
+@@ -2068,7 +2076,9 @@ const VSFrame* cnr3_complete_live_recovery(
+         const Cnr3Status predecessor_status = data.output_cache.lookup_frame_and_add_ref(
+             hole_frame - 1,
+             vsapi,
+-            predecessor_compute_ref
++            predecessor_compute_ref,
++            Cnr3LookupCountPolicy::none,
++            Cnr3LookupSite::reacquire_already_pinned
+         );
+ 
+         if (!cnr3_status_is_ok(predecessor_status) ||
+@@ -2378,7 +2388,9 @@ const VSFrame* cnr3_complete_live_recovery(
+         data.output_cache.lookup_frame_and_add_ref(
+             n - 1,
+             vsapi,
+-            target_predecessor_compute_ref
++            target_predecessor_compute_ref,
++            Cnr3LookupCountPolicy::none,
++            Cnr3LookupSite::reacquire_already_pinned
+         );
+ 
+     if (!cnr3_status_is_ok(target_predecessor_status) ||
+diff --git a/src/cnr3_arInitial.cpp b/src/cnr3_arInitial.cpp
+index 8ff720a..18db5aa 100644
+--- a/src/cnr3_arInitial.cpp
++++ b/src/cnr3_arInitial.cpp
+@@ -624,7 +624,8 @@ const VSFrame* cnr3_start_live_recovery(
+             n,
+             CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+             request_data->pin_list,
+-            recovery_plan
++            recovery_plan,
++            true
+         );
+ 
+     if (!cnr3_status_is_ok(plan_status)) {
+@@ -913,7 +914,8 @@ const VSFrame* cnr3_arInitial(
+         data.output_cache.lookup_frame_and_record_pin(
+             n,
+             request_data->pin_list,
+-            Cnr3LookupCountPolicy::hit_only
++            Cnr3LookupCountPolicy::hit_only,
++            Cnr3LookupSite::requested_frame
+         );
+ 
+     if (cnr3_status_is_ok(cache_hit_pin_status)) {
+@@ -967,7 +969,8 @@ const VSFrame* cnr3_arInitial(
+         data.output_cache.lookup_frame_and_record_pin(
+             request_data->predecessor_frame,
+             request_data->pin_list,
+-            Cnr3LookupCountPolicy::full
++            Cnr3LookupCountPolicy::full,
++            Cnr3LookupSite::predecessor_fastpath
+         );
+ 
+     if (cnr3_status_is_ok(predecessor_pin_status)) {
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 817bedf..217fbfd 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -32,7 +32,7 @@
+     This string is for human diagnostics and build identification only. It must
+     not be used for control flow.
+ */
+-inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.intent-counted-lookups";
++inline constexpr const char* CNR3_EDIT_VERSION = "CMS07-DIAG.lookup-site-breakdown";
+ 
+ /*
+     CMS07-P.11C.2 live scene-change default.
+diff --git a/src/cnr3_cache_core.cpp b/src/cnr3_cache_core.cpp
+index 7824236..09bb466 100644
+--- a/src/cnr3_cache_core.cpp
++++ b/src/cnr3_cache_core.cpp
+@@ -51,6 +51,14 @@ namespace {
+         return policy == Cnr3LookupCountPolicy::hit_only;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    [[nodiscard]] bool cnr3_lookup_site_is_specified(
++        Cnr3LookupSite site
++    ) noexcept {
++        return site != Cnr3LookupSite::unspecified;
++    }
++#endif
++
+     [[nodiscard]] bool cnr3_prune_candidate_distance_order_before(
+         Cnr3PruneCandidateDistanceOrderEntry left,
+         Cnr3PruneCandidateDistanceOrderEntry right
+@@ -1492,7 +1500,8 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass(
+ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
+     int requested_frame,
+     int max_back_radius,
+-    Cnr3CacheRecoverySearchPlan& out_plan
++    Cnr3CacheRecoverySearchPlan& out_plan,
++    bool observe_lookup_site_breakdown
+ ) const {
+     out_plan = Cnr3CacheRecoverySearchPlan{};
+ 
+@@ -1522,7 +1531,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search(
+     return plan_bounded_recovery_search_locked(
+         requested_frame,
+         max_back_radius,
+-        out_plan
++        out_plan,
++        observe_lookup_site_breakdown
+     );
+ }
+ 
+@@ -1530,7 +1540,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
+     int requested_frame,
+     int max_back_radius,
+     Cnr3CachePinList& pin_list,
+-    Cnr3CacheRecoverySearchPlan& out_plan
++    Cnr3CacheRecoverySearchPlan& out_plan,
++    bool observe_lookup_site_breakdown
+ ) {
+     out_plan = Cnr3CacheRecoverySearchPlan{};
+ 
+@@ -1567,7 +1578,8 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
+         requested_frame,
+         max_back_radius,
+         pin_list,
+-        out_plan
++        out_plan,
++        observe_lookup_site_breakdown
+     );
+ }
+ 
+@@ -1620,7 +1632,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+     int frame_number,
+     const VSAPI* vsapi,
+     Cnr3OwnedFrameRef& out_frame,
+-    Cnr3LookupCountPolicy count_policy
++    Cnr3LookupCountPolicy count_policy,
++    Cnr3LookupSite lookup_site
+ ) const {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -1644,7 +1657,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+             frame_number,
+             vsapi,
+             &acquired_frame,
+-            count_policy
++            count_policy,
++            lookup_site
+         );
+     }
+ 
+@@ -1684,7 +1698,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref(
+ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
+     int frame_number,
+     Cnr3CachePinList& pin_list,
+-    Cnr3LookupCountPolicy count_policy
++    Cnr3LookupCountPolicy count_policy,
++    Cnr3LookupSite lookup_site
+ ) {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -1698,7 +1713,7 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin(
+ 
+     const std::lock_guard<std::mutex> lock(cache_mutex_);
+ 
+-    return lookup_frame_and_record_pin_locked(frame_number, pin_list, count_policy);
++    return lookup_frame_and_record_pin_locked(frame_number, pin_list, count_policy, lookup_site);
+ }
+ 
+ Cnr3Status Cnr3OutputCacheCore::unpin_frame(
+@@ -1957,6 +1972,86 @@ void Cnr3OutputCacheCore::observe_cache_lookup_hit_locked() const noexcept {
+     cnr3_cache_ownership_diagnostic_observe_cache_lookup_hit(ownership_diag_stats_);
+ }
+ 
++Cnr3CacheLookupSiteDiagnosticStats* Cnr3OutputCacheCore::lookup_site_stats_locked(
++    Cnr3LookupSite site
++) const noexcept {
++    switch (site) {
++    case Cnr3LookupSite::requested_frame:
++        return &ownership_diag_stats_.site1_requested_frame_check;
++    case Cnr3LookupSite::predecessor_fastpath:
++        return &ownership_diag_stats_.site2_predecessor_fastpath;
++    case Cnr3LookupSite::recovery_walk:
++        return &ownership_diag_stats_.site3_recovery_walk;
++    case Cnr3LookupSite::hole_catalogue_scan:
++        return &ownership_diag_stats_.site4_hole_catalogue_scan;
++    case Cnr3LookupSite::anchor_repin:
++        return &ownership_diag_stats_.site5_anchor_repin;
++    case Cnr3LookupSite::reacquire_already_pinned:
++        return &ownership_diag_stats_.site6_reacquire_already_pinned;
++    case Cnr3LookupSite::floor_adopt:
++        return &ownership_diag_stats_.site7a_floor_adopt_bail_early;
++    case Cnr3LookupSite::hole_adopt:
++        return &ownership_diag_stats_.site7b_hole_adopt_bail_early;
++    case Cnr3LookupSite::plain_store_duplicate:
++        return &ownership_diag_stats_.site8a_plain_store_duplicate_check;
++    case Cnr3LookupSite::as2_store_duplicate:
++        return &ownership_diag_stats_.site8b_as2_store_duplicate_check;
++    case Cnr3LookupSite::duplicate_winner_reacquire:
++        return &ownership_diag_stats_.site9_duplicate_winner_reacquire;
++    case Cnr3LookupSite::unspecified:
++    default:
++        return nullptr;
++    }
++}
++
++void Cnr3OutputCacheCore::observe_lookup_site_invocation_locked(
++    Cnr3LookupSite site
++) const noexcept {
++    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
++
++    if (site_stats == nullptr) {
++        return;
++    }
++
++    cnr3_cache_ownership_diagnostic_observe_lookup_site_invocation(*site_stats);
++}
++
++void Cnr3OutputCacheCore::observe_lookup_site_look_locked(
++    Cnr3LookupSite site
++) const noexcept {
++    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
++
++    if (site_stats == nullptr) {
++        return;
++    }
++
++    cnr3_cache_ownership_diagnostic_observe_lookup_site_look(*site_stats);
++}
++
++void Cnr3OutputCacheCore::observe_lookup_site_hit_locked(
++    Cnr3LookupSite site
++) const noexcept {
++    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
++
++    if (site_stats == nullptr) {
++        return;
++    }
++
++    cnr3_cache_ownership_diagnostic_observe_lookup_site_hit(*site_stats);
++}
++
++void Cnr3OutputCacheCore::observe_lookup_site_miss_locked(
++    Cnr3LookupSite site
++) const noexcept {
++    Cnr3CacheLookupSiteDiagnosticStats* const site_stats = lookup_site_stats_locked(site);
++
++    if (site_stats == nullptr) {
++        return;
++    }
++
++    cnr3_cache_ownership_diagnostic_observe_lookup_site_miss(*site_stats);
++}
++
+ void Cnr3OutputCacheCore::observe_lookup_ref_acquired_locked() const noexcept {
+     cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(ownership_diag_stats_);
+ }
+@@ -2741,13 +2836,21 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_locked(
+         return Cnr3Status::invariant_violation;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
++        observe_lookup_site_invocation_locked(Cnr3LookupSite::plain_store_duplicate);
++    }
++#endif
++
+     const auto existing_frame_index_it = frame_index_.find(frame_number);
+ 
+     if (existing_frame_index_it != frame_index_.end()) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+         if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
+             observe_cache_lookup_query_locked();
++            observe_lookup_site_look_locked(Cnr3LookupSite::plain_store_duplicate);
+             observe_cache_lookup_hit_locked();
++            observe_lookup_site_hit_locked(Cnr3LookupSite::plain_store_duplicate);
+         }
+ #endif
+ 
+@@ -2871,6 +2974,12 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+         return Cnr3Status::invariant_violation;
+     }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
++        observe_lookup_site_invocation_locked(Cnr3LookupSite::as2_store_duplicate);
++    }
++#endif
++
+     const auto existing_frame_index_it = frame_index_.find(frame_number);
+     const bool existing_slot_found =
+         existing_frame_index_it != frame_index_.end();
+@@ -2880,7 +2989,9 @@ Cnr3Status Cnr3OutputCacheCore::store_owned_frame_and_record_pin_locked(
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+         if (cnr3_lookup_count_policy_counts_duplicate_hit(duplicate_count_policy)) {
+             observe_cache_lookup_query_locked();
++            observe_lookup_site_look_locked(Cnr3LookupSite::as2_store_duplicate);
+             observe_cache_lookup_hit_locked();
++            observe_lookup_site_hit_locked(Cnr3LookupSite::as2_store_duplicate);
+         }
+ #endif
+ 
+@@ -3617,7 +3728,8 @@ Cnr3Status Cnr3OutputCacheCore::execute_bounded_prune_pass_locked(
+ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+     int requested_frame,
+     int max_back_radius,
+-    Cnr3CacheRecoverySearchPlan& out_plan
++    Cnr3CacheRecoverySearchPlan& out_plan,
++    bool observe_lookup_site_breakdown
+ ) const {
+     out_plan.hole_frame_numbers.clear();
+     out_plan.anchor_pin_recorded = false;
+@@ -3666,8 +3778,15 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+             candidate_frame == upper_bound;
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (observe_lookup_site_breakdown) {
++            observe_lookup_site_invocation_locked(Cnr3LookupSite::recovery_walk);
++        }
++
+         if (!candidate_is_rechecked_predecessor) {
+             observe_cache_lookup_query_locked();
++            if (observe_lookup_site_breakdown) {
++                observe_lookup_site_look_locked(Cnr3LookupSite::recovery_walk);
++            }
+         }
+ #endif
+ 
+@@ -3677,9 +3796,15 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+             if (candidate_is_rechecked_predecessor) {
+                 observe_cache_lookup_query_locked();
++                if (observe_lookup_site_breakdown) {
++                    observe_lookup_site_look_locked(Cnr3LookupSite::recovery_walk);
++                }
+             }
+ 
+             observe_cache_lookup_hit_locked();
++            if (observe_lookup_site_breakdown) {
++                observe_lookup_site_hit_locked(Cnr3LookupSite::recovery_walk);
++            }
+ #endif
+ 
+             const std::size_t slot_index = index_it->second;
+@@ -3699,6 +3824,12 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+             break;
+         }
+ 
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (observe_lookup_site_breakdown && !candidate_is_rechecked_predecessor) {
++            observe_lookup_site_miss_locked(Cnr3LookupSite::recovery_walk);
++        }
++#endif
++
+         if (candidate_frame == 0) {
+             break;
+         }
+@@ -3713,6 +3844,12 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_locked(
+     out_plan.anchor_is_checkpoint = anchor_is_checkpoint;
+ 
+     for (int frame_number = anchor_frame + 1; frame_number < requested_frame; ++frame_number) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (observe_lookup_site_breakdown) {
++            observe_lookup_site_invocation_locked(Cnr3LookupSite::hole_catalogue_scan);
++        }
++#endif
++
+         const auto index_it = frame_index_.find(frame_number);
+ 
+         if (index_it == frame_index_.end()) {
+@@ -3738,12 +3875,14 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
+     int requested_frame,
+     int max_back_radius,
+     Cnr3CachePinList& pin_list,
+-    Cnr3CacheRecoverySearchPlan& out_plan
++    Cnr3CacheRecoverySearchPlan& out_plan,
++    bool observe_lookup_site_breakdown
+ ) {
+     const Cnr3Status plan_status = plan_bounded_recovery_search_locked(
+         requested_frame,
+         max_back_radius,
+-        out_plan
++        out_plan,
++        observe_lookup_site_breakdown
+     );
+ 
+     if (!cnr3_status_is_ok(plan_status)) {
+@@ -3757,7 +3896,10 @@ Cnr3Status Cnr3OutputCacheCore::plan_bounded_recovery_search_and_record_anchor_p
+     const Cnr3Status record_status = lookup_frame_and_record_pin_locked(
+         out_plan.anchor_frame_number,
+         pin_list,
+-        Cnr3LookupCountPolicy::none
++        Cnr3LookupCountPolicy::none,
++        observe_lookup_site_breakdown
++            ? Cnr3LookupSite::anchor_repin
++            : Cnr3LookupSite::unspecified
+     );
+ 
+     if (!cnr3_status_is_ok(record_status)) {
+@@ -3842,7 +3984,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+     int frame_number,
+     const VSAPI* vsapi,
+     const VSFrame** out_acquired_frame,
+-    Cnr3LookupCountPolicy count_policy
++    Cnr3LookupCountPolicy count_policy,
++    Cnr3LookupSite lookup_site
+ ) const {
+     if (out_acquired_frame == nullptr) {
+         return Cnr3Status::invalid_argument;
+@@ -3863,14 +4006,24 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+     }
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    if (cnr3_lookup_site_is_specified(lookup_site)) {
++        observe_lookup_site_invocation_locked(lookup_site);
++    }
++
+     if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
+         observe_cache_lookup_query_locked();
++        observe_lookup_site_look_locked(lookup_site);
+     }
+ #endif
+ 
+     const auto frame_index_it = frame_index_.find(frame_number);
+ 
+     if (frame_index_it == frame_index_.end()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
++            observe_lookup_site_miss_locked(lookup_site);
++        }
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+         observe_lookup_miss_rechurn_locked(frame_number);
+ #endif
+@@ -3880,10 +4033,12 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+     if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
+         observe_cache_lookup_query_locked();
++        observe_lookup_site_look_locked(lookup_site);
+     }
+ 
+     if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
+         observe_cache_lookup_hit_locked();
++        observe_lookup_site_hit_locked(lookup_site);
+     }
+ #endif
+ 
+@@ -3927,11 +4082,12 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_add_ref_locked(
+ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
+     int frame_number,
+     Cnr3CachePinList& pin_list,
+-    Cnr3LookupCountPolicy count_policy
++    Cnr3LookupCountPolicy count_policy,
++    Cnr3LookupSite lookup_site
+ ) {
+     Cnr3CacheSlotPinToken pin_token{};
+ 
+-    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token, count_policy);
++    const Cnr3Status pin_status = pin_frame_locked(frame_number, pin_token, count_policy, lookup_site);
+ 
+     if (!cnr3_status_is_ok(pin_status)) {
+         return pin_status;
+@@ -3956,7 +4112,8 @@ Cnr3Status Cnr3OutputCacheCore::lookup_frame_and_record_pin_locked(
+ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     int frame_number,
+     Cnr3CacheSlotPinToken& out_pin_token,
+-    Cnr3LookupCountPolicy count_policy
++    Cnr3LookupCountPolicy count_policy,
++    Cnr3LookupSite lookup_site
+ ) {
+     if (!cnr3_frame_number_is_valid(frame_number)) {
+         return Cnr3Status::invalid_argument;
+@@ -3971,14 +4128,24 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+     }
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    if (cnr3_lookup_site_is_specified(lookup_site)) {
++        observe_lookup_site_invocation_locked(lookup_site);
++    }
++
+     if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
+         observe_cache_lookup_query_locked();
++        observe_lookup_site_look_locked(lookup_site);
+     }
+ #endif
+ 
+     const auto frame_index_it = frame_index_.find(frame_number);
+ 
+     if (frame_index_it == frame_index_.end()) {
++#if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++        if (cnr3_lookup_count_policy_counts_query_before_find(count_policy)) {
++            observe_lookup_site_miss_locked(lookup_site);
++        }
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
+         observe_lookup_miss_rechurn_locked(frame_number);
+ #endif
+@@ -3988,10 +4155,12 @@ Cnr3Status Cnr3OutputCacheCore::pin_frame_locked(
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
+     if (cnr3_lookup_count_policy_counts_query_on_hit(count_policy)) {
+         observe_cache_lookup_query_locked();
++        observe_lookup_site_look_locked(lookup_site);
+     }
+ 
+     if (cnr3_lookup_count_policy_counts_hit(count_policy)) {
+         observe_cache_lookup_hit_locked();
++        observe_lookup_site_hit_locked(lookup_site);
+     }
+ #endif
+ 
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 22d638f..a78096a 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -178,6 +178,26 @@ enum class Cnr3LookupCountPolicy {
+     hit_only
+ };
+ 
++/*
++    Diagnostic-only lookup-site tag for D-SUM-04 per-site breakdown output.
++    It is an observation label only; it must not affect cache lookup, pin,
++    store, recovery, or pixel control flow.
++*/
++enum class Cnr3LookupSite {
++    unspecified,
++    requested_frame,
++    predecessor_fastpath,
++    recovery_walk,
++    hole_catalogue_scan,
++    anchor_repin,
++    reacquire_already_pinned,
++    floor_adopt,
++    hole_adopt,
++    plain_store_duplicate,
++    as2_store_duplicate,
++    duplicate_winner_reacquire
++};
++
+ // Recency bound for the prune-rechurn counter, in EVICTION-COUNT units (not frame numbers).
+ // A re-fetched frame counts as "recently evicted" only if <= this many evictions occurred since it was dropped.
+ // Proof data under TINY-100 showed evict-then-refetch events clustering into two populations:
+@@ -1159,7 +1179,8 @@ public:
+     [[nodiscard]] Cnr3Status plan_bounded_recovery_search(
+         int requested_frame,
+         int max_back_radius,
+-        Cnr3CacheRecoverySearchPlan& out_plan
++        Cnr3CacheRecoverySearchPlan& out_plan,
++        bool observe_lookup_site_breakdown = false
+     ) const;
+ 
+     /*
+@@ -1180,7 +1201,8 @@ public:
+         int requested_frame,
+         int max_back_radius,
+         Cnr3CachePinList& pin_list,
+-        Cnr3CacheRecoverySearchPlan& out_plan
++        Cnr3CacheRecoverySearchPlan& out_plan,
++        bool observe_lookup_site_breakdown = false
+     );
+ 
+     /*
+@@ -1226,7 +1248,8 @@ public:
+         int frame_number,
+         const VSAPI* vsapi,
+         Cnr3OwnedFrameRef& out_frame,
+-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
+     ) const;
+ 
+     /*
+@@ -1248,7 +1271,8 @@ public:
+     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin(
+         int frame_number,
+         Cnr3CachePinList& pin_list,
+-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
+     );
+ 
+     /*
+@@ -1391,6 +1415,10 @@ private:
+     void observe_pin_released_locked() noexcept;
+     void observe_cache_lookup_query_locked() const noexcept;
+     void observe_cache_lookup_hit_locked() const noexcept;
++    void observe_lookup_site_invocation_locked(Cnr3LookupSite site) const noexcept;
++    void observe_lookup_site_look_locked(Cnr3LookupSite site) const noexcept;
++    void observe_lookup_site_hit_locked(Cnr3LookupSite site) const noexcept;
++    void observe_lookup_site_miss_locked(Cnr3LookupSite site) const noexcept;
+     void observe_lookup_ref_acquired_locked() const noexcept;
+     void observe_lookup_ref_released_by_cache_core() const noexcept;
+     void observe_lookup_ref_transferred() const noexcept;
+@@ -1627,7 +1655,8 @@ private:
+     [[nodiscard]] Cnr3Status plan_bounded_recovery_search_locked(
+         int requested_frame,
+         int max_back_radius,
+-        Cnr3CacheRecoverySearchPlan& out_plan
++        Cnr3CacheRecoverySearchPlan& out_plan,
++        bool observe_lookup_site_breakdown = false
+     ) const;
+ 
+     /*
+@@ -1641,7 +1670,8 @@ private:
+         int requested_frame,
+         int max_back_radius,
+         Cnr3CachePinList& pin_list,
+-        Cnr3CacheRecoverySearchPlan& out_plan
++        Cnr3CacheRecoverySearchPlan& out_plan,
++        bool observe_lookup_site_breakdown = false
+     );
+ 
+     /*
+@@ -1682,7 +1712,8 @@ private:
+         int frame_number,
+         const VSAPI* vsapi,
+         const VSFrame** out_acquired_frame,
+-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
+     ) const;
+ 
+     /*
+@@ -1699,7 +1730,8 @@ private:
+     [[nodiscard]] Cnr3Status lookup_frame_and_record_pin_locked(
+         int frame_number,
+         Cnr3CachePinList& pin_list,
+-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
+     );
+ 
+     /*
+@@ -1714,7 +1746,8 @@ private:
+     [[nodiscard]] Cnr3Status pin_frame_locked(
+         int frame_number,
+         Cnr3CacheSlotPinToken& out_pin_token,
+-        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none
++        Cnr3LookupCountPolicy count_policy = Cnr3LookupCountPolicy::none,
++        Cnr3LookupSite lookup_site = Cnr3LookupSite::unspecified
+     );
+ 
+     /*
+@@ -1781,6 +1814,10 @@ private:
+     std::vector<Cnr3CacheHotZone> hot_zones_{};
+     Cnr3CacheHotZoneDiagnosticStats hot_zone_diag_stats_{};
+ #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
++    [[nodiscard]] Cnr3CacheLookupSiteDiagnosticStats* lookup_site_stats_locked(
++        Cnr3LookupSite site
++    ) const noexcept;
++
+     mutable Cnr3CacheOwnershipDiagnosticStats ownership_diag_stats_{};
+ #endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
+diff --git a/src/cnr3_cache_diagnostics.cpp b/src/cnr3_cache_diagnostics.cpp
+index e3253db..224e025 100644
+--- a/src/cnr3_cache_diagnostics.cpp
++++ b/src/cnr3_cache_diagnostics.cpp
+@@ -263,6 +263,124 @@ namespace {
+ 
+ #endif
+ 
++
++#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
++
++    [[nodiscard]] std::uint64_t cnr3_cache_diag_lookup_misses(
++        std::uint64_t looks,
++        std::uint64_t hits
++    ) noexcept {
++        return looks >= hits ? (looks - hits) : 0U;
++    }
++
++    void cnr3_cache_diag_format_delta(
++        char* buffer,
++        std::size_t buffer_size,
++        std::uint64_t sum,
++        std::uint64_t total
++    ) noexcept {
++        if (buffer == nullptr || buffer_size == 0U) {
++            return;
++        }
++
++        const char* sign = "+";
++        std::uint64_t magnitude = 0;
++
++        if (sum >= total) {
++            magnitude = sum - total;
++        }
++        else {
++            sign = "-";
++            magnitude = total - sum;
++        }
++
++        const int written = std::snprintf(
++            buffer,
++            buffer_size,
++            "%s%llu",
++            sign,
++            static_cast<unsigned long long>(magnitude)
++        );
++
++        if (written < 0) {
++            buffer[0] = '\0';
++            return;
++        }
++
++        buffer[buffer_size - 1U] = '\0';
++    }
++
++    void cnr3_cache_diag_write_lookup_site_row(
++        Cnr3InstanceId instance_id,
++        const char* label,
++        const Cnr3CacheLookupSiteDiagnosticStats& stats,
++        bool excluded_from_totals,
++        const char* purpose
++    ) noexcept {
++        char message[512] = {};
++
++        const int written = std::snprintf(
++            message,
++            sizeof(message),
++            "[DSUM-SUMMARY] D-SUM-04 %-38s invocations=%llu looks=%llu hits=%llu misses=%llu%s",
++            label != nullptr ? label : "(null)",
++            static_cast<unsigned long long>(stats.invocations),
++            static_cast<unsigned long long>(stats.looks_counted),
++            static_cast<unsigned long long>(stats.hits_counted),
++            static_cast<unsigned long long>(stats.misses_counted),
++            excluded_from_totals ? " (excluded from totals)" : ""
++        );
++
++        if (written < 0) {
++            cnr3_diag_write_line(
++                instance_id,
++                Cnr3DiagnosticLevel::error,
++                "D-SUM-04",
++                "[DSUM-SUMMARY] D-SUM-04 lookup-site row formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        message[sizeof(message) - 1U] = '\0';
++        cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", message);
++
++        char purpose_message[640] = {};
++        const int purpose_written = std::snprintf(
++            purpose_message,
++            sizeof(purpose_message),
++            "[DSUM-SUMMARY] D-SUM-04    -> %s",
++            purpose != nullptr ? purpose : "no purpose text supplied."
++        );
++
++        if (purpose_written < 0) {
++            cnr3_diag_write_line(
++                instance_id,
++                Cnr3DiagnosticLevel::error,
++                "D-SUM-04",
++                "[DSUM-SUMMARY] D-SUM-04 lookup-site purpose formatting_error",
++                Cnr3StderrFlushPolicy::no_flush
++            );
++            return;
++        }
++
++        purpose_message[sizeof(purpose_message) - 1U] = '\0';
++        cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", purpose_message);
++    }
++
++    void cnr3_cache_diag_accumulate_lookup_site(
++        const Cnr3CacheLookupSiteDiagnosticStats& stats,
++        std::uint64_t& looks,
++        std::uint64_t& hits,
++        std::uint64_t& misses
++    ) noexcept {
++        cnr3_cache_diag_saturating_add(looks, stats.looks_counted);
++        cnr3_cache_diag_saturating_add(hits, stats.hits_counted);
++        cnr3_cache_diag_saturating_add(misses, stats.misses_counted);
++    }
++
++#endif
++
+ } // namespace
+ 
+ #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+@@ -281,6 +399,8 @@ void cnr3_cache_ownership_diagnostic_write_summary(
+         stats.lookup_refs_acquired >= lookup_refs_released_or_transferred
+         ? static_cast<std::int64_t>(stats.lookup_refs_acquired - lookup_refs_released_or_transferred)
+         : -static_cast<std::int64_t>(lookup_refs_released_or_transferred - stats.lookup_refs_acquired);
++    const std::uint64_t cache_lookup_misses =
++        cnr3_cache_diag_lookup_misses(stats.cache_lookup_queries_total, stats.cache_lookup_hits);
+ 
+     cnr3_cache_diag_write_text_line(
+         instance_id,
+@@ -311,9 +431,201 @@ void cnr3_cache_ownership_diagnostic_write_summary(
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_hits", stats.cache_lookup_hits);
+     cnr3_cache_diag_write_uint64_row(
+         instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_misses",
+-        stats.cache_lookup_queries_total >= stats.cache_lookup_hits
+-            ? (stats.cache_lookup_queries_total - stats.cache_lookup_hits)
+-            : 0U);   // derived; else-branch means a policy-counted hit was not paired with a query.
++        cache_lookup_misses);   // derived; else-branch means a policy-counted hit was not paired with a query.
++
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04 lookup-site breakdown legend:"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04   a lookup is the plugin asking the cache: is this frame present?"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04   invocations = how many times the code reached this location and asked"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04   looks       = of those, how many were COUNTED toward the cache_lookup totals"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04   hits        = of the counted looks, how many found the frame present"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04   misses      = of the counted looks, how many found it absent"
++    );
++    cnr3_cache_diag_write_text_line(
++        instance_id,
++        "D-SUM-04",
++        "[DSUM-SUMMARY] D-SUM-04   excluded from totals = this location deliberately never counts; invocations prove it participated"
++    );
++
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site1_requested_frame_check",
++        stats.site1_requested_frame_check,
++        false,
++        "when a frame was first requested, checked if it was already finished in the cache; counted only when found, which means out-of-order work produced it early."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site2_predecessor_fastpath",
++        stats.site2_predecessor_fastpath,
++        false,
++        "after the requested frame was absent, checked whether the previous output frame was present so this frame could be built directly; a miss routes to recovery."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site3_recovery_walk",
++        stats.site3_recovery_walk,
++        false,
++        "during recovery, walked backward until the nearest present anchor frame was found; N-1 is counted only if it appears between two lock holds, deeper probes count normally."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site4_hole_catalogue_scan",
++        stats.site4_hole_catalogue_scan,
++        true,
++        "after an anchor was found, scanned the frames between anchor and target to list holes for the plan; this is bookkeeping, not a lookup decision."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site5_anchor_repin",
++        stats.site5_anchor_repin,
++        true,
++        "re-pinned the anchor frame that the recovery walk had just found under the same cache lock; guaranteed present, so deliberately not counted."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site6_reacquire_already_pinned",
++        stats.site6_reacquire_already_pinned,
++        true,
++        "re-fetched a frame this request had already found and pinned earlier; guaranteed present, so deliberately not counted."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site7a_floor_adopt_bail_early",
++        stats.site7a_floor_adopt_bail_early,
++        false,
++        "before computing a floor-recovery frame, checked whether another activation had already produced it; counted only when found and adopted."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site7b_hole_adopt_bail_early",
++        stats.site7b_hole_adopt_bail_early,
++        false,
++        "before computing a recovery hole, checked whether another activation had already produced it; counted only when found and adopted."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site8a_plain_store_duplicate_check",
++        stats.site8a_plain_store_duplicate_check,
++        false,
++        "after computing a normal output frame, checked whether another activation had already stored it; counted only when found, then this duplicate is discarded."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site8b_as2_store_duplicate_check",
++        stats.site8b_as2_store_duplicate_check,
++        false,
++        "after computing an AS2 recovery frame, checked whether another activation had already stored it; counted only when found, then this duplicate is discarded."
++    );
++    cnr3_cache_diag_write_lookup_site_row(
++        instance_id,
++        "site9_duplicate_winner_reacquire",
++        stats.site9_duplicate_winner_reacquire,
++        true,
++        "after losing a store race, fetched the other activation's winning frame; duplicate status guarantees it is present, so deliberately not counted."
++    );
++
++    std::uint64_t site_looks_sum = 0;
++    std::uint64_t site_hits_sum = 0;
++    std::uint64_t site_misses_sum = 0;
++    cnr3_cache_diag_accumulate_lookup_site(stats.site1_requested_frame_check, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site2_predecessor_fastpath, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site3_recovery_walk, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site4_hole_catalogue_scan, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site5_anchor_repin, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site6_reacquire_already_pinned, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site7a_floor_adopt_bail_early, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site7b_hole_adopt_bail_early, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site8a_plain_store_duplicate_check, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site8b_as2_store_duplicate_check, site_looks_sum, site_hits_sum, site_misses_sum);
++    cnr3_cache_diag_accumulate_lookup_site(stats.site9_duplicate_winner_reacquire, site_looks_sum, site_hits_sum, site_misses_sum);
++
++    char selfcheck_message[640] = {};
++    if (
++        site_looks_sum == stats.cache_lookup_queries_total &&
++        site_hits_sum == stats.cache_lookup_hits &&
++        site_misses_sum == cache_lookup_misses
++        ) {
++        const int written = std::snprintf(
++            selfcheck_message,
++            sizeof(selfcheck_message),
++            "[DSUM-SUMMARY] D-SUM-04 breakdown self-check: per-site looks/hits/misses add up to the cache_lookup totals (%llu/%llu/%llu) -> OK",
++            static_cast<unsigned long long>(stats.cache_lookup_queries_total),
++            static_cast<unsigned long long>(stats.cache_lookup_hits),
++            static_cast<unsigned long long>(cache_lookup_misses)
++        );
++
++        if (written >= 0) {
++            selfcheck_message[sizeof(selfcheck_message) - 1U] = '\0';
++            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", selfcheck_message);
++        }
++    }
++    else {
++        char looks_delta[32] = {};
++        char hits_delta[32] = {};
++        char misses_delta[32] = {};
++        cnr3_cache_diag_format_delta(
++            looks_delta,
++            sizeof(looks_delta),
++            site_looks_sum,
++            stats.cache_lookup_queries_total
++        );
++        cnr3_cache_diag_format_delta(
++            hits_delta,
++            sizeof(hits_delta),
++            site_hits_sum,
++            stats.cache_lookup_hits
++        );
++        cnr3_cache_diag_format_delta(
++            misses_delta,
++            sizeof(misses_delta),
++            site_misses_sum,
++            cache_lookup_misses
++        );
++
++        const int written = std::snprintf(
++            selfcheck_message,
++            sizeof(selfcheck_message),
++            "[DSUM-SUMMARY] D-SUM-04 breakdown self-check: *** MISMATCH *** per-site sums (%llu/%llu/%llu) vs cache_lookup totals (%llu/%llu/%llu); delta looks=%s hits=%s misses=%s",
++            static_cast<unsigned long long>(site_looks_sum),
++            static_cast<unsigned long long>(site_hits_sum),
++            static_cast<unsigned long long>(site_misses_sum),
++            static_cast<unsigned long long>(stats.cache_lookup_queries_total),
++            static_cast<unsigned long long>(stats.cache_lookup_hits),
++            static_cast<unsigned long long>(cache_lookup_misses),
++            looks_delta,
++            hits_delta,
++            misses_delta
++        );
++
++        if (written >= 0) {
++            selfcheck_message[sizeof(selfcheck_message) - 1U] = '\0';
++            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", selfcheck_message);
++        }
++    }
++
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
+     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);
+diff --git a/src/cnr3_cache_diagnostics.h b/src/cnr3_cache_diagnostics.h
+index 902f29f..21183f7 100644
+--- a/src/cnr3_cache_diagnostics.h
++++ b/src/cnr3_cache_diagnostics.h
+@@ -71,6 +71,13 @@ struct Cnr3CacheHotZoneDiagnosticStats {
+     and lookup-ref handoff. The lookup query/hit counters are diagnostic
+     rates only; they do not claim a global VSFrame ownership balance.
+ */
++struct Cnr3CacheLookupSiteDiagnosticStats {
++    std::uint64_t invocations = 0;
++    std::uint64_t looks_counted = 0;
++    std::uint64_t hits_counted = 0;
++    std::uint64_t misses_counted = 0;
++};
++
+ struct Cnr3CacheOwnershipDiagnosticStats {
+     std::uint64_t pins_acquired = 0;
+     std::uint64_t pins_released = 0;
+@@ -79,6 +86,18 @@ struct Cnr3CacheOwnershipDiagnosticStats {
+     std::uint64_t cache_lookup_queries_total = 0;
+     std::uint64_t cache_lookup_hits = 0;
+ 
++    Cnr3CacheLookupSiteDiagnosticStats site1_requested_frame_check{};
++    Cnr3CacheLookupSiteDiagnosticStats site2_predecessor_fastpath{};
++    Cnr3CacheLookupSiteDiagnosticStats site3_recovery_walk{};
++    Cnr3CacheLookupSiteDiagnosticStats site4_hole_catalogue_scan{};
++    Cnr3CacheLookupSiteDiagnosticStats site5_anchor_repin{};
++    Cnr3CacheLookupSiteDiagnosticStats site6_reacquire_already_pinned{};
++    Cnr3CacheLookupSiteDiagnosticStats site7a_floor_adopt_bail_early{};
++    Cnr3CacheLookupSiteDiagnosticStats site7b_hole_adopt_bail_early{};
++    Cnr3CacheLookupSiteDiagnosticStats site8a_plain_store_duplicate_check{};
++    Cnr3CacheLookupSiteDiagnosticStats site8b_as2_store_duplicate_check{};
++    Cnr3CacheLookupSiteDiagnosticStats site9_duplicate_winner_reacquire{};
++
+     std::uint64_t lookup_refs_acquired = 0;
+     std::uint64_t lookup_refs_released_by_cache_core = 0;
+     std::uint64_t lookup_refs_transferred = 0;
+@@ -369,6 +388,30 @@ inline void cnr3_cache_ownership_diagnostic_observe_cache_lookup_hit(
+     cnr3_cache_diag_saturating_increment(stats.cache_lookup_hits);
+ }
+ 
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_invocation(
++    Cnr3CacheLookupSiteDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.invocations);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_look(
++    Cnr3CacheLookupSiteDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.looks_counted);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_hit(
++    Cnr3CacheLookupSiteDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.hits_counted);
++}
++
++inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_miss(
++    Cnr3CacheLookupSiteDiagnosticStats& stats
++) noexcept {
++    cnr3_cache_diag_saturating_increment(stats.misses_counted);
++}
++
+ inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(
+     Cnr3CacheOwnershipDiagnosticStats& stats
+ ) noexcept {

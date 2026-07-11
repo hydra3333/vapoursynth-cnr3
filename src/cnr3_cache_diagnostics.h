@@ -71,6 +71,13 @@ struct Cnr3CacheHotZoneDiagnosticStats {
     and lookup-ref handoff. The lookup query/hit counters are diagnostic
     rates only; they do not claim a global VSFrame ownership balance.
 */
+struct Cnr3CacheLookupSiteDiagnosticStats {
+    std::uint64_t invocations = 0;
+    std::uint64_t looks_counted = 0;
+    std::uint64_t hits_counted = 0;
+    std::uint64_t misses_counted = 0;
+};
+
 struct Cnr3CacheOwnershipDiagnosticStats {
     std::uint64_t pins_acquired = 0;
     std::uint64_t pins_released = 0;
@@ -78,6 +85,18 @@ struct Cnr3CacheOwnershipDiagnosticStats {
 
     std::uint64_t cache_lookup_queries_total = 0;
     std::uint64_t cache_lookup_hits = 0;
+
+    Cnr3CacheLookupSiteDiagnosticStats site1_requested_frame_check{};
+    Cnr3CacheLookupSiteDiagnosticStats site2_predecessor_fastpath{};
+    Cnr3CacheLookupSiteDiagnosticStats site3_recovery_walk{};
+    Cnr3CacheLookupSiteDiagnosticStats site4_hole_catalogue_scan{};
+    Cnr3CacheLookupSiteDiagnosticStats site5_anchor_repin{};
+    Cnr3CacheLookupSiteDiagnosticStats site6_reacquire_already_pinned{};
+    Cnr3CacheLookupSiteDiagnosticStats site7a_floor_adopt_bail_early{};
+    Cnr3CacheLookupSiteDiagnosticStats site7b_hole_adopt_bail_early{};
+    Cnr3CacheLookupSiteDiagnosticStats site8a_plain_store_duplicate_check{};
+    Cnr3CacheLookupSiteDiagnosticStats site8b_as2_store_duplicate_check{};
+    Cnr3CacheLookupSiteDiagnosticStats site9_duplicate_winner_reacquire{};
 
     std::uint64_t lookup_refs_acquired = 0;
     std::uint64_t lookup_refs_released_by_cache_core = 0;
@@ -367,6 +386,30 @@ inline void cnr3_cache_ownership_diagnostic_observe_cache_lookup_hit(
     Cnr3CacheOwnershipDiagnosticStats& stats
 ) noexcept {
     cnr3_cache_diag_saturating_increment(stats.cache_lookup_hits);
+}
+
+inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_invocation(
+    Cnr3CacheLookupSiteDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_saturating_increment(stats.invocations);
+}
+
+inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_look(
+    Cnr3CacheLookupSiteDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_saturating_increment(stats.looks_counted);
+}
+
+inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_hit(
+    Cnr3CacheLookupSiteDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_saturating_increment(stats.hits_counted);
+}
+
+inline void cnr3_cache_ownership_diagnostic_observe_lookup_site_miss(
+    Cnr3CacheLookupSiteDiagnosticStats& stats
+) noexcept {
+    cnr3_cache_diag_saturating_increment(stats.misses_counted);
 }
 
 inline void cnr3_cache_ownership_diagnostic_observe_lookup_ref_acquired(

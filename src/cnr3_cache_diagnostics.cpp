@@ -263,6 +263,124 @@ namespace {
 
 #endif
 
+
+#if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
+
+    [[nodiscard]] std::uint64_t cnr3_cache_diag_lookup_misses(
+        std::uint64_t looks,
+        std::uint64_t hits
+    ) noexcept {
+        return looks >= hits ? (looks - hits) : 0U;
+    }
+
+    void cnr3_cache_diag_format_delta(
+        char* buffer,
+        std::size_t buffer_size,
+        std::uint64_t sum,
+        std::uint64_t total
+    ) noexcept {
+        if (buffer == nullptr || buffer_size == 0U) {
+            return;
+        }
+
+        const char* sign = "+";
+        std::uint64_t magnitude = 0;
+
+        if (sum >= total) {
+            magnitude = sum - total;
+        }
+        else {
+            sign = "-";
+            magnitude = total - sum;
+        }
+
+        const int written = std::snprintf(
+            buffer,
+            buffer_size,
+            "%s%llu",
+            sign,
+            static_cast<unsigned long long>(magnitude)
+        );
+
+        if (written < 0) {
+            buffer[0] = '\0';
+            return;
+        }
+
+        buffer[buffer_size - 1U] = '\0';
+    }
+
+    void cnr3_cache_diag_write_lookup_site_row(
+        Cnr3InstanceId instance_id,
+        const char* label,
+        const Cnr3CacheLookupSiteDiagnosticStats& stats,
+        bool excluded_from_totals,
+        const char* purpose
+    ) noexcept {
+        char message[512] = {};
+
+        const int written = std::snprintf(
+            message,
+            sizeof(message),
+            "[DSUM-SUMMARY] D-SUM-04 %-38s invocations=%llu looks=%llu hits=%llu misses=%llu%s",
+            label != nullptr ? label : "(null)",
+            static_cast<unsigned long long>(stats.invocations),
+            static_cast<unsigned long long>(stats.looks_counted),
+            static_cast<unsigned long long>(stats.hits_counted),
+            static_cast<unsigned long long>(stats.misses_counted),
+            excluded_from_totals ? " (excluded from totals)" : ""
+        );
+
+        if (written < 0) {
+            cnr3_diag_write_line(
+                instance_id,
+                Cnr3DiagnosticLevel::error,
+                "D-SUM-04",
+                "[DSUM-SUMMARY] D-SUM-04 lookup-site row formatting_error",
+                Cnr3StderrFlushPolicy::no_flush
+            );
+            return;
+        }
+
+        message[sizeof(message) - 1U] = '\0';
+        cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", message);
+
+        char purpose_message[640] = {};
+        const int purpose_written = std::snprintf(
+            purpose_message,
+            sizeof(purpose_message),
+            "[DSUM-SUMMARY] D-SUM-04    -> %s",
+            purpose != nullptr ? purpose : "no purpose text supplied."
+        );
+
+        if (purpose_written < 0) {
+            cnr3_diag_write_line(
+                instance_id,
+                Cnr3DiagnosticLevel::error,
+                "D-SUM-04",
+                "[DSUM-SUMMARY] D-SUM-04 lookup-site purpose formatting_error",
+                Cnr3StderrFlushPolicy::no_flush
+            );
+            return;
+        }
+
+        purpose_message[sizeof(purpose_message) - 1U] = '\0';
+        cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", purpose_message);
+    }
+
+    void cnr3_cache_diag_accumulate_lookup_site(
+        const Cnr3CacheLookupSiteDiagnosticStats& stats,
+        std::uint64_t& looks,
+        std::uint64_t& hits,
+        std::uint64_t& misses
+    ) noexcept {
+        cnr3_cache_diag_saturating_add(looks, stats.looks_counted);
+        cnr3_cache_diag_saturating_add(hits, stats.hits_counted);
+        cnr3_cache_diag_saturating_add(misses, stats.misses_counted);
+    }
+
+#endif
+
 } // namespace
 
 #if defined(CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE)
@@ -281,6 +399,8 @@ void cnr3_cache_ownership_diagnostic_write_summary(
         stats.lookup_refs_acquired >= lookup_refs_released_or_transferred
         ? static_cast<std::int64_t>(stats.lookup_refs_acquired - lookup_refs_released_or_transferred)
         : -static_cast<std::int64_t>(lookup_refs_released_or_transferred - stats.lookup_refs_acquired);
+    const std::uint64_t cache_lookup_misses =
+        cnr3_cache_diag_lookup_misses(stats.cache_lookup_queries_total, stats.cache_lookup_hits);
 
     cnr3_cache_diag_write_text_line(
         instance_id,
@@ -311,9 +431,201 @@ void cnr3_cache_ownership_diagnostic_write_summary(
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_hits", stats.cache_lookup_hits);
     cnr3_cache_diag_write_uint64_row(
         instance_id, "D-SUM-04", "D-SUM-04", "cache_lookup_misses",
-        stats.cache_lookup_queries_total >= stats.cache_lookup_hits
-            ? (stats.cache_lookup_queries_total - stats.cache_lookup_hits)
-            : 0U);   // derived; else-branch means a policy-counted hit was not paired with a query.
+        cache_lookup_misses);   // derived; else-branch means a policy-counted hit was not paired with a query.
+
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04 lookup-site breakdown legend:"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04   a lookup is the plugin asking the cache: is this frame present?"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04   invocations = how many times the code reached this location and asked"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04   looks       = of those, how many were COUNTED toward the cache_lookup totals"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04   hits        = of the counted looks, how many found the frame present"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04   misses      = of the counted looks, how many found it absent"
+    );
+    cnr3_cache_diag_write_text_line(
+        instance_id,
+        "D-SUM-04",
+        "[DSUM-SUMMARY] D-SUM-04   excluded from totals = this location deliberately never counts; invocations prove it participated"
+    );
+
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site1_requested_frame_check",
+        stats.site1_requested_frame_check,
+        false,
+        "when a frame was first requested, checked if it was already finished in the cache; counted only when found, which means out-of-order work produced it early."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site2_predecessor_fastpath",
+        stats.site2_predecessor_fastpath,
+        false,
+        "after the requested frame was absent, checked whether the previous output frame was present so this frame could be built directly; a miss routes to recovery."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site3_recovery_walk",
+        stats.site3_recovery_walk,
+        false,
+        "during recovery, walked backward until the nearest present anchor frame was found; N-1 is counted only if it appears between two lock holds, deeper probes count normally."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site4_hole_catalogue_scan",
+        stats.site4_hole_catalogue_scan,
+        true,
+        "after an anchor was found, scanned the frames between anchor and target to list holes for the plan; this is bookkeeping, not a lookup decision."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site5_anchor_repin",
+        stats.site5_anchor_repin,
+        true,
+        "re-pinned the anchor frame that the recovery walk had just found under the same cache lock; guaranteed present, so deliberately not counted."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site6_reacquire_already_pinned",
+        stats.site6_reacquire_already_pinned,
+        true,
+        "re-fetched a frame this request had already found and pinned earlier; guaranteed present, so deliberately not counted."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site7a_floor_adopt_bail_early",
+        stats.site7a_floor_adopt_bail_early,
+        false,
+        "before computing a floor-recovery frame, checked whether another activation had already produced it; counted only when found and adopted."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site7b_hole_adopt_bail_early",
+        stats.site7b_hole_adopt_bail_early,
+        false,
+        "before computing a recovery hole, checked whether another activation had already produced it; counted only when found and adopted."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site8a_plain_store_duplicate_check",
+        stats.site8a_plain_store_duplicate_check,
+        false,
+        "after computing a normal output frame, checked whether another activation had already stored it; counted only when found, then this duplicate is discarded."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site8b_as2_store_duplicate_check",
+        stats.site8b_as2_store_duplicate_check,
+        false,
+        "after computing an AS2 recovery frame, checked whether another activation had already stored it; counted only when found, then this duplicate is discarded."
+    );
+    cnr3_cache_diag_write_lookup_site_row(
+        instance_id,
+        "site9_duplicate_winner_reacquire",
+        stats.site9_duplicate_winner_reacquire,
+        true,
+        "after losing a store race, fetched the other activation's winning frame; duplicate status guarantees it is present, so deliberately not counted."
+    );
+
+    std::uint64_t site_looks_sum = 0;
+    std::uint64_t site_hits_sum = 0;
+    std::uint64_t site_misses_sum = 0;
+    cnr3_cache_diag_accumulate_lookup_site(stats.site1_requested_frame_check, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site2_predecessor_fastpath, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site3_recovery_walk, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site4_hole_catalogue_scan, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site5_anchor_repin, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site6_reacquire_already_pinned, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site7a_floor_adopt_bail_early, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site7b_hole_adopt_bail_early, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site8a_plain_store_duplicate_check, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site8b_as2_store_duplicate_check, site_looks_sum, site_hits_sum, site_misses_sum);
+    cnr3_cache_diag_accumulate_lookup_site(stats.site9_duplicate_winner_reacquire, site_looks_sum, site_hits_sum, site_misses_sum);
+
+    char selfcheck_message[640] = {};
+    if (
+        site_looks_sum == stats.cache_lookup_queries_total &&
+        site_hits_sum == stats.cache_lookup_hits &&
+        site_misses_sum == cache_lookup_misses
+        ) {
+        const int written = std::snprintf(
+            selfcheck_message,
+            sizeof(selfcheck_message),
+            "[DSUM-SUMMARY] D-SUM-04 breakdown self-check: per-site looks/hits/misses add up to the cache_lookup totals (%llu/%llu/%llu) -> OK",
+            static_cast<unsigned long long>(stats.cache_lookup_queries_total),
+            static_cast<unsigned long long>(stats.cache_lookup_hits),
+            static_cast<unsigned long long>(cache_lookup_misses)
+        );
+
+        if (written >= 0) {
+            selfcheck_message[sizeof(selfcheck_message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", selfcheck_message);
+        }
+    }
+    else {
+        char looks_delta[32] = {};
+        char hits_delta[32] = {};
+        char misses_delta[32] = {};
+        cnr3_cache_diag_format_delta(
+            looks_delta,
+            sizeof(looks_delta),
+            site_looks_sum,
+            stats.cache_lookup_queries_total
+        );
+        cnr3_cache_diag_format_delta(
+            hits_delta,
+            sizeof(hits_delta),
+            site_hits_sum,
+            stats.cache_lookup_hits
+        );
+        cnr3_cache_diag_format_delta(
+            misses_delta,
+            sizeof(misses_delta),
+            site_misses_sum,
+            cache_lookup_misses
+        );
+
+        const int written = std::snprintf(
+            selfcheck_message,
+            sizeof(selfcheck_message),
+            "[DSUM-SUMMARY] D-SUM-04 breakdown self-check: *** MISMATCH *** per-site sums (%llu/%llu/%llu) vs cache_lookup totals (%llu/%llu/%llu); delta looks=%s hits=%s misses=%s",
+            static_cast<unsigned long long>(site_looks_sum),
+            static_cast<unsigned long long>(site_hits_sum),
+            static_cast<unsigned long long>(site_misses_sum),
+            static_cast<unsigned long long>(stats.cache_lookup_queries_total),
+            static_cast<unsigned long long>(stats.cache_lookup_hits),
+            static_cast<unsigned long long>(cache_lookup_misses),
+            looks_delta,
+            hits_delta,
+            misses_delta
+        );
+
+        if (written >= 0) {
+            selfcheck_message[sizeof(selfcheck_message) - 1U] = '\0';
+            cnr3_cache_diag_write_text_line(instance_id, "D-SUM-04", selfcheck_message);
+        }
+    }
+
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_acquired", stats.lookup_refs_acquired);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_released_by_cache_core", stats.lookup_refs_released_by_cache_core);
     cnr3_cache_diag_write_uint64_row(instance_id, "D-SUM-04", "D-SUM-04", "lookup_refs_transferred", stats.lookup_refs_transferred);

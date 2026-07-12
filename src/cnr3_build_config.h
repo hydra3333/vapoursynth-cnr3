@@ -580,7 +580,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: This is a per-frame trace, not an aggregate summary. It is
 //                        observe-only and must compile out completely when the master
 //                        compute gate is disabled.
-//#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
+#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
 #   define CNR3_DIAG_PRINT_DSUM_PLANTRACE 1
 #endif

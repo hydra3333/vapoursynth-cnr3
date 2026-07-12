@@ -400,8 +400,16 @@ else:           # INTERLACED source
 # D-SUM-13 recalculated_frame_count as the "did disorder force real recompute" signal; and the
 # [DSUM-HEALTH] block for the at-a-glance ratios.
 
+# ***
+# ***
+# *** SCENARIO example_00 — LINEAR, 3000 frames clip, in-order, NO shuffle. 
+clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=3000, shuffle_in_zones=False, zone_size=1)    ####
+# ***
+# ***
+# ***
+
 # *** SCENARIO example_01 — LINEAR, 200 frames clip, in-order, NO shuffle.  Used with or without '-r 1' and with fmunordered or fmparallel
-clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=200, shuffle_in_zones=False, zone_size=1)    ####
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=200, shuffle_in_zones=False, zone_size=1)    ####
 
 # *** SCENARIO L1 — LINEAR, whole clip, in-order, NO shuffle.  The clean 99% baseline.
 #   Prediction (-r 1): recovery ~0%, out_of_order 0, recent_rechurn 0, recalc 0, cache_hit ~99%.

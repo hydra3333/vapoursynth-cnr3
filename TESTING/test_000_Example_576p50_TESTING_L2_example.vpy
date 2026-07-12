@@ -378,7 +378,46 @@ else:           # INTERLACED source
 # *** SCENARIO S9e — recency positive control: revisit a JUST-evicted region.
 #   Under TINY-100, this lands evict-then-refetch events in the recovery-local population.
 #   Expect frames_recently_evicted_then_re_requested > 0. -r 1.
-clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)    ####
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)
+
+# ===============================================================================================
+# ===============================================================================================
+# ===============================================================================================
+# =============================== LINEAR PRODUCTION-CASE (L1..L4) ===============================
+# The 99% real use case: vspipe -> ffmpeg linear playthrough of a whole clip, NO jumps.
+# This is "bubbling linear" -- a single contiguous forward sweep of the ENTIRE source.
+# Run these under the NORMAL profile (TINY-100 OFF); a clip longer than the NORMAL ceiling (1000)
+# will evict naturally as the wavefront advances, which is exactly the production behaviour to watch.
+#
+# segment_length = SOURCE_FRAME_COUNT  -> the whole clip (there is no "ALL" keyword; pass the count).
+# jump_to_frames = [0]                 -> start at 0, one contiguous segment, no jumps.
+#
+# The L1<->L2 and (with -r 1 removed) the L*-noR pairs isolate the two variables independently:
+#   L1  vs L2   : arrival ORDER (clean vs shuffle8) at fixed single-thread -r 1.
+#   L1  vs L1noR: THREADING (single vs multi) at fixed clean order.
+# Read D-SUM-01 out_of_order/backward/forward as the disorder signal; D-SUM-12 recovery_rate as the
+# cache-miss consequence; D-SUM-10 recent_rechurn + [DSUM10-GAP-HISTO] as the eviction-quality signal;
+# D-SUM-13 recalculated_frame_count as the "did disorder force real recompute" signal; and the
+# [DSUM-HEALTH] block for the at-a-glance ratios.
+
+# *** SCENARIO L1 — LINEAR, whole clip, in-order, NO shuffle.  The clean 99% baseline.
+#   Prediction (-r 1): recovery ~0%, out_of_order 0, recent_rechurn 0, recalc 0, cache_hit ~99%.
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=SOURCE_FRAME_COUNT, shuffle_in_zones=False, zone_size=1)    ####
+
+# *** SCENARIO L2 — LINEAR, whole clip, in-zone shuffle size 8.  Arrival-disorder stand-in.
+#   Prediction (-r 1): out_of_order > 0, small recovery bump, recent_rechurn likely still 0
+#   (an 8-frame shuffle stays within BACK_RADIUS=50 so predecessors remain resident), recalc likely 0.
+clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=SOURCE_FRAME_COUNT, shuffle_in_zones=True,  zone_size=8)    ####
+
+# *** SCENARIO L1noR / L2noR — SAME two lines as L1 / L2, but run the .bat with rrr= EMPTY (remove -r 1).
+#   This is the ONLY way to see genuine multi-thread "bubbling" (out-of-order EXECUTION across threads).
+#   Use the L1 line for L1noR (clean order + threads) and the L2 line for L2noR (disorder + threads).
+#   Prediction: L1noR is the key run -- if the cache/hot-zone handles the production case, recovery stays
+#   low; if threads outrun the predecessor chain, recovery/recent_rechurn/recalc appear. That gap is the
+#   first real A1 question. (No separate scenario line needed; just toggle rrr in the .bat.)
+# ===============================================================================================
+# ===============================================================================================
+# ===============================================================================================
 
 # ------------------------------- BOUNDARY / STRESS (B1..B7) ---------------------------------
 # These poke the EDGES of the bound / clamp / hot-zone cap. The dev-trace reveals

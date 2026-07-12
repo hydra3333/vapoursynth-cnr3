@@ -1,6 +1,6 @@
 @echo off
-REM set "rrr="
-set "rrr=-r 1"
+set "rrr="
+REM set "rrr=-r 1"
 REM echo.
 
 set "top_root=D:\TEST"
@@ -16,7 +16,7 @@ copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_
 
 REM The TEST id MUST coincide with the test uncommented inside the vpy
 REM set "test="
-set "test=TESTING_L1noR"
+set "test=TESTING_example_01"
 if /I "%test%" NEQ "" (
     set "vpy_ending=_%test%"
 ) else (

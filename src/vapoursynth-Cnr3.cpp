@@ -537,6 +537,22 @@ void VS_CC cnr3_create_filter(
         return;
     }
 
+#if defined(CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE)
+    std::fprintf(
+        stderr,
+        "CNR3[%d] INFO CONFIG: edit_version=%s\n",
+        data->config.instance_id.value,
+        CNR3_EDIT_VERSION
+    );
+
+    std::fprintf(
+        stderr,
+        "CNR3[%d] INFO CONFIG: filter_mode=%s (compile-time selector)\n",
+        data->config.instance_id.value,
+        CNR3_SELECTED_FILTER_MODE_TEXT
+    );
+#endif
+
     const Cnr3Status pixel_config_status = cnr3_initialise_k1e2_live_pixel_config(
         *source_info,
         *data
@@ -570,7 +586,7 @@ void VS_CC cnr3_create_filter(
         &data->video_info,
         cnr3_get_frame_keystone_live_k1f_proof,
         cnr3_free_filter,
-        fmUnordered,
+        CNR3_SELECTED_FILTER_MODE,
         dependencies,
         1,
         data,

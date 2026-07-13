@@ -34,7 +34,7 @@ for %%f in (fmUnordered fmParallelRequests fmParallel) do (
         REM
         set "log=%top_root%\run_log_R%%r_%%f.txt"
         set "findstr_log=%top_root%\run_log_R%%r_%%f_FINDSTR.txt"
-        set "findstr_cmd=findstr /C:"INFO CONFIG" /C:"filter_mode=" /C:"DSUM-SUMMARY" /C:"[DSUM-HEALTH]" /C:"Output" /C:"frames_computed" /C:"bailed_after_compute_because" /C:"duplicates_seen" /C:"stores_total" /C:"frames_evicted" /C:"recovery_plans_created" /C:"holes_identified" /C:"recovery_span_mean" /C:"out_of_order_count" /C:"MISMATCH" "!log!""
+        set "findstr_cmd=findstr /C:"fps" /C:"INFO CONFIG" /C:"filter_mode=" /C:"DSUM-SUMMARY" /C:"[DSUM-HEALTH]" /C:"Output" /C:"frames_computed" /C:"bailed_after_compute_because" /C:"duplicates_seen" /C:"stores_total" /C:"frames_evicted" /C:"recovery_plans_created" /C:"holes_identified" /C:"recovery_span_mean" /C:"out_of_order_count" /C:"MISMATCH" "!log!""
         set "mp4=%top_root%\test_000_Example_576p50_RESULT_R%%r_%%f.mp4"
         set "y4m=%top_root%\test_000_Example_576p50_RESULT_R%%r_%%f.y4m"
         REM 

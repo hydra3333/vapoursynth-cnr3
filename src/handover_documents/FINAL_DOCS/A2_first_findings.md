@@ -199,3 +199,39 @@ FINAL MODE TABLE (all mode-verified, 200-frame NORMAL-ish, correctness x=0 throu
 
 The defect is exclusive to overlapped COMPUTE (fmParallel). fmParallelRequests overlaps requests/planning
 only (serial compute) and is clean even when it recovers heavily. Definitive mode characterisation.
+
+---
+## A2 — plan-retry-bias experiment RESULT (2026-07-12/13, two-run confirmed)
+
+Committed CMS07-EXPERIMENT.plan-retry-bias (gated, default OFF). Swept sleep S (10-250ms) x num_threads
+(1/2/4/8/24) on the 3000-frame fmParallel clip; T=24 band repeated to confirm. All runs: invariants 0,
+ownership 0, x=0 (correctness held throughout).
+
+REPRODUCIBILITY (T=24, run1 vs run2, duplicates): S30 4601/4762, S40 3927/3851, S50 2286/2027 -- match
+within a few percent. The sweet spot is real, not single-run noise.
+
+KEY SHAPE (T=24, the heavy-concurrency stress case):
+  S=10 : ~47000 duplicates (both runs) -- sleep too short, retry spins, predecessors never publish in time.
+  S=30 : ~4700 duplicates, fps PEAKS ~180 -- ~10x duplicate reduction vs S=10.
+  S=40 : ~3900 duplicates, fps ~156.
+  S=50 : ~2100 duplicates, fps ~128.
+  S=70 : ~1900 duplicates, fps ~100.
+Two optima depending on objective:
+  - BEST THROUGHPUT: S~30-40 (fps peak; duplicates already down 10x).
+  - LEAST WASTE: S~50-70 (duplicates keep falling, but fps sags -- paying latency for adoption).
+  Crossover / practical default: S~35-40 (maximises fps while capturing most of the duplicate reduction).
+
+THREAD COUNT is the dominant variable: T=1 perfect (3000 computes, 0 dup, ~300fps -- serial, no race);
+T=2 near-clean; waste grows with genuine compute concurrency, worst at T=24 (oversubscription stress).
+
+VERDICT: the experiment MEASURABLY reduces overcompute at high concurrency (~10x at tuned S) and is a
+usable cheap mitigation. BUT it is a BIAS, not a cure: duplicates plateau ~2000 (never ~0) even at best S;
+choosing S is a genuine throughput-vs-waste tradeoff with no single optimum; benefit is thread-count- and
+S-dependent. This is exactly the scoped expectation. It does NOT replace the reservation/await table
+(research #1), which would remove the need to tune S and target true ~1x. Correctness (x=0) held in every
+cell. throttle-vs-adopt guard: this is genuine adoption, not throttling -- fps ROSE into the sweet spot
+(S10->S30: fps 62->180) while duplicates fell, so plans genuinely shrank rather than merely being delayed.
+
+STATUS: plan-retry arc COMPLETE. Banked as a tunable mitigation (default S~35-40 if enabled). Reservation
+table remains the designed follow-up for a true fix. fmParallel still not default-safe for production
+without one of these; fmUnordered and fmParallelRequests remain the clean shipping modes.

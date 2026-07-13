@@ -8,6 +8,51 @@ import vapoursynth as vs
 
 core = vs.core
 
+#****************************************************************************************
+# =================================================================================
+# VPY / VSPIPE TEST ARGUMENTS
+# ----------------------------------------------------------------------------
+# vspipe --arg key=value injects string globals into this script.
+#
+# Example:
+#   vspipe --arg cnr3_core_threads=8 ...
+#
+# Important distinction:
+#   core.num_threads controls VapourSynth core worker threads.
+#   vspipe -r controls concurrent output frame requests, not worker threads.
+#
+# Therefore:
+#   1. Use cnr3_core_threads to model smaller worker-thread pools.
+# =================================================================================
+
+def _cnr3_get_arg_str(name: str, default: str) -> str:
+    value = globals().get(name, default)
+    if value is None:
+        return default
+    return str(value).strip()
+
+def _cnr3_get_arg_int(name: str, default: int, *, minimum: Optional[int] = None) -> int:
+    raw = _cnr3_get_arg_str(name, str(default))
+    try:
+        value = int(raw, 10)
+    except ValueError as exc:
+        raise ValueError(f"{name}: expected integer, got {raw!r}") from exc
+
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name}: expected >= {minimum}, got {value}")
+
+    return value
+
+CNR3_VPY_CORE_THREADS = _cnr3_get_arg_int("cnr3_core_threads", 0, minimum=0)
+
+# If cnr3_core_threads is set to a positive integer, apply it to core.num_threads.
+if CNR3_VPY_CORE_THREADS > 0:
+    core.num_threads = CNR3_VPY_CORE_THREADS
+    sys.stderr.write(f"--- [vpy] RESET core.num_threads = {core.num_threads}\n")
+    sys.stderr.flush()
+
+#****************************************************************************************
+
 # --- Source selection: uncomment ONE ---
 #source_filename = r"D:\TEST\000_Example_576i.mp4"     # interlaced  (LATER second pass)
 #source_filename = r"D:\TEST\000_Example_576p25.mp4"   # progressive (PRIMARY recovery-test clip)
@@ -506,7 +551,20 @@ clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jum
 clip_denoised.set_output()
 
 # Print info to stderr
-sys.stderr.write(f"\n--- vpy Clip Information ---\n")
-sys.stderr.write(f"--- vpy Original source frames: {SOURCE_FRAME_COUNT}\n")
-sys.stderr.write(f"--- vpy Final output frames:    {TEST_CLIP_LENGTH}\n")
-sys.stderr.write(f"--- vpy ------------------------\n\n")
+sys.stderr.write(f"\n--- [vpy] Vapoursynth Information ---\n")
+sys.stderr.write(f"--- [vpy] === VapourSynth core info ===\n")
+sys.stderr.write(f"--- [vpy] core.num_threads     = {core.num_threads}\n")
+sys.stderr.write(f"--- [vpy] core.max_cache_size  = {core.max_cache_size}\n")
+sys.stderr.write(f"--- [vpy] core.used_cache_size = {core.used_cache_size}\n")
+sys.stderr.write(f"--- [vpy] core.core_version    = {core.core_version}\n")
+sys.stderr.write(f"--- [vpy] core.api_version     = {core.api_version}\n")
+#
+sys.stderr.write(f"\n--- [vpy] CNR3 TEST: VapourSynth core.num_threads={core.num_threads}\n")
+sys.stderr.write(f"--- [vpy] CNR3 TEST:                numThreads/2 ={core.num_threads // 2}\n")
+#
+sys.stderr.write(f"\n--- [vpy] Clip Information ---\n")
+sys.stderr.write(f"--- [vpy] Original source frames = {SOURCE_FRAME_COUNT}\n")
+sys.stderr.write(f"--- [vpy] Final output frames    = {TEST_CLIP_LENGTH}\n")
+sys.stderr.write(f"--- [vpy] ------------------------\n\n")
+#
+sys.stderr.flush()

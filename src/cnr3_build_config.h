@@ -126,9 +126,9 @@
         Upper bound on retry attempts. The per-instance plan_retry_max is derived
         at filter creation as min(CNR3_PLAN_RETRY_MAX_CAP, max(1, numThreads/2)).
 */
-#   define CNR3_PLAN_RETRY_SLEEP_MS        20  // was 25, start small up it later
-#   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2
-#   define CNR3_PLAN_RETRY_MAX_CAP         4
+#   define CNR3_PLAN_RETRY_SLEEP_MS        50  // was 25, 50 is best
+#   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2   // was 2
+#   define CNR3_PLAN_RETRY_MAX_CAP         4   // was 4
 
 #   if CNR3_PLAN_RETRY_SLEEP_MS < 0
 #       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_SLEEP_MS must be non-negative"

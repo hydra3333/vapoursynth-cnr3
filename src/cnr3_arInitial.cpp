@@ -11,9 +11,16 @@
 #include "cnr3_build_config.h"
 #include "cnr3_plugin_internal.h"
 
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#include <chrono>
+#endif
 #include <cstdio>
 #include <new>
 #include <string>
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#include <mutex>
+#include <thread>
+#endif
 #include <utility>
 
 namespace {
@@ -593,6 +600,63 @@ Cnr3Status cnr3_fill_floor_fresh_start_hole_numbers(
     return Cnr3Status::ok;
 }
 
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+
+void cnr3_planretry_observe_plan_attempt(
+    Cnr3PlanRetryExperimentStats& stats
+) noexcept {
+    std::lock_guard<std::mutex> lock{stats.mutex};
+    ++stats.plan_attempts_total;
+}
+
+void cnr3_planretry_observe_dumped_plan(
+    Cnr3PlanRetryExperimentStats& stats,
+    std::size_t hole_count
+) noexcept {
+    std::lock_guard<std::mutex> lock{stats.mutex};
+    ++stats.plans_dumped_total;
+    ++stats.retry_sleeps_total;
+    stats.dumped_plan_holes_total += static_cast<std::uint64_t>(hole_count);
+}
+
+void cnr3_planretry_observe_kept_plan(
+    Cnr3PlanRetryExperimentStats& stats,
+    int attempt_index,
+    std::size_t hole_count
+) noexcept {
+    std::lock_guard<std::mutex> lock{stats.mutex};
+
+    if (attempt_index <= 1) {
+        ++stats.plans_kept_on_attempt_1;
+    }
+    else if (attempt_index == 2) {
+        ++stats.plans_kept_on_attempt_2;
+    }
+    else {
+        ++stats.plans_kept_on_attempt_3plus;
+    }
+
+    stats.kept_plan_holes_total += static_cast<std::uint64_t>(hole_count);
+}
+
+void cnr3_planretry_reset_candidate_plan_after_dump(
+    Cnr3LiveGetFrameFrameData& request_data
+) {
+    request_data.branch = Cnr3LiveGetFrameBranch::none;
+    request_data.recovery_branch = Cnr3LiveRecoveryBranch::none;
+    request_data.recovery_plan = Cnr3CacheRecoverySearchPlan{};
+    request_data.recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
+    request_data.recovery_floor_outcome = Cnr3LiveRecoveryHoleOutcome::none;
+    request_data.source_requested = false;
+    request_data.source_request_frame_numbers.clear();
+    request_data.per_hole_outcomes.clear();
+#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
+    request_data.dsum12_recovery_plan_stats = nullptr;
+#endif
+}
+
+#endif
+
 const VSFrame* cnr3_start_live_recovery(
     int n,
     Cnr3FilterData& data,
@@ -618,122 +682,192 @@ const VSFrame* cnr3_start_live_recovery(
         return nullptr;
     }
 
-    Cnr3CacheRecoverySearchPlan recovery_plan{};
-    const Cnr3Status plan_status =
-        data.output_cache.plan_bounded_recovery_search_and_record_anchor_pin(
-            n,
-            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
-            request_data->pin_list,
-            recovery_plan,
-            true
-        );
+    Cnr3Status plan_status = Cnr3Status::ok;
 
-    if (!cnr3_status_is_ok(plan_status)) {
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+    const int attempts_allowed = data.plan_retry_max > 0 ? data.plan_retry_max : 1;
+
+    for (int attempt_index = 1; attempt_index <= attempts_allowed; ++attempt_index) {
+#else
+    {
+#endif
+        Cnr3CacheRecoverySearchPlan recovery_plan{};
+        plan_status =
+            data.output_cache.plan_bounded_recovery_search_and_record_anchor_pin(
+                n,
+                CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+                request_data->pin_list,
+                recovery_plan,
+                true
+            );
+
+        if (!cnr3_status_is_ok(plan_status)) {
 #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
-        cnr3_diag_live_observe_recovery_search_result(
-            data,
-            n,
-            plan_status,
-            Cnr3LiveRecoveryBranch::none,
-            recovery_plan
-        );
+            cnr3_diag_live_observe_recovery_search_result(
+                data,
+                n,
+                plan_status,
+                Cnr3LiveRecoveryBranch::none,
+                recovery_plan
+            );
 #endif
-        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
-#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
-        cnr3_diag_plantrace_observe_initial_failed(
-            data,
-            n,
-            Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
-            n
-        );
-#endif
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            "CNR3 D.3 floor-fresh-start proof: bounded recovery plan failed."
-        );
-        return nullptr;
-    }
-
-    Cnr3LiveRecoveryBranch recovery_branch = Cnr3LiveRecoveryBranch::none;
-    int recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
-
-    if (cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
-        recovery_branch = Cnr3LiveRecoveryBranch::exact_anchor;
-    }
-    else if (cnr3_floor_fresh_start_recovery_plan_is_accepted(n, recovery_plan)) {
-        /*
-            No anchor exists yet. The floor-start path will materialize,
-            store, and pin output[floor] before arAllFramesReady treats that
-            floor output as the consumer foundation for the walked holes.
-        */
-        recovery_branch = Cnr3LiveRecoveryBranch::floor_fresh_start;
-        recovery_floor_frame = recovery_plan.search_lower_frame;
-    }
-    else {
-#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
-        cnr3_diag_live_observe_recovery_search_result(
-            data,
-            n,
-            plan_status,
-            Cnr3LiveRecoveryBranch::none,
-            recovery_plan
-        );
-#endif
-        const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
-        cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
-
-        const Cnr3Status discard_status =
-            cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
-
-#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
-        cnr3_diag_plantrace_observe_initial_failed(
-            data,
-            n,
-            cnr3_status_is_ok(discard_status)
-            ? Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused
-            : Cnr3DiagPlanTraceFailReason::discharge_failed,
-            n
-        );
-#endif
-        cnr3_set_filter_error(
-            frame_ctx,
-            vsapi,
-            cnr3_status_is_ok(discard_status)
-            ? refusal_reason
-            : "CNR3 D.3 floor-fresh-start proof: recovery refusal pin discharge failed."
-        );
-        return nullptr;
-    }
-
-    request_data->branch = Cnr3LiveGetFrameBranch::recovery;
-    request_data->recovery_branch = recovery_branch;
-    request_data->requested_frame = n;
-    request_data->predecessor_frame = n - 1;
-    request_data->recovery_floor_frame = recovery_floor_frame;
-    request_data->recovery_plan = std::move(recovery_plan);
-
-    if (request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
-        const Cnr3Status floor_holes_status =
-            cnr3_fill_floor_fresh_start_hole_numbers(n, *request_data);
-
-        if (!cnr3_status_is_ok(floor_holes_status)) {
             cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
 #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
             cnr3_diag_plantrace_observe_initial_failed(
                 data,
                 n,
                 Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
-                request_data != nullptr ? request_data->recovery_floor_frame : n
+                n
             );
 #endif
             cnr3_set_filter_error(
                 frame_ctx,
                 vsapi,
-                "CNR3 D.3 floor-fresh-start proof: failed to derive floor-start holes."
+                "CNR3 D.3 floor-fresh-start proof: bounded recovery plan failed."
             );
             return nullptr;
         }
+
+        Cnr3LiveRecoveryBranch recovery_branch = Cnr3LiveRecoveryBranch::none;
+        int recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
+
+        if (cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
+            recovery_branch = Cnr3LiveRecoveryBranch::exact_anchor;
+        }
+        else if (cnr3_floor_fresh_start_recovery_plan_is_accepted(n, recovery_plan)) {
+            /*
+                No anchor exists yet. The floor-start path will materialize,
+                store, and pin output[floor] before arAllFramesReady treats that
+                floor output as the consumer foundation for the walked holes.
+            */
+            recovery_branch = Cnr3LiveRecoveryBranch::floor_fresh_start;
+            recovery_floor_frame = recovery_plan.search_lower_frame;
+        }
+        else {
+#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+            cnr3_diag_live_observe_recovery_search_result(
+                data,
+                n,
+                plan_status,
+                Cnr3LiveRecoveryBranch::none,
+                recovery_plan
+            );
+#endif
+            const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
+            cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
+
+            const Cnr3Status discard_status =
+                cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+            cnr3_diag_plantrace_observe_initial_failed(
+                data,
+                n,
+                cnr3_status_is_ok(discard_status)
+                ? Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused
+                : Cnr3DiagPlanTraceFailReason::discharge_failed,
+                n
+            );
+#endif
+            cnr3_set_filter_error(
+                frame_ctx,
+                vsapi,
+                cnr3_status_is_ok(discard_status)
+                ? refusal_reason
+                : "CNR3 D.3 floor-fresh-start proof: recovery refusal pin discharge failed."
+            );
+            return nullptr;
+        }
+
+        request_data->branch = Cnr3LiveGetFrameBranch::recovery;
+        request_data->recovery_branch = recovery_branch;
+        request_data->requested_frame = n;
+        request_data->predecessor_frame = n - 1;
+        request_data->recovery_floor_frame = recovery_floor_frame;
+        request_data->recovery_plan = std::move(recovery_plan);
+
+        if (request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+            const Cnr3Status floor_holes_status =
+                cnr3_fill_floor_fresh_start_hole_numbers(n, *request_data);
+
+            if (!cnr3_status_is_ok(floor_holes_status)) {
+                cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_initial_failed(
+                    data,
+                    n,
+                    Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
+                    request_data != nullptr ? request_data->recovery_floor_frame : n
+                );
+#endif
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 D.3 floor-fresh-start proof: failed to derive floor-start holes."
+                );
+                return nullptr;
+            }
+        }
+
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+        const std::size_t candidate_hole_count =
+            request_data->recovery_plan.hole_frame_numbers.size();
+
+        cnr3_planretry_observe_plan_attempt(data.plan_retry_stats);
+
+        if (candidate_hole_count >
+            static_cast<std::size_t>(CNR3_PLAN_RETRY_HOLE_THRESHOLD) &&
+            attempt_index < attempts_allowed) {
+            cnr3_planretry_observe_dumped_plan(
+                data.plan_retry_stats,
+                candidate_hole_count
+            );
+
+            const Cnr3Status discharge_status =
+                request_data->pin_list.discharge_all(data.output_cache);
+
+            if (!cnr3_status_is_ok(discharge_status)) {
+                cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+                cnr3_diag_plantrace_observe_initial_failed(
+                    data,
+                    n,
+                    Cnr3DiagPlanTraceFailReason::discharge_failed,
+                    n
+                );
+#endif
+                cnr3_set_filter_error(
+                    frame_ctx,
+                    vsapi,
+                    "CNR3 plan-retry experiment: dumped recovery-plan pin discharge failed."
+                );
+                return nullptr;
+            }
+
+            cnr3_planretry_reset_candidate_plan_after_dump(*request_data);
+
+            /*
+                The candidate plan has been fully destroyed and all pins have
+                been discharged before this sleep. No cache mutex or pin-list
+                cleanup lock is held while yielding the worker.
+            */
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(CNR3_PLAN_RETRY_SLEEP_MS)
+            );
+
+            continue;
+        }
+
+        cnr3_planretry_observe_kept_plan(
+            data.plan_retry_stats,
+            attempt_index,
+            candidate_hole_count
+        );
+#endif
+
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+        break;
+#endif
     }
 
     const Cnr3Status source_plan_status =

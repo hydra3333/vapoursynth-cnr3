@@ -156,7 +156,204 @@
 #include <cstdio>
 #include <new>
 
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#include <mutex>
+#endif
+
 namespace {
+
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+
+int cnr3_planretry_derive_max_attempts(
+    int num_threads
+) noexcept {
+    const int scaled_thread_limit = num_threads > 1 ? num_threads / 2 : 1;
+    const int lower_bounded_limit = scaled_thread_limit > 1 ? scaled_thread_limit : 1;
+
+    return lower_bounded_limit < CNR3_PLAN_RETRY_MAX_CAP
+        ? lower_bounded_limit
+        : CNR3_PLAN_RETRY_MAX_CAP;
+}
+
+void cnr3_planretry_write_u64_line(
+    Cnr3InstanceId instance_id,
+    const char* field_name,
+    std::uint64_t value
+) noexcept {
+    std::fprintf(
+        stderr,
+        "CNR3[%d] INFO DSUM-PLANRETRY: [DSUM-PLANRETRY] %-44s %llu\n",
+        instance_id.value,
+        field_name != nullptr ? field_name : "<null>",
+        static_cast<unsigned long long>(value)
+    );
+}
+
+void cnr3_planretry_write_i32_line(
+    Cnr3InstanceId instance_id,
+    const char* field_name,
+    int value
+) noexcept {
+    std::fprintf(
+        stderr,
+        "CNR3[%d] INFO DSUM-PLANRETRY: [DSUM-PLANRETRY] %-44s %d\n",
+        instance_id.value,
+        field_name != nullptr ? field_name : "<null>",
+        value
+    );
+}
+
+void cnr3_planretry_write_text_line(
+    Cnr3InstanceId instance_id,
+    const char* text
+) noexcept {
+    std::fprintf(
+        stderr,
+        "CNR3[%d] INFO DSUM-PLANRETRY: [DSUM-PLANRETRY] %s\n",
+        instance_id.value,
+        text != nullptr ? text : "<null>"
+    );
+}
+
+void cnr3_planretry_write_summary_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3PlanRetryExperimentStats& stats,
+    int plan_retry_max
+) noexcept {
+    struct Snapshot {
+        std::uint64_t plan_attempts_total = 0;
+        std::uint64_t plans_dumped_total = 0;
+        std::uint64_t retry_sleeps_total = 0;
+        std::uint64_t plans_kept_on_attempt_1 = 0;
+        std::uint64_t plans_kept_on_attempt_2 = 0;
+        std::uint64_t plans_kept_on_attempt_3plus = 0;
+        std::uint64_t dumped_plan_holes_total = 0;
+        std::uint64_t kept_plan_holes_total = 0;
+    };
+
+    Snapshot snapshot{};
+
+    {
+        std::lock_guard<std::mutex> lock{stats.mutex};
+        snapshot.plan_attempts_total = stats.plan_attempts_total;
+        snapshot.plans_dumped_total = stats.plans_dumped_total;
+        snapshot.retry_sleeps_total = stats.retry_sleeps_total;
+        snapshot.plans_kept_on_attempt_1 = stats.plans_kept_on_attempt_1;
+        snapshot.plans_kept_on_attempt_2 = stats.plans_kept_on_attempt_2;
+        snapshot.plans_kept_on_attempt_3plus = stats.plans_kept_on_attempt_3plus;
+        snapshot.dumped_plan_holes_total = stats.dumped_plan_holes_total;
+        snapshot.kept_plan_holes_total = stats.kept_plan_holes_total;
+    }
+
+    cnr3_planretry_write_text_line(
+        instance_id,
+        "plan-retry biasing experiment summary"
+    );
+    cnr3_planretry_write_i32_line(instance_id, "plan_retry_enabled", 1);
+    cnr3_planretry_write_i32_line(
+        instance_id,
+        "plan_retry_sleep_ms",
+        CNR3_PLAN_RETRY_SLEEP_MS
+    );
+    cnr3_planretry_write_i32_line(
+        instance_id,
+        "plan_retry_hole_threshold",
+        CNR3_PLAN_RETRY_HOLE_THRESHOLD
+    );
+    cnr3_planretry_write_i32_line(
+        instance_id,
+        "plan_retry_max_cap",
+        CNR3_PLAN_RETRY_MAX_CAP
+    );
+    cnr3_planretry_write_i32_line(
+        instance_id,
+        "plan_retry_max",
+        plan_retry_max
+    );
+
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "plan_retry_plan_attempts_total",
+        snapshot.plan_attempts_total
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "plans_dumped_total",
+        snapshot.plans_dumped_total
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "retry_sleeps_total",
+        snapshot.retry_sleeps_total
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "plans_kept_on_attempt_1",
+        snapshot.plans_kept_on_attempt_1
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "plans_kept_on_attempt_2",
+        snapshot.plans_kept_on_attempt_2
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "plans_kept_on_attempt_3plus",
+        snapshot.plans_kept_on_attempt_3plus
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "dumped_plan_holes_total",
+        snapshot.dumped_plan_holes_total
+    );
+    cnr3_planretry_write_u64_line(
+        instance_id,
+        "kept_plan_holes_total",
+        snapshot.kept_plan_holes_total
+    );
+
+    const std::uint64_t kept_total =
+        snapshot.plans_kept_on_attempt_1 +
+        snapshot.plans_kept_on_attempt_2 +
+        snapshot.plans_kept_on_attempt_3plus;
+
+    const std::uint64_t expected_attempts =
+        snapshot.plans_dumped_total + kept_total;
+
+    if (snapshot.plan_attempts_total == expected_attempts) {
+        cnr3_planretry_write_text_line(
+            instance_id,
+            "self-check attempts == dumped + kept buckets -> OK"
+        );
+    }
+    else {
+        std::fprintf(
+            stderr,
+            "CNR3[%d] WARN DSUM-PLANRETRY: [DSUM-PLANRETRY] self-check attempts == dumped + kept buckets -> WARN (%llu vs %llu)\n",
+            instance_id.value,
+            static_cast<unsigned long long>(snapshot.plan_attempts_total),
+            static_cast<unsigned long long>(expected_attempts)
+        );
+    }
+
+    if (snapshot.retry_sleeps_total == snapshot.plans_dumped_total) {
+        cnr3_planretry_write_text_line(
+            instance_id,
+            "self-check retry_sleeps_total == plans_dumped_total -> OK"
+        );
+    }
+    else {
+        std::fprintf(
+            stderr,
+            "CNR3[%d] WARN DSUM-PLANRETRY: [DSUM-PLANRETRY] self-check retry_sleeps_total == plans_dumped_total -> WARN (%llu vs %llu)\n",
+            instance_id.value,
+            static_cast<unsigned long long>(snapshot.retry_sleeps_total),
+            static_cast<unsigned long long>(snapshot.plans_dumped_total)
+        );
+    }
+}
+
+#endif
 
 inline constexpr int CNR3_K1E2_PROOF_DEFAULT_THRESHOLD_8BIT = 255;
 inline constexpr int CNR3_K1E2_PROOF_DEFAULT_STRENGTH_8BIT = 255;
@@ -409,6 +606,13 @@ void VS_CC cnr3_free_filter(
         data->dsum_plantrace
     );
 #endif
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+    cnr3_planretry_write_summary_to_stderr(
+        data->config.instance_id,
+        data->plan_retry_stats,
+        data->plan_retry_max
+    );
+#endif
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
     cnr3_memory_record_and_print_snapshot(
@@ -536,6 +740,12 @@ void VS_CC cnr3_create_filter(
         vsapi->mapSetError(out, "CNR3: failed to initialise instance configuration.");
         return;
     }
+
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+    VSCoreInfo core_info{};
+    vsapi->getCoreInfo(core, &core_info);
+    data->plan_retry_max = cnr3_planretry_derive_max_attempts(core_info.numThreads);
+#endif
 
 #if defined(CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE)
     std::fprintf(

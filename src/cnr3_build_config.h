@@ -58,9 +58,9 @@
     preserving the phase marker at the start of the string.
     ---------------------------------------------------------------------------
 */
-#define CNR3_FILTER_MODE_UNORDERED 1
+//#define CNR3_FILTER_MODE_UNORDERED 1
 //#define CNR3_FILTER_MODE_PARALLEL_REQUESTS 1
-//#define CNR3_FILTER_MODE_PARALLEL 1
+#define CNR3_FILTER_MODE_PARALLEL 1
 
 #if (defined(CNR3_FILTER_MODE_UNORDERED) + defined(CNR3_FILTER_MODE_PARALLEL_REQUESTS) + defined(CNR3_FILTER_MODE_PARALLEL)) != 1
 #   error "CNR3 filter mode: uncomment exactly ONE of CNR3_FILTER_MODE_UNORDERED / _PARALLEL_REQUESTS / _PARALLEL in cnr3_build_config.h"
@@ -92,6 +92,56 @@
 #define CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE 1
 
 /*
+    ---------------------------------------------------------------------------
+    PLAN-RETRY BIASING EXPERIMENT (fmParallel redundant-recompute mitigation)
+
+    Uncomment to enable. OFF (default) = recovery plan formation is single-pass,
+    exactly today's behaviour.
+
+    ON = arInitial may retry recovery plan formation up to the derived
+    per-instance retry limit, sleeping briefly between attempts, whenever a
+    formed recovery plan contains more than CNR3_PLAN_RETRY_HOLE_THRESHOLD
+    holes. The last attempt's plan is always kept; there is no infinite loop.
+
+    This is a gated experiment only. It is a polling approximation of an
+    in-flight reservation/await mechanism, not the final fmParallel design.
+    ---------------------------------------------------------------------------
+*/
+#define CNR3_EXPERIMENT_PLAN_RETRY_BIAS 1
+
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+/*
+    Adjustable experiment parameters. These names exist only when the experiment
+    is enabled, so macro-OFF builds compile out the loop, knobs, counters, and
+    summary block.
+
+    CNR3_PLAN_RETRY_SLEEP_MS
+        True yield-sleep between dumped-plan attempts.
+
+    CNR3_PLAN_RETRY_HOLE_THRESHOLD
+        A plan with MORE than this many holes is dumped and retried when another
+        attempt is available.
+
+    CNR3_PLAN_RETRY_MAX_CAP
+        Upper bound on retry attempts. The per-instance plan_retry_max is derived
+        at filter creation as min(CNR3_PLAN_RETRY_MAX_CAP, max(1, numThreads/2)).
+*/
+#   define CNR3_PLAN_RETRY_SLEEP_MS        20  // was 25, start small up it later
+#   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2
+#   define CNR3_PLAN_RETRY_MAX_CAP         4
+
+#   if CNR3_PLAN_RETRY_SLEEP_MS < 0
+#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_SLEEP_MS must be non-negative"
+#   endif
+#   if CNR3_PLAN_RETRY_HOLE_THRESHOLD < 0
+#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_HOLE_THRESHOLD must be non-negative"
+#   endif
+#   if CNR3_PLAN_RETRY_MAX_CAP < 1
+#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_MAX_CAP must be at least 1"
+#   endif
+#endif
+
+/*
     Edit/version marker.
 
     This string is for human diagnostics and build identification only. It must
@@ -99,7 +149,7 @@
     suffixed so selftests and logs keep the phase marker at the start while also
     identifying the selected mode.
 */
-#define CNR3_EDIT_VERSION_LITERAL "CMS07-SCAFFOLD.filter-mode-selector"
+#define CNR3_EDIT_VERSION_LITERAL "CMS07-EXPERIMENT.plan-retry-bias"
 
 inline constexpr const char* CNR3_EDIT_VERSION =
     CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;

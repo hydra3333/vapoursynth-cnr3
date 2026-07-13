@@ -1,0 +1,721 @@
+diff --git a/src/cnr3_arInitial.cpp b/src/cnr3_arInitial.cpp
+index 18db5aa..0437904 100644
+--- a/src/cnr3_arInitial.cpp
++++ b/src/cnr3_arInitial.cpp
+@@ -11,9 +11,16 @@
+ #include "cnr3_build_config.h"
+ #include "cnr3_plugin_internal.h"
+ 
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#include <chrono>
++#endif
+ #include <cstdio>
+ #include <new>
+ #include <string>
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#include <mutex>
++#include <thread>
++#endif
+ #include <utility>
+ 
+ namespace {
+@@ -593,6 +600,63 @@ Cnr3Status cnr3_fill_floor_fresh_start_hole_numbers(
+     return Cnr3Status::ok;
+ }
+ 
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++
++void cnr3_planretry_observe_plan_attempt(
++    Cnr3PlanRetryExperimentStats& stats
++) noexcept {
++    std::lock_guard<std::mutex> lock{stats.mutex};
++    ++stats.plan_attempts_total;
++}
++
++void cnr3_planretry_observe_dumped_plan(
++    Cnr3PlanRetryExperimentStats& stats,
++    std::size_t hole_count
++) noexcept {
++    std::lock_guard<std::mutex> lock{stats.mutex};
++    ++stats.plans_dumped_total;
++    ++stats.retry_sleeps_total;
++    stats.dumped_plan_holes_total += static_cast<std::uint64_t>(hole_count);
++}
++
++void cnr3_planretry_observe_kept_plan(
++    Cnr3PlanRetryExperimentStats& stats,
++    int attempt_index,
++    std::size_t hole_count
++) noexcept {
++    std::lock_guard<std::mutex> lock{stats.mutex};
++
++    if (attempt_index <= 1) {
++        ++stats.plans_kept_on_attempt_1;
++    }
++    else if (attempt_index == 2) {
++        ++stats.plans_kept_on_attempt_2;
++    }
++    else {
++        ++stats.plans_kept_on_attempt_3plus;
++    }
++
++    stats.kept_plan_holes_total += static_cast<std::uint64_t>(hole_count);
++}
++
++void cnr3_planretry_reset_candidate_plan_after_dump(
++    Cnr3LiveGetFrameFrameData& request_data
++) {
++    request_data.branch = Cnr3LiveGetFrameBranch::none;
++    request_data.recovery_branch = Cnr3LiveRecoveryBranch::none;
++    request_data.recovery_plan = Cnr3CacheRecoverySearchPlan{};
++    request_data.recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
++    request_data.recovery_floor_outcome = Cnr3LiveRecoveryHoleOutcome::none;
++    request_data.source_requested = false;
++    request_data.source_request_frame_numbers.clear();
++    request_data.per_hole_outcomes.clear();
++#if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
++    request_data.dsum12_recovery_plan_stats = nullptr;
++#endif
++}
++
++#endif
++
+ const VSFrame* cnr3_start_live_recovery(
+     int n,
+     Cnr3FilterData& data,
+@@ -618,122 +682,192 @@ const VSFrame* cnr3_start_live_recovery(
+         return nullptr;
+     }
+ 
+-    Cnr3CacheRecoverySearchPlan recovery_plan{};
+-    const Cnr3Status plan_status =
+-        data.output_cache.plan_bounded_recovery_search_and_record_anchor_pin(
+-            n,
+-            CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
+-            request_data->pin_list,
+-            recovery_plan,
+-            true
+-        );
++    Cnr3Status plan_status = Cnr3Status::ok;
+ 
+-    if (!cnr3_status_is_ok(plan_status)) {
+-#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+-        cnr3_diag_live_observe_recovery_search_result(
+-            data,
+-            n,
+-            plan_status,
+-            Cnr3LiveRecoveryBranch::none,
+-            recovery_plan
+-        );
+-#endif
+-        cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+-#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+-        cnr3_diag_plantrace_observe_initial_failed(
+-            data,
+-            n,
+-            Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
+-            n
+-        );
+-#endif
+-        cnr3_set_filter_error(
+-            frame_ctx,
+-            vsapi,
+-            "CNR3 D.3 floor-fresh-start proof: bounded recovery plan failed."
+-        );
+-        return nullptr;
+-    }
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++    const int attempts_allowed = data.plan_retry_max > 0 ? data.plan_retry_max : 1;
+ 
+-    Cnr3LiveRecoveryBranch recovery_branch = Cnr3LiveRecoveryBranch::none;
+-    int recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
++    for (int attempt_index = 1; attempt_index <= attempts_allowed; ++attempt_index) {
++#else
++    {
++#endif
++        Cnr3CacheRecoverySearchPlan recovery_plan{};
++        plan_status =
++            data.output_cache.plan_bounded_recovery_search_and_record_anchor_pin(
++                n,
++                CNR3_CACHE_BOUNDED_RECOVERY_BACK_RADIUS,
++                request_data->pin_list,
++                recovery_plan,
++                true
++            );
+ 
+-    if (cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
+-        recovery_branch = Cnr3LiveRecoveryBranch::exact_anchor;
+-    }
+-    else if (cnr3_floor_fresh_start_recovery_plan_is_accepted(n, recovery_plan)) {
+-        /*
+-            No anchor exists yet. The floor-start path will materialize,
+-            store, and pin output[floor] before arAllFramesReady treats that
+-            floor output as the consumer foundation for the walked holes.
+-        */
+-        recovery_branch = Cnr3LiveRecoveryBranch::floor_fresh_start;
+-        recovery_floor_frame = recovery_plan.search_lower_frame;
+-    }
+-    else {
++        if (!cnr3_status_is_ok(plan_status)) {
+ #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
+-        cnr3_diag_live_observe_recovery_search_result(
+-            data,
+-            n,
+-            plan_status,
+-            Cnr3LiveRecoveryBranch::none,
+-            recovery_plan
+-        );
++            cnr3_diag_live_observe_recovery_search_result(
++                data,
++                n,
++                plan_status,
++                Cnr3LiveRecoveryBranch::none,
++                recovery_plan
++            );
+ #endif
+-        const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
+-        cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
+-
+-        const Cnr3Status discard_status =
+             cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+-
+ #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+-        cnr3_diag_plantrace_observe_initial_failed(
+-            data,
+-            n,
+-            cnr3_status_is_ok(discard_status)
+-            ? Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused
+-            : Cnr3DiagPlanTraceFailReason::discharge_failed,
+-            n
+-        );
++            cnr3_diag_plantrace_observe_initial_failed(
++                data,
++                n,
++                Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
++                n
++            );
+ #endif
+-        cnr3_set_filter_error(
+-            frame_ctx,
+-            vsapi,
+-            cnr3_status_is_ok(discard_status)
+-            ? refusal_reason
+-            : "CNR3 D.3 floor-fresh-start proof: recovery refusal pin discharge failed."
+-        );
+-        return nullptr;
+-    }
++            cnr3_set_filter_error(
++                frame_ctx,
++                vsapi,
++                "CNR3 D.3 floor-fresh-start proof: bounded recovery plan failed."
++            );
++            return nullptr;
++        }
+ 
+-    request_data->branch = Cnr3LiveGetFrameBranch::recovery;
+-    request_data->recovery_branch = recovery_branch;
+-    request_data->requested_frame = n;
+-    request_data->predecessor_frame = n - 1;
+-    request_data->recovery_floor_frame = recovery_floor_frame;
+-    request_data->recovery_plan = std::move(recovery_plan);
++        Cnr3LiveRecoveryBranch recovery_branch = Cnr3LiveRecoveryBranch::none;
++        int recovery_floor_frame = CNR3_INVALID_FRAME_NUMBER;
+ 
+-    if (request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
+-        const Cnr3Status floor_holes_status =
+-            cnr3_fill_floor_fresh_start_hole_numbers(n, *request_data);
++        if (cnr3_exact_anchor_recovery_plan_is_accepted(n, recovery_plan)) {
++            recovery_branch = Cnr3LiveRecoveryBranch::exact_anchor;
++        }
++        else if (cnr3_floor_fresh_start_recovery_plan_is_accepted(n, recovery_plan)) {
++            /*
++                No anchor exists yet. The floor-start path will materialize,
++                store, and pin output[floor] before arAllFramesReady treats that
++                floor output as the consumer foundation for the walked holes.
++            */
++            recovery_branch = Cnr3LiveRecoveryBranch::floor_fresh_start;
++            recovery_floor_frame = recovery_plan.search_lower_frame;
++        }
++        else {
++#if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
++            cnr3_diag_live_observe_recovery_search_result(
++                data,
++                n,
++                plan_status,
++                Cnr3LiveRecoveryBranch::none,
++                recovery_plan
++            );
++#endif
++            const char* const refusal_reason = cnr3_recovery_refusal_reason(recovery_plan);
++            cnr3_trace_live_recovery_refusal(data, n, recovery_plan, refusal_reason);
++
++            const Cnr3Status discard_status =
++                cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+ 
+-        if (!cnr3_status_is_ok(floor_holes_status)) {
+-            cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
+ #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+             cnr3_diag_plantrace_observe_initial_failed(
+                 data,
+                 n,
+-                Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
+-                request_data != nullptr ? request_data->recovery_floor_frame : n
++                cnr3_status_is_ok(discard_status)
++                ? Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused
++                : Cnr3DiagPlanTraceFailReason::discharge_failed,
++                n
+             );
+ #endif
+             cnr3_set_filter_error(
+                 frame_ctx,
+                 vsapi,
+-                "CNR3 D.3 floor-fresh-start proof: failed to derive floor-start holes."
++                cnr3_status_is_ok(discard_status)
++                ? refusal_reason
++                : "CNR3 D.3 floor-fresh-start proof: recovery refusal pin discharge failed."
+             );
+             return nullptr;
+         }
++
++        request_data->branch = Cnr3LiveGetFrameBranch::recovery;
++        request_data->recovery_branch = recovery_branch;
++        request_data->requested_frame = n;
++        request_data->predecessor_frame = n - 1;
++        request_data->recovery_floor_frame = recovery_floor_frame;
++        request_data->recovery_plan = std::move(recovery_plan);
++
++        if (request_data->recovery_branch == Cnr3LiveRecoveryBranch::floor_fresh_start) {
++            const Cnr3Status floor_holes_status =
++                cnr3_fill_floor_fresh_start_hole_numbers(n, *request_data);
++
++            if (!cnr3_status_is_ok(floor_holes_status)) {
++                cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
++#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
++                cnr3_diag_plantrace_observe_initial_failed(
++                    data,
++                    n,
++                    Cnr3DiagPlanTraceFailReason::recovery_plan_failed_or_refused,
++                    request_data != nullptr ? request_data->recovery_floor_frame : n
++                );
++#endif
++                cnr3_set_filter_error(
++                    frame_ctx,
++                    vsapi,
++                    "CNR3 D.3 floor-fresh-start proof: failed to derive floor-start holes."
++                );
++                return nullptr;
++            }
++        }
++
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++        const std::size_t candidate_hole_count =
++            request_data->recovery_plan.hole_frame_numbers.size();
++
++        cnr3_planretry_observe_plan_attempt(data.plan_retry_stats);
++
++        if (candidate_hole_count >
++            static_cast<std::size_t>(CNR3_PLAN_RETRY_HOLE_THRESHOLD) &&
++            attempt_index < attempts_allowed) {
++            cnr3_planretry_observe_dumped_plan(
++                data.plan_retry_stats,
++                candidate_hole_count
++            );
++
++            const Cnr3Status discharge_status =
++                request_data->pin_list.discharge_all(data.output_cache);
++
++            if (!cnr3_status_is_ok(discharge_status)) {
++                cnr3_delete_unpublished_frame_data(request_data, data.output_cache);
++#if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
++                cnr3_diag_plantrace_observe_initial_failed(
++                    data,
++                    n,
++                    Cnr3DiagPlanTraceFailReason::discharge_failed,
++                    n
++                );
++#endif
++                cnr3_set_filter_error(
++                    frame_ctx,
++                    vsapi,
++                    "CNR3 plan-retry experiment: dumped recovery-plan pin discharge failed."
++                );
++                return nullptr;
++            }
++
++            cnr3_planretry_reset_candidate_plan_after_dump(*request_data);
++
++            /*
++                The candidate plan has been fully destroyed and all pins have
++                been discharged before this sleep. No cache mutex or pin-list
++                cleanup lock is held while yielding the worker.
++            */
++            std::this_thread::sleep_for(
++                std::chrono::milliseconds(CNR3_PLAN_RETRY_SLEEP_MS)
++            );
++
++            continue;
++        }
++
++        cnr3_planretry_observe_kept_plan(
++            data.plan_retry_stats,
++            attempt_index,
++            candidate_hole_count
++        );
++#endif
++
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++        break;
++#endif
+     }
+ 
+     const Cnr3Status source_plan_status =
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index 5bf0c30..a4f71c7 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -91,6 +91,56 @@
+ */
+ #define CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE 1
+ 
++/*
++    ---------------------------------------------------------------------------
++    PLAN-RETRY BIASING EXPERIMENT (fmParallel redundant-recompute mitigation)
++
++    Uncomment to enable. OFF (default) = recovery plan formation is single-pass,
++    exactly today's behaviour.
++
++    ON = arInitial may retry recovery plan formation up to the derived
++    per-instance retry limit, sleeping briefly between attempts, whenever a
++    formed recovery plan contains more than CNR3_PLAN_RETRY_HOLE_THRESHOLD
++    holes. The last attempt's plan is always kept; there is no infinite loop.
++
++    This is a gated experiment only. It is a polling approximation of an
++    in-flight reservation/await mechanism, not the final fmParallel design.
++    ---------------------------------------------------------------------------
++*/
++//#define CNR3_EXPERIMENT_PLAN_RETRY_BIAS 1
++
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++/*
++    Adjustable experiment parameters. These names exist only when the experiment
++    is enabled, so macro-OFF builds compile out the loop, knobs, counters, and
++    summary block.
++
++    CNR3_PLAN_RETRY_SLEEP_MS
++        True yield-sleep between dumped-plan attempts.
++
++    CNR3_PLAN_RETRY_HOLE_THRESHOLD
++        A plan with MORE than this many holes is dumped and retried when another
++        attempt is available.
++
++    CNR3_PLAN_RETRY_MAX_CAP
++        Upper bound on retry attempts. The per-instance plan_retry_max is derived
++        at filter creation as min(CNR3_PLAN_RETRY_MAX_CAP, max(1, numThreads/2)).
++*/
++#   define CNR3_PLAN_RETRY_SLEEP_MS        25
++#   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2
++#   define CNR3_PLAN_RETRY_MAX_CAP         4
++
++#   if CNR3_PLAN_RETRY_SLEEP_MS < 0
++#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_SLEEP_MS must be non-negative"
++#   endif
++#   if CNR3_PLAN_RETRY_HOLE_THRESHOLD < 0
++#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_HOLE_THRESHOLD must be non-negative"
++#   endif
++#   if CNR3_PLAN_RETRY_MAX_CAP < 1
++#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_MAX_CAP must be at least 1"
++#   endif
++#endif
++
+ /*
+     Edit/version marker.
+ 
+@@ -99,7 +149,7 @@
+     suffixed so selftests and logs keep the phase marker at the start while also
+     identifying the selected mode.
+ */
+-#define CNR3_EDIT_VERSION_LITERAL "CMS07-SCAFFOLD.filter-mode-selector"
++#define CNR3_EDIT_VERSION_LITERAL "CMS07-EXPERIMENT.plan-retry-bias"
+ 
+ inline constexpr const char* CNR3_EDIT_VERSION =
+     CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;
+diff --git a/src/cnr3_plugin_internal.h b/src/cnr3_plugin_internal.h
+index 585c95e..4730926 100644
+--- a/src/cnr3_plugin_internal.h
++++ b/src/cnr3_plugin_internal.h
+@@ -27,6 +27,27 @@
+ 
+ #include <vector>
+ 
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#include <cstdint>
++#include <mutex>
++#endif
++
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++
++struct Cnr3PlanRetryExperimentStats {
++    mutable std::mutex mutex{};
++    std::uint64_t plan_attempts_total = 0;
++    std::uint64_t plans_dumped_total = 0;
++    std::uint64_t retry_sleeps_total = 0;
++    std::uint64_t plans_kept_on_attempt_1 = 0;
++    std::uint64_t plans_kept_on_attempt_2 = 0;
++    std::uint64_t plans_kept_on_attempt_3plus = 0;
++    std::uint64_t dumped_plan_holes_total = 0;
++    std::uint64_t kept_plan_holes_total = 0;
++};
++
++#endif
++
+ struct Cnr3FilterData {
+     VSNode* source = nullptr;
+     VSVideoInfo video_info{};
+@@ -38,6 +59,10 @@ struct Cnr3FilterData {
+     int sub_sampling_h = -1;
+     double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
+     Cnr3SceneChangeConfig scene_change_config{};
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++    int plan_retry_max = 1;
++    Cnr3PlanRetryExperimentStats plan_retry_stats{};
++#endif
+ #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
+     Cnr3DiagPlanTraceBuffer dsum_plantrace{};
+ #endif
+diff --git a/src/vapoursynth-Cnr3.cpp b/src/vapoursynth-Cnr3.cpp
+index 6717f63..d020446 100644
+--- a/src/vapoursynth-Cnr3.cpp
++++ b/src/vapoursynth-Cnr3.cpp
+@@ -156,8 +156,205 @@
+ #include <cstdio>
+ #include <new>
+ 
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#include <mutex>
++#endif
++
+ namespace {
+ 
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++
++int cnr3_planretry_derive_max_attempts(
++    int num_threads
++) noexcept {
++    const int scaled_thread_limit = num_threads > 1 ? num_threads / 2 : 1;
++    const int lower_bounded_limit = scaled_thread_limit > 1 ? scaled_thread_limit : 1;
++
++    return lower_bounded_limit < CNR3_PLAN_RETRY_MAX_CAP
++        ? lower_bounded_limit
++        : CNR3_PLAN_RETRY_MAX_CAP;
++}
++
++void cnr3_planretry_write_u64_line(
++    Cnr3InstanceId instance_id,
++    const char* field_name,
++    std::uint64_t value
++) noexcept {
++    std::fprintf(
++        stderr,
++        "CNR3[%d] INFO DSUM-PLANRETRY: [DSUM-PLANRETRY] %-44s %llu\n",
++        instance_id.value,
++        field_name != nullptr ? field_name : "<null>",
++        static_cast<unsigned long long>(value)
++    );
++}
++
++void cnr3_planretry_write_i32_line(
++    Cnr3InstanceId instance_id,
++    const char* field_name,
++    int value
++) noexcept {
++    std::fprintf(
++        stderr,
++        "CNR3[%d] INFO DSUM-PLANRETRY: [DSUM-PLANRETRY] %-44s %d\n",
++        instance_id.value,
++        field_name != nullptr ? field_name : "<null>",
++        value
++    );
++}
++
++void cnr3_planretry_write_text_line(
++    Cnr3InstanceId instance_id,
++    const char* text
++) noexcept {
++    std::fprintf(
++        stderr,
++        "CNR3[%d] INFO DSUM-PLANRETRY: [DSUM-PLANRETRY] %s\n",
++        instance_id.value,
++        text != nullptr ? text : "<null>"
++    );
++}
++
++void cnr3_planretry_write_summary_to_stderr(
++    Cnr3InstanceId instance_id,
++    const Cnr3PlanRetryExperimentStats& stats,
++    int plan_retry_max
++) noexcept {
++    struct Snapshot {
++        std::uint64_t plan_attempts_total = 0;
++        std::uint64_t plans_dumped_total = 0;
++        std::uint64_t retry_sleeps_total = 0;
++        std::uint64_t plans_kept_on_attempt_1 = 0;
++        std::uint64_t plans_kept_on_attempt_2 = 0;
++        std::uint64_t plans_kept_on_attempt_3plus = 0;
++        std::uint64_t dumped_plan_holes_total = 0;
++        std::uint64_t kept_plan_holes_total = 0;
++    };
++
++    Snapshot snapshot{};
++
++    {
++        std::lock_guard<std::mutex> lock{stats.mutex};
++        snapshot.plan_attempts_total = stats.plan_attempts_total;
++        snapshot.plans_dumped_total = stats.plans_dumped_total;
++        snapshot.retry_sleeps_total = stats.retry_sleeps_total;
++        snapshot.plans_kept_on_attempt_1 = stats.plans_kept_on_attempt_1;
++        snapshot.plans_kept_on_attempt_2 = stats.plans_kept_on_attempt_2;
++        snapshot.plans_kept_on_attempt_3plus = stats.plans_kept_on_attempt_3plus;
++        snapshot.dumped_plan_holes_total = stats.dumped_plan_holes_total;
++        snapshot.kept_plan_holes_total = stats.kept_plan_holes_total;
++    }
++
++    cnr3_planretry_write_text_line(
++        instance_id,
++        "plan-retry biasing experiment summary"
++    );
++    cnr3_planretry_write_i32_line(instance_id, "plan_retry_enabled", 1);
++    cnr3_planretry_write_i32_line(
++        instance_id,
++        "plan_retry_sleep_ms",
++        CNR3_PLAN_RETRY_SLEEP_MS
++    );
++    cnr3_planretry_write_i32_line(
++        instance_id,
++        "plan_retry_hole_threshold",
++        CNR3_PLAN_RETRY_HOLE_THRESHOLD
++    );
++    cnr3_planretry_write_i32_line(
++        instance_id,
++        "plan_retry_max_cap",
++        CNR3_PLAN_RETRY_MAX_CAP
++    );
++    cnr3_planretry_write_i32_line(
++        instance_id,
++        "plan_retry_max",
++        plan_retry_max
++    );
++
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "plan_retry_plan_attempts_total",
++        snapshot.plan_attempts_total
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "plans_dumped_total",
++        snapshot.plans_dumped_total
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "retry_sleeps_total",
++        snapshot.retry_sleeps_total
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "plans_kept_on_attempt_1",
++        snapshot.plans_kept_on_attempt_1
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "plans_kept_on_attempt_2",
++        snapshot.plans_kept_on_attempt_2
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "plans_kept_on_attempt_3plus",
++        snapshot.plans_kept_on_attempt_3plus
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "dumped_plan_holes_total",
++        snapshot.dumped_plan_holes_total
++    );
++    cnr3_planretry_write_u64_line(
++        instance_id,
++        "kept_plan_holes_total",
++        snapshot.kept_plan_holes_total
++    );
++
++    const std::uint64_t kept_total =
++        snapshot.plans_kept_on_attempt_1 +
++        snapshot.plans_kept_on_attempt_2 +
++        snapshot.plans_kept_on_attempt_3plus;
++
++    const std::uint64_t expected_attempts =
++        snapshot.plans_dumped_total + kept_total;
++
++    if (snapshot.plan_attempts_total == expected_attempts) {
++        cnr3_planretry_write_text_line(
++            instance_id,
++            "self-check attempts == dumped + kept buckets -> OK"
++        );
++    }
++    else {
++        std::fprintf(
++            stderr,
++            "CNR3[%d] WARN DSUM-PLANRETRY: [DSUM-PLANRETRY] self-check attempts == dumped + kept buckets -> WARN (%llu vs %llu)\n",
++            instance_id.value,
++            static_cast<unsigned long long>(snapshot.plan_attempts_total),
++            static_cast<unsigned long long>(expected_attempts)
++        );
++    }
++
++    if (snapshot.retry_sleeps_total == snapshot.plans_dumped_total) {
++        cnr3_planretry_write_text_line(
++            instance_id,
++            "self-check retry_sleeps_total == plans_dumped_total -> OK"
++        );
++    }
++    else {
++        std::fprintf(
++            stderr,
++            "CNR3[%d] WARN DSUM-PLANRETRY: [DSUM-PLANRETRY] self-check retry_sleeps_total == plans_dumped_total -> WARN (%llu vs %llu)\n",
++            instance_id.value,
++            static_cast<unsigned long long>(snapshot.retry_sleeps_total),
++            static_cast<unsigned long long>(snapshot.plans_dumped_total)
++        );
++    }
++}
++
++#endif
++
+ inline constexpr int CNR3_K1E2_PROOF_DEFAULT_THRESHOLD_8BIT = 255;
+ inline constexpr int CNR3_K1E2_PROOF_DEFAULT_STRENGTH_8BIT = 255;
+ 
+@@ -409,6 +606,13 @@ void VS_CC cnr3_free_filter(
+         data->dsum_plantrace
+     );
+ #endif
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++    cnr3_planretry_write_summary_to_stderr(
++        data->config.instance_id,
++        data->plan_retry_stats,
++        data->plan_retry_max
++    );
++#endif
+ 
+ #if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
+     cnr3_memory_record_and_print_snapshot(
+@@ -537,6 +741,12 @@ void VS_CC cnr3_create_filter(
+         return;
+     }
+ 
++#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++    VSCoreInfo core_info{};
++    vsapi->getCoreInfo(core, &core_info);
++    data->plan_retry_max = cnr3_planretry_derive_max_attempts(core_info.numThreads);
++#endif
++
+ #if defined(CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE)
+     std::fprintf(
+         stderr,

@@ -27,6 +27,27 @@
 
 #include <vector>
 
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#include <cstdint>
+#include <mutex>
+#endif
+
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+
+struct Cnr3PlanRetryExperimentStats {
+    mutable std::mutex mutex{};
+    std::uint64_t plan_attempts_total = 0;
+    std::uint64_t plans_dumped_total = 0;
+    std::uint64_t retry_sleeps_total = 0;
+    std::uint64_t plans_kept_on_attempt_1 = 0;
+    std::uint64_t plans_kept_on_attempt_2 = 0;
+    std::uint64_t plans_kept_on_attempt_3plus = 0;
+    std::uint64_t dumped_plan_holes_total = 0;
+    std::uint64_t kept_plan_holes_total = 0;
+};
+
+#endif
+
 struct Cnr3FilterData {
     VSNode* source = nullptr;
     VSVideoInfo video_info{};
@@ -38,6 +59,10 @@ struct Cnr3FilterData {
     int sub_sampling_h = -1;
     double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
     Cnr3SceneChangeConfig scene_change_config{};
+#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+    int plan_retry_max = 1;
+    Cnr3PlanRetryExperimentStats plan_retry_stats{};
+#endif
 #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
     Cnr3DiagPlanTraceBuffer dsum_plantrace{};
 #endif

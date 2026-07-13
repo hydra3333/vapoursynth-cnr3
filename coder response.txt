@@ -1,0 +1,113 @@
+## Verdict
+
+v3 is materially improved and is now **implementable in concept**. The previous hard blocker — HALF incorrectly expecting NORMAL’s `max_protected=348` — has been corrected. v3 now explicitly states that HALF changes both `ACTIVE_CEILING_MAX_FRAMES=500` and `MAX_HOT_ZONES=3`, and that this is an honest two-coupled-variable profile because the hot-zone reduction is required to preserve CR4. 
+
+The derived-value correction is also now much better: v3 states `CNR3_CACHE_MAX_PROTECTED_SET_ESTIMATE=228` under HALF, not 348, and it also catches the second derived change: `CNR3_CACHE_CHECKPOINT_GRID_FLOOR_ESTIMATE=15`, not 25. That directly fixes the main issue I raised and adds one I missed. 
+
+## Remaining edits I would make before coding
+
+### 1. Fix the document title/version
+
+The uploaded v3 file still starts with:
+
+```text
+# CNR3 — PATCH SCOPE: HALF-500 cache profile + plan-retry rename (single patch) — v1
+```
+
+That should say v3, or whatever the intended current scope revision is. It is minor, but these docs become historical proof artifacts, so the title should not misidentify the revision. 
+
+### 2. Fix stale A.3 heading text
+
+A.3 still says:
+
+```text
+Primitive knobs — three-way, HALF starts = NORMAL except the ceiling
+```
+
+That is now stale. The table correctly shows `MAX_HOT_ZONES` changing from NORMAL 5 to HALF 3, and A.1 correctly says HALF has two coupled changes. 
+
+I would change the A.3 heading to:
+
+```text
+### A.3 Primitive knobs — three-way, HALF starts = NORMAL except ceiling and CR4 companion zone count
+```
+
+or:
+
+```text
+### A.3 Primitive knobs — three-way, HALF starts with two deliberate differences from NORMAL
+```
+
+### 3. Tighten A.6 selftest wording
+
+A.6 says the HALF branch should use `active_ceiling_max 500U, all others = NORMAL's expected numbers EXCEPT the two changed derived values`. That is ambiguous because `MAX_HOT_ZONES` is also not NORMAL; it must be 3, not 5. 
+
+I would replace that sentence with:
+
+```text
+Add an #elif defined(CNR3_CACHE_PROFILE_HALF) branch with HALF's expected values:
+profile_name "half-500"; active_ceiling_max 500U; max_hot_zones 3U;
+all other unchanged primitive values matching NORMAL; and the changed derived
+values max_protected 228U and grid_floor 15U.
+```
+
+That removes any chance the implementer copies NORMAL’s expected `MAX_HOT_ZONES=5`.
+
+### 4. Keep Option 2/3 as fallback only, not work items
+
+v3 still asks the coder to evaluate options “in order” and report which compiles. Since v3 already states that Option 1 was cold-verified and is the intended HALF-500 profile, I would implement **Option 1 only first** and compile it. Options 2/3 should remain fallback paths only if Option 1 fails in the real header/build. 
+
+Recommended wording:
+
+```text
+Implement Option 1 first. Only evaluate Option 2 or Option 3 if Option 1 fails
+real compilation or static_assert verification.
+```
+
+## Proof gate now looks strong
+
+The expanded proof gate is good. It now includes:
+
+```text
+DEFAULT build
+R-PROCESS-19 byte-identical default proof
+HALF build
+CR4/static_assert report
+rename grep-all
+NORMAL + PlanRetry ON smoke
+HALF + PlanRetry composition smoke
+TINY scaffold smoke
+```
+
+That is the right shape for this patch. In particular, the added PlanRetry-enabled smoke is important because default-OFF testing alone cannot prove the renamed enabled-only path still compiles. 
+
+## Rename/default PlanRetry setting
+
+The rename scope is now fine. It keeps the per-knob names, renames only the enable gate, requires whole-tree grep proof, and sets the accepted sleep default to 50 with a maintainable comment. 
+
+One nuance: if you commit scope/test docs containing the old macro name as historical text, the grep rule “zero occurrences anywhere” needs to apply to the source tree/build files being patched, not necessarily to archived design notes unless those notes are included in the same grep target. If the grep command includes docs, then any historical mention of `CNR3_EXPERIMENT_PLAN_RETRY_BIAS` will violate the rule by design. The scope currently says “incl. comments, patch-notes refs,” so be clear whether the patch notes themselves are part of the grep target. 
+
+## Implementation recommendation
+
+Proceed after the three wording fixes above.
+
+The intended implementation path should be:
+
+```text
+1. Rename the PlanRetry enable macro mechanically.
+2. Set PlanRetry sleep default to 50.
+3. Add CNR3_CACHE_PROFILE_HALF gate and mutual-exclusion guard.
+4. Convert every primitive profile knob to TINY / HALF / NORMAL.
+5. Implement HALF as:
+   ACTIVE_CEILING_MAX_FRAMES = 500
+   MAX_HOT_ZONES = 3
+   all other primitive knobs copied from NORMAL.
+6. Do not hardcode derived HALF values in the header.
+7. Add the HALF selftest expectation branch using:
+   max_protected = 228
+   grid_floor = 15
+   and max_hot_zones = 3.
+8. Run the expanded proof gate.
+```
+
+This v3 scope is now coherent enough to hand to the coder, provided the stale heading/version/selftest wording is cleaned up first.

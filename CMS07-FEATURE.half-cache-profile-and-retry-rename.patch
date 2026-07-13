@@ -1,0 +1,351 @@
+diff --git a/src/cnr3_arInitial.cpp b/src/cnr3_arInitial.cpp
+index 0437904..7945718 100644
+--- a/src/cnr3_arInitial.cpp
++++ b/src/cnr3_arInitial.cpp
+@@ -11,13 +11,13 @@
+ #include "cnr3_build_config.h"
+ #include "cnr3_plugin_internal.h"
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ #include <chrono>
+ #endif
+ #include <cstdio>
+ #include <new>
+ #include <string>
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ #include <mutex>
+ #include <thread>
+ #endif
+@@ -600,7 +600,7 @@ Cnr3Status cnr3_fill_floor_fresh_start_hole_numbers(
+     return Cnr3Status::ok;
+ }
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ 
+ void cnr3_planretry_observe_plan_attempt(
+     Cnr3PlanRetryExperimentStats& stats
+@@ -684,7 +684,7 @@ const VSFrame* cnr3_start_live_recovery(
+ 
+     Cnr3Status plan_status = Cnr3Status::ok;
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+     const int attempts_allowed = data.plan_retry_max > 0 ? data.plan_retry_max : 1;
+ 
+     for (int attempt_index = 1; attempt_index <= attempts_allowed; ++attempt_index) {
+@@ -809,7 +809,7 @@ const VSFrame* cnr3_start_live_recovery(
+             }
+         }
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+         const std::size_t candidate_hole_count =
+             request_data->recovery_plan.hole_frame_numbers.size();
+ 
+@@ -865,7 +865,7 @@ const VSFrame* cnr3_start_live_recovery(
+         );
+ #endif
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+         break;
+ #endif
+     }
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index a4f71c7..4d45d7b 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -93,7 +93,7 @@
+ 
+ /*
+     ---------------------------------------------------------------------------
+-    PLAN-RETRY BIASING EXPERIMENT (fmParallel redundant-recompute mitigation)
++    PLAN-RETRY BIAS (fmParallel redundant-recompute mitigation)
+ 
+     Uncomment to enable. OFF (default) = recovery plan formation is single-pass,
+     exactly today's behaviour.
+@@ -103,15 +103,15 @@
+     formed recovery plan contains more than CNR3_PLAN_RETRY_HOLE_THRESHOLD
+     holes. The last attempt's plan is always kept; there is no infinite loop.
+ 
+-    This is a gated experiment only. It is a polling approximation of an
++    This is a gated mitigation. It is a polling approximation of an
+     in-flight reservation/await mechanism, not the final fmParallel design.
+     ---------------------------------------------------------------------------
+ */
+-//#define CNR3_EXPERIMENT_PLAN_RETRY_BIAS 1
++//#define CNR3_ENABLE_PLAN_RETRY_BIAS 1
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ /*
+-    Adjustable experiment parameters. These names exist only when the experiment
++    Adjustable plan-retry parameters. These names exist only when the mitigation
+     is enabled, so macro-OFF builds compile out the loop, knobs, counters, and
+     summary block.
+ 
+@@ -126,7 +126,7 @@
+         Upper bound on retry attempts. The per-instance plan_retry_max is derived
+         at filter creation as min(CNR3_PLAN_RETRY_MAX_CAP, max(1, numThreads/2)).
+ */
+-#   define CNR3_PLAN_RETRY_SLEEP_MS        25
++#   define CNR3_PLAN_RETRY_SLEEP_MS        50
+ #   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2
+ #   define CNR3_PLAN_RETRY_MAX_CAP         4
+ 
+@@ -149,7 +149,7 @@
+     suffixed so selftests and logs keep the phase marker at the start while also
+     identifying the selected mode.
+ */
+-#define CNR3_EDIT_VERSION_LITERAL "CMS07-EXPERIMENT.plan-retry-bias"
++#define CNR3_EDIT_VERSION_LITERAL "CMS07-FEATURE.half-cache-profile-and-retry-rename"
+ 
+ inline constexpr const char* CNR3_EDIT_VERSION =
+     CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;
+@@ -233,6 +233,18 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
+ */
+ //#define CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY 1
+ 
++/*
++    HALF cache profile: half-size active ceiling (500) for lower memory
++    footprint on end-user PCs. This is a behaviour-changing profile selector,
++    not a diagnostic-observation gate. Uncomment only for an explicit HALF
++    profile build. Mutually exclusive with the TINY diagnostic scaffold.
++*/
++//#define CNR3_CACHE_PROFILE_HALF 1
++
++#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY) && defined(CNR3_CACHE_PROFILE_HALF)
++#   error "Select at most ONE cache profile: TINY scaffold OR HALF, not both."
++#endif
++
+ // ---------------------------------------------------------------------------------------------
+ // NOTE:    Comment out the relevant #define line(s) to
+ //          disable compute and/or print for this diagnostic.
+diff --git a/src/cnr3_cache_core.h b/src/cnr3_cache_core.h
+index 6c5e02f..0ac3434 100644
+--- a/src/cnr3_cache_core.h
++++ b/src/cnr3_cache_core.h
+@@ -64,14 +64,16 @@
+ /*
+     Cache profile identity marker.
+ 
+-    This is keyed off the same CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY macro
+-    that gates the cache policy constants below, so the marker cannot drift
+-    from the compiled constants. It is for human diagnostics, selftest
+-    assertions, and future D-SUM summary headers only. Do not branch cache
+-    behaviour on this string; the preprocessor macro is the only feature gate.
++    This is keyed off the cache profile preprocessor gates below, so the marker
++    cannot drift from the compiled constants. It is for human diagnostics,
++    selftest assertions, and future D-SUM summary headers only. Do not branch
++    cache behaviour on this string; the preprocessor macro is the only feature
++    gate.
+ */
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "tiny-100";
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "half-500";
+ #else
+ inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "normal";
+ #endif
+@@ -87,18 +89,23 @@ inline constexpr std::uint64_t CNR3_CACHE_BYTE_BUDGET_BYTES =
+     Active-ceiling clamp bounds.
+ 
+     CR4 active_ceiling >= ~2 x max-protected set, where max-protected ~=
+-    MAX_HOT_ZONES x (BACK_RADIUS + FORWARD_RADIUS) + checkpoint pool ~=
+-    5 x 60 + 48 = ~348; 1000 >> 348. If pruning can never reach target,
+-    this rule is violated.
++    MAX_HOT_ZONES x (BACK_RADIUS + FORWARD_RADIUS) + checkpoint pool. NORMAL
++    uses 5 x 60 + 48 = 348, so 1000 comfortably fits. HALF uses 3 x 60 +
++    48 = 228, so 500 preserves the same 2x relationship. If pruning can never
++    reach target, this rule is violated.
+ */
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 40U;   // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;  // HALF: copied from NORMAL; tunable.
+ #else
+ inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;  // NORMAL production profile.
+ #endif
+ 
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 100U;   // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 500U;   // HALF: deliberate half-size change.
+ #else
+ inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;  // NORMAL production profile.
+ #endif
+@@ -123,19 +130,25 @@ inline constexpr std::size_t CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR = 10U;
+     MIN_RETAIN unchanged at 10.
+ */
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+-inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 3;  // TINY-100 diagnostic profile.
++inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 3;   // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;  // HALF: copied from NORMAL; tunable.
+ #else
+-inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10; // NORMAL production profile.
++inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;  // NORMAL production profile.
+ #endif
+ 
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 4U;   // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;  // HALF: copied from NORMAL; tunable.
+ #else
+ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;  // NORMAL production profile.
+ #endif
+ 
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 12U;  // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // HALF: copied from NORMAL; tunable.
+ #else
+ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // NORMAL production profile.
+ #endif
+@@ -155,12 +168,16 @@ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // NORMAL
+ */
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 3;   // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;  // HALF: copied from NORMAL; tunable.
+ #else
+ inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;  // NORMAL production profile.
+ #endif
+ 
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 15;  // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // HALF: copied from NORMAL; tunable.
+ #else
+ inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production profile.
+ #endif
+@@ -214,6 +231,8 @@ inline constexpr std::uint64_t CNR3_PRUNE_RECHURN_MAX_EVICTION_GAP =
+ */
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 2U;  // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 3U;  // HALF: CR4-preserving companion; tunable.
+ #else
+ inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;  // NORMAL production profile.
+ #endif
+@@ -233,6 +252,8 @@ inline constexpr int CNR3_CACHE_JUMP_THRESHOLD =
+ */
+ #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+ inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 6;   // TINY-100 diagnostic profile.
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;  // HALF: copied from NORMAL; tunable.
+ #else
+ inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;  // NORMAL production profile.
+ #endif
+diff --git a/src/cnr3_cache_core_selftest.cpp b/src/cnr3_cache_core_selftest.cpp
+index bb91f20..3727231 100644
+--- a/src/cnr3_cache_core_selftest.cpp
++++ b/src/cnr3_cache_core_selftest.cpp
+@@ -4366,6 +4366,20 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
+     constexpr int expected_hot_zone_decay_margin = 6;
+     constexpr std::size_t expected_max_protected_set = 48U;
+     constexpr std::size_t expected_checkpoint_grid_floor = 10U;
++#elif defined(CNR3_CACHE_PROFILE_HALF)
++    constexpr const char* expected_profile_name = "half-500";
++    constexpr std::size_t expected_active_ceiling_min = 150U;
++    constexpr std::size_t expected_active_ceiling_max = 500U;
++    constexpr int expected_checkpoint_interval = 10;
++    constexpr std::size_t expected_checkpoint_min_retain = 10U;
++    constexpr std::size_t expected_checkpoint_max_retain = 48U;
++    constexpr int expected_hot_zone_forward_radius = 10;
++    constexpr int expected_hot_zone_back_radius = 50;
++    constexpr std::size_t expected_max_hot_zones = 3U;
++    constexpr int expected_jump_threshold = 61;
++    constexpr int expected_hot_zone_decay_margin = 20;
++    constexpr std::size_t expected_max_protected_set = 228U;
++    constexpr std::size_t expected_checkpoint_grid_floor = 15U;
+ #else
+     constexpr const char* expected_profile_name = "normal";
+     constexpr std::size_t expected_active_ceiling_min = 150U;
+@@ -4762,7 +4776,7 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept
+ #else
+     Cnr3OutputCacheCore cache{};
+ 
+-    const int observations[CNR3_CACHE_MAX_HOT_ZONES] = {
++    const int observations[] = {
+         100,
+         300,
+         600,
+@@ -6873,7 +6887,7 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept {
+         return Cnr3Status::invariant_violation;
+     }
+ 
+-    const int observations[CNR3_CACHE_MAX_HOT_ZONES - 1U] = {
++    const int observations[] = {
+         300,
+         600,
+         1000,
+diff --git a/src/cnr3_plugin_internal.h b/src/cnr3_plugin_internal.h
+index 4730926..d341769 100644
+--- a/src/cnr3_plugin_internal.h
++++ b/src/cnr3_plugin_internal.h
+@@ -27,12 +27,12 @@
+ 
+ #include <vector>
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ #include <cstdint>
+ #include <mutex>
+ #endif
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ 
+ struct Cnr3PlanRetryExperimentStats {
+     mutable std::mutex mutex{};
+@@ -59,7 +59,7 @@ struct Cnr3FilterData {
+     int sub_sampling_h = -1;
+     double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
+     Cnr3SceneChangeConfig scene_change_config{};
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+     int plan_retry_max = 1;
+     Cnr3PlanRetryExperimentStats plan_retry_stats{};
+ #endif
+diff --git a/src/vapoursynth-Cnr3.cpp b/src/vapoursynth-Cnr3.cpp
+index d020446..289c543 100644
+--- a/src/vapoursynth-Cnr3.cpp
++++ b/src/vapoursynth-Cnr3.cpp
+@@ -156,13 +156,13 @@
+ #include <cstdio>
+ #include <new>
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ #include <mutex>
+ #endif
+ 
+ namespace {
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+ 
+ int cnr3_planretry_derive_max_attempts(
+     int num_threads
+@@ -606,7 +606,7 @@ void VS_CC cnr3_free_filter(
+         data->dsum_plantrace
+     );
+ #endif
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+     cnr3_planretry_write_summary_to_stderr(
+         data->config.instance_id,
+         data->plan_retry_stats,
+@@ -741,7 +741,7 @@ void VS_CC cnr3_create_filter(
+         return;
+     }
+ 
+-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
++#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
+     VSCoreInfo core_info{};
+     vsapi->getCoreInfo(core, &core_info);
+     data->plan_retry_max = cnr3_planretry_derive_max_attempts(core_info.numThreads);

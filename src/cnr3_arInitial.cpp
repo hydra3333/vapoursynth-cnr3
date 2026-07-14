@@ -11,13 +11,13 @@
 #include "cnr3_build_config.h"
 #include "cnr3_plugin_internal.h"
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 #include <chrono>
 #endif
 #include <cstdio>
 #include <new>
 #include <string>
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 #include <mutex>
 #include <thread>
 #endif
@@ -600,7 +600,7 @@ Cnr3Status cnr3_fill_floor_fresh_start_hole_numbers(
     return Cnr3Status::ok;
 }
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 
 void cnr3_planretry_observe_plan_attempt(
     Cnr3PlanRetryExperimentStats& stats
@@ -684,7 +684,7 @@ const VSFrame* cnr3_start_live_recovery(
 
     Cnr3Status plan_status = Cnr3Status::ok;
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
     const int attempts_allowed = data.plan_retry_max > 0 ? data.plan_retry_max : 1;
 
     for (int attempt_index = 1; attempt_index <= attempts_allowed; ++attempt_index) {
@@ -809,7 +809,7 @@ const VSFrame* cnr3_start_live_recovery(
             }
         }
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
         const std::size_t candidate_hole_count =
             request_data->recovery_plan.hole_frame_numbers.size();
 
@@ -865,7 +865,7 @@ const VSFrame* cnr3_start_live_recovery(
         );
 #endif
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
         break;
 #endif
     }

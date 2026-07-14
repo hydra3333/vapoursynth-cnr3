@@ -72,6 +72,8 @@
 */
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "tiny-100";
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "half-500";
 #else
 inline constexpr const char* CNR3_CACHE_PROFILE_NAME = "normal";
 #endif
@@ -87,18 +89,22 @@ inline constexpr std::uint64_t CNR3_CACHE_BYTE_BUDGET_BYTES =
     Active-ceiling clamp bounds.
 
     CR4 active_ceiling >= ~2 x max-protected set, where max-protected ~=
-    MAX_HOT_ZONES x (BACK_RADIUS + FORWARD_RADIUS) + checkpoint pool ~=
-    5 x 60 + 48 = ~348; 1000 >> 348. If pruning can never reach target,
-    this rule is violated.
+    MAX_HOT_ZONES x (BACK_RADIUS + FORWARD_RADIUS) + checkpoint pool.
+    NORMAL is 5 x 60 + 48 = 348 and HALF is 3 x 60 + 48 = 228. If pruning
+    can never reach target, this rule is violated.
 */
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 40U;   // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;  // HALF: copied from NORMAL; tunable.
 #else
 inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MIN_FRAMES = 150U;  // NORMAL production profile.
 #endif
 
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 100U;   // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 500U;   // HALF: deliberate half-size change.
 #else
 inline constexpr std::size_t CNR3_CACHE_ACTIVE_CEILING_MAX_FRAMES = 1000U;  // NORMAL production profile.
 #endif
@@ -123,19 +129,25 @@ inline constexpr std::size_t CNR3_CACHE_OVERFLOW_FACTOR_DENOMINATOR = 10U;
     MIN_RETAIN unchanged at 10.
 */
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
-inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 3;  // TINY-100 diagnostic profile.
+inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 3;   // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;  // HALF: copied from NORMAL; tunable.
 #else
-inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10; // NORMAL production profile.
+inline constexpr int CNR3_CACHE_CHECKPOINT_INTERVAL = 10;  // NORMAL production profile.
 #endif
 
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 4U;   // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;  // HALF: copied from NORMAL; tunable.
 #else
 inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MIN_RETAIN = 10U;  // NORMAL production profile.
 #endif
 
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 12U;  // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // HALF: copied from NORMAL; tunable.
 #else
 inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // NORMAL production profile.
 #endif
@@ -155,12 +167,16 @@ inline constexpr std::size_t CNR3_CACHE_CHECKPOINT_MAX_RETAIN = 48U;  // NORMAL 
 */
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 3;   // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;  // HALF: copied from NORMAL; tunable.
 #else
 inline constexpr int CNR3_CACHE_HOT_ZONE_FORWARD_RADIUS = 10;  // NORMAL production profile.
 #endif
 
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 15;  // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // HALF: copied from NORMAL; tunable.
 #else
 inline constexpr int CNR3_CACHE_HOT_ZONE_BACK_RADIUS = 50;  // NORMAL production profile.
 #endif
@@ -214,6 +230,8 @@ inline constexpr std::uint64_t CNR3_PRUNE_RECHURN_MAX_EVICTION_GAP =
 */
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 2U;  // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 3U;  // HALF: CR4-preserving companion to 500 ceiling.
 #else
 inline constexpr std::size_t CNR3_CACHE_MAX_HOT_ZONES = 5U;  // NORMAL production profile.
 #endif
@@ -233,6 +251,8 @@ inline constexpr int CNR3_CACHE_JUMP_THRESHOLD =
 */
 #if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
 inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 6;   // TINY-100 diagnostic profile.
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;  // HALF: copied from NORMAL; tunable.
 #else
 inline constexpr int CNR3_CACHE_HOT_ZONE_DECAY_MARGIN = 20;  // NORMAL production profile.
 #endif

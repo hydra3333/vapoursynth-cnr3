@@ -59,8 +59,8 @@
     ---------------------------------------------------------------------------
 */
 //#define CNR3_FILTER_MODE_UNORDERED 1
-//#define CNR3_FILTER_MODE_PARALLEL_REQUESTS 1
-#define CNR3_FILTER_MODE_PARALLEL 1
+#define CNR3_FILTER_MODE_PARALLEL_REQUESTS 1    // ship with this ON
+//#define CNR3_FILTER_MODE_PARALLEL 1
 
 #if (defined(CNR3_FILTER_MODE_UNORDERED) + defined(CNR3_FILTER_MODE_PARALLEL_REQUESTS) + defined(CNR3_FILTER_MODE_PARALLEL)) != 1
 #   error "CNR3 filter mode: uncomment exactly ONE of CNR3_FILTER_MODE_UNORDERED / _PARALLEL_REQUESTS / _PARALLEL in cnr3_build_config.h"
@@ -81,6 +81,19 @@
 #endif
 
 /*
+    Edit/version marker.
+
+    This string is for human diagnostics and build identification only. It must
+    not be used for control flow. The selected filter mode is intentionally
+    suffixed so selftests and logs keep the phase marker at the start while also
+    identifying the selected mode.
+*/
+#define CNR3_EDIT_VERSION_LITERAL "CMS07-FEATURE.half-cache-profile-and-retry-rename-fmParallelRequests-Half-noCNR3_ENABLE_PLAN_RETRY_BIAS"
+
+inline constexpr const char* CNR3_EDIT_VERSION =
+CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;
+
+/*
     ---------------------------------------------------------------------------
     PLUGIN STARTUP PROVENANCE
 
@@ -92,26 +105,34 @@
 #define CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE 1
 
 /*
-    ---------------------------------------------------------------------------
-    PLAN-RETRY BIASING EXPERIMENT (fmParallel redundant-recompute mitigation)
+    CNR3_CACHE_PROFILE_HALF -- optional HALF-500 cache profile.
 
-    Uncomment to enable. OFF (default) = recovery plan formation is single-pass,
-    exactly today's behaviour.
+    Selects a half-size active ceiling for lower memory footprint on end-user
+    PCs. Mutually exclusive with the TINY diagnostic scaffold.
+*/
+#define CNR3_CACHE_PROFILE_HALF 1
+
+/*
+    ---------------------------------------------------------------------------
+    PLAN-RETRY BIASING (fmParallel redundant-recompute mitigation)
+
+    Uncomment to enable. OFF = recovery plan formation is single-pass,
+    exactly the non-mitigation behaviour.
 
     ON = arInitial may retry recovery plan formation up to the derived
     per-instance retry limit, sleeping briefly between attempts, whenever a
     formed recovery plan contains more than CNR3_PLAN_RETRY_HOLE_THRESHOLD
     holes. The last attempt's plan is always kept; there is no infinite loop.
 
-    This is a gated experiment only. It is a polling approximation of an
-    in-flight reservation/await mechanism, not the final fmParallel design.
+    This is a gated mitigation. It is a polling approximation of an in-flight
+    reservation/await mechanism, not the final fmParallel design.
     ---------------------------------------------------------------------------
 */
-#define CNR3_EXPERIMENT_PLAN_RETRY_BIAS 1
+//#define CNR3_ENABLE_PLAN_RETRY_BIAS 1     // ship with this OFF under fmParallelRequests or fmUnordered
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 /*
-    Adjustable experiment parameters. These names exist only when the experiment
+    Adjustable plan-retry parameters. These names exist only when the mitigation
     is enabled, so macro-OFF builds compile out the loop, knobs, counters, and
     summary block.
 
@@ -126,33 +147,20 @@
         Upper bound on retry attempts. The per-instance plan_retry_max is derived
         at filter creation as min(CNR3_PLAN_RETRY_MAX_CAP, max(1, numThreads/2)).
 */
-#   define CNR3_PLAN_RETRY_SLEEP_MS        50  // was 25, 50 is best
-#   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2   // was 2
-#   define CNR3_PLAN_RETRY_MAX_CAP         4   // was 4
+#   define CNR3_PLAN_RETRY_SLEEP_MS        50  // Fixed cross-CPU PlanRetry default; see PlanRetry ladder tests.
+#   define CNR3_PLAN_RETRY_HOLE_THRESHOLD  2
+#   define CNR3_PLAN_RETRY_MAX_CAP         4
 
 #   if CNR3_PLAN_RETRY_SLEEP_MS < 0
-#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_SLEEP_MS must be non-negative"
+#       error "CNR3 plan-retry: CNR3_PLAN_RETRY_SLEEP_MS must be non-negative"
 #   endif
 #   if CNR3_PLAN_RETRY_HOLE_THRESHOLD < 0
-#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_HOLE_THRESHOLD must be non-negative"
+#       error "CNR3 plan-retry: CNR3_PLAN_RETRY_HOLE_THRESHOLD must be non-negative"
 #   endif
 #   if CNR3_PLAN_RETRY_MAX_CAP < 1
-#       error "CNR3 plan-retry experiment: CNR3_PLAN_RETRY_MAX_CAP must be at least 1"
+#       error "CNR3 plan-retry: CNR3_PLAN_RETRY_MAX_CAP must be at least 1"
 #   endif
 #endif
-
-/*
-    Edit/version marker.
-
-    This string is for human diagnostics and build identification only. It must
-    not be used for control flow. The selected filter mode is intentionally
-    suffixed so selftests and logs keep the phase marker at the start while also
-    identifying the selected mode.
-*/
-#define CNR3_EDIT_VERSION_LITERAL "CMS07-EXPERIMENT.plan-retry-bias"
-
-inline constexpr const char* CNR3_EDIT_VERSION =
-    CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;
 
 /*
     CMS07-P.11C.2 live scene-change default.
@@ -232,6 +240,10 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
     correctness.
 */
 //#define CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY 1
+
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY) && defined(CNR3_CACHE_PROFILE_HALF)
+#   error "Select at most ONE cache profile: TINY scaffold OR HALF, not both."
+#endif
 
 // ---------------------------------------------------------------------------------------------
 // NOTE:    Comment out the relevant #define line(s) to

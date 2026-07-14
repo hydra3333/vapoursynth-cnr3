@@ -13,12 +13,14 @@ REM copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%bu
 REM copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.pdb "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
 
 REM for %%f in (fmUnordered fmParallelRequests fmParallel) do (
-for %%f in (fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS) do (
+for %%f in (fmParallel_FULLsizeCache) do (
     REM echo *** Current fmMODE is %%f
     set "dll_source=%top_root%\DLL_%%f\cnr3.*"
+    echo.
     echo copy /y "!dll_source!" "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
     copy /y "!dll_source!" "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
-    for %%t in (8 0) do (
+    echo.
+    for %%t in (0) do (
         echo.
         echo.****************************************************************
         echo *** Current fmMODE is %%f Current vs Threads number is %%t
@@ -35,7 +37,7 @@ for %%f in (fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS) do (
         REM
         set "log=%top_root%\run_log_T%%t_%%f.txt"
         set "findstr_log=%top_root%\run_log_T%%t_%%f_FINDSTR.txt"
-        set "findstr_cmd=findstr /C:"vspipe" /C:"[vpy]" /C:"fps" /C:"PLANRETRY" /C:"INFO CONFIG" /C:"filter_mode=" /C:"DSUM-SUMMARY" /C:"[DSUM-HEALTH]" /C:"Output" /C:"frames_computed" /C:"bailed_after_compute_because" /C:"duplicates_seen" /C:"stores_total" /C:"frames_evicted" /C:"recovery_plans_created" /C:"holes_identified" /C:"recovery_span_mean" /C:"out_of_order_count" /C:"MISMATCH" "!log!""
+        set "findstr_cmd=findstr /C:"edit_version=" /C:"vspipe" /C:"[vpy]" /C:"INFO CONFIG" /C:"fps" /C:"filter_mode=" /C:"active_ceiling" /C:"frames_evicted" /C:"frames_recently_evicted_then_re_requested" /C:"frames_re_requested_repeatedly" /C:"duplicates_seen" /C:"holes_identified" /C:"recovery_span_mean" /C:"Output" /C:"DSUM-SUMMARY" /C:"[DSUM-HEALTH]" /C:"[DSUM-PLANRETRY]" "!log!""
         set "mp4=%top_root%\test_000_Example_576p50_RESULT_T%%t_%%f.mp4"
         set "y4m=%top_root%\test_000_Example_576p50_RESULT_T%%t_%%f.y4m"
         REM 
@@ -50,27 +52,6 @@ for %%f in (fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS) do (
 )
 echo.
 echo Finished collecting data
-echo.
-set "ms=50"
-echo Analysing %ms%ms data ...
-echo.
-@echo on
-del table_Tx_ms%ms%.csv >NUL 2>&1
-del table_Tx_ms%ms%.md >NUL 2>&1
-dir /b "D:\TEST\run_log_T*_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt"
-REM python cnr3_parse_planretry_ladder.py -ms %ms% ^
-REM   -file1="D:\TEST\run_log_T0_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt" ^
-REM   -file2="D:\TEST\run_log_T8_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt" ^
-REM   -file3="D:\TEST\run_log_T4_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt" ^
-REM   -file4="D:\TEST\run_log_T2_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt" ^
-REM   -file5="D:\TEST\run_log_T1_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt"
-python cnr3_parse_planretry_ladder.py -ms %ms% ^
-  -file1="D:\TEST\run_log_T0_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt" ^
-  -file2="D:\TEST\run_log_T8_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS_FINDSTR.txt"
-dir table_Tx_ms%ms%.*
-type table_Tx_ms%ms%.csv
-type table_Tx_ms%ms%.md
-@echo off
 echo.
 pause
 goto :eof

@@ -2941,7 +2941,7 @@ void cnr3_diag_dsum14_write_scene_reset_summary_to_stderr(
     cnr3_diag_write_text_line(
         instance_id,
         "D-SUM-14",
-        "[DSUM-SUMMARY] D-SUM-14 note: near-grid means distance to nearest checkpoint grid <= 1; tiny profile interval=3 makes every frame near-grid"
+        "[DSUM-SUMMARY] D-SUM-14 note: near-grid means distance to nearest checkpoint grid <= 1; smaller checkpoint intervals make more frames near-grid"
     );
 
     cnr3_diag_write_uint64_row(instance_id, "D-SUM-14", "D-SUM-14", "scene_change_detections", snapshot.scene_change_detections);

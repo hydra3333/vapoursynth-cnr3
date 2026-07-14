@@ -311,7 +311,7 @@ namespace {
         const int written = std::snprintf(
             message,
             sizeof(message),
-            "SKIPPED under CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY: %s",
+            "SKIPPED because required compile-time gate is disabled: %s",
             test_name != nullptr ? test_name : "(null)"
         );
 
@@ -320,7 +320,7 @@ namespace {
                 CNR3_SELFTEST_TRACE_INSTANCE_ID,
                 Cnr3DiagnosticLevel::warning,
                 CNR3_SELFTEST_TRACE_COMPONENT,
-                "SKIPPED under CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY: formatting_error",
+                "SKIPPED because required compile-time gate is disabled: formatting_error",
                 Cnr3StderrFlushPolicy::no_flush
             );
             return;
@@ -4366,6 +4366,20 @@ Cnr3Status cnr3_cache_core_selftest_cache_policy_constants() noexcept {
     constexpr int expected_hot_zone_decay_margin = 6;
     constexpr std::size_t expected_max_protected_set = 48U;
     constexpr std::size_t expected_checkpoint_grid_floor = 10U;
+#elif defined(CNR3_CACHE_PROFILE_HALF)
+    constexpr const char* expected_profile_name = "half-500";
+    constexpr std::size_t expected_active_ceiling_min = 150U;
+    constexpr std::size_t expected_active_ceiling_max = 500U;
+    constexpr int expected_checkpoint_interval = 10;
+    constexpr std::size_t expected_checkpoint_min_retain = 10U;
+    constexpr std::size_t expected_checkpoint_max_retain = 48U;
+    constexpr int expected_hot_zone_forward_radius = 10;
+    constexpr int expected_hot_zone_back_radius = 50;
+    constexpr std::size_t expected_max_hot_zones = 3U;
+    constexpr int expected_jump_threshold = 61;
+    constexpr int expected_hot_zone_decay_margin = 20;
+    constexpr std::size_t expected_max_protected_set = 228U;
+    constexpr std::size_t expected_checkpoint_grid_floor = 15U;
 #else
     constexpr const char* expected_profile_name = "normal";
     constexpr std::size_t expected_active_ceiling_min = 150U;
@@ -4756,7 +4770,7 @@ Cnr3Status cnr3_cache_core_selftest_hot_zone_slide_spawn_lifecycle() noexcept {
 }
 
 Cnr3Status cnr3_cache_core_selftest_hot_zone_capacity_merge_lifecycle() noexcept {
-#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY) || defined(CNR3_CACHE_PROFILE_HALF)
     cnr3_cache_core_selftest_skip_line("hot_zone_capacity_merge_lifecycle");
     return Cnr3Status::ok;
 #else
@@ -6801,7 +6815,7 @@ Cnr3Status cnr3_cache_core_selftest_checkpoint_retention_boundary_lifecycle() no
 }
 
 Cnr3Status cnr3_cache_core_selftest_hot_zone_dsum11_counter_model() noexcept {
-#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY)
+#if defined(CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY) || defined(CNR3_CACHE_PROFILE_HALF)
     cnr3_cache_core_selftest_skip_line("hot_zone_dsum11_counter_model");
     return Cnr3Status::ok;
 #else

@@ -156,13 +156,13 @@
 #include <cstdio>
 #include <new>
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 #include <mutex>
 #endif
 
 namespace {
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 
 int cnr3_planretry_derive_max_attempts(
     int num_threads
@@ -606,7 +606,7 @@ void VS_CC cnr3_free_filter(
         data->dsum_plantrace
     );
 #endif
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
     cnr3_planretry_write_summary_to_stderr(
         data->config.instance_id,
         data->plan_retry_stats,
@@ -741,7 +741,7 @@ void VS_CC cnr3_create_filter(
         return;
     }
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
     VSCoreInfo core_info{};
     vsapi->getCoreInfo(core, &core_info);
     data->plan_retry_max = cnr3_planretry_derive_max_attempts(core_info.numThreads);

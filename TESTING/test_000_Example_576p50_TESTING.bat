@@ -1,6 +1,6 @@
 @echo off
-REM set "rrr="
-set "rrr=-r 1"
+set "rrr="
+REM set "rrr=-r 1"
 REM echo.
 
 set "top_root=D:\TEST"
@@ -8,15 +8,15 @@ set "vs_root=%top_root%\Vapoursynth_x64_R76"
 
 cd /D "%vs_root%"
 
-set "build_type=Debug"
-REM set "build_type=Release"
+REM set "build_type=Debug"
+set "build_type=Release"
 
 copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.dll "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
 copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.pdb "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
 
 REM The TEST id MUST coincide with the test uncommented inside the vpy
 REM set "test="
-set "test=TESTING_example_01"
+set "test=TESTING_example_01_noR"
 if /I "%test%" NEQ "" (
     set "vpy_ending=_%test%"
 ) else (

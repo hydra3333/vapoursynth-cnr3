@@ -27,12 +27,12 @@
 
 #include <vector>
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 #include <cstdint>
 #include <mutex>
 #endif
 
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
 
 struct Cnr3PlanRetryExperimentStats {
     mutable std::mutex mutex{};
@@ -59,7 +59,7 @@ struct Cnr3FilterData {
     int sub_sampling_h = -1;
     double scene_change_scdthr = CNR3_P11C_DEFAULT_SCDTHR;
     Cnr3SceneChangeConfig scene_change_config{};
-#if defined(CNR3_EXPERIMENT_PLAN_RETRY_BIAS)
+#if defined(CNR3_ENABLE_PLAN_RETRY_BIAS)
     int plan_retry_max = 1;
     Cnr3PlanRetryExperimentStats plan_retry_stats{};
 #endif

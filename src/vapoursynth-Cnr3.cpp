@@ -355,31 +355,71 @@ void cnr3_planretry_write_summary_to_stderr(
 
 #endif
 
-inline constexpr int CNR3_K1E2_PROOF_DEFAULT_THRESHOLD_8BIT = 255;
-inline constexpr int CNR3_K1E2_PROOF_DEFAULT_STRENGTH_8BIT = 255;
+/*
+    vscnr2-style operational defaults (historical mode "oxx"):
+    Y uses the wide response curve; U/V use the narrow response curve so
+    real chroma changes are handled conservatively. Full user option
+    parsing (ln/lm/un/um/vn/vm/mode/scdthr) remains a deferred follow-up.
+*/
+inline constexpr int CNR3_DEFAULT_Y_THRESHOLD_8BIT = 35;
+inline constexpr int CNR3_DEFAULT_Y_STRENGTH_8BIT = 192;
+inline constexpr int CNR3_DEFAULT_UV_THRESHOLD_8BIT = 47;
+inline constexpr int CNR3_DEFAULT_UV_STRENGTH_8BIT = 255;
 
-Cnr3ResponseTableConfig cnr3_make_k1e2_proof_default_response_table_config(
+const char* cnr3_response_curve_kind_text(
+    Cnr3ResponseCurveKind curve
+) noexcept {
+    switch (curve) {
+    case Cnr3ResponseCurveKind::narrow:
+        return "narrow";
+    case Cnr3ResponseCurveKind::wide:
+        return "wide";
+    default:
+        return "unknown";
+    }
+}
+
+void cnr3_emit_response_config_to_stderr(
+    Cnr3InstanceId instance_id,
+    const Cnr3ResponseTableConfig& config
+) noexcept {
+#if defined(CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE)
+    std::fprintf(
+        stderr,
+        "CNR3[%d] INFO CONFIG: response_config: y=%d/%d/%s u=%d/%d/%s v=%d/%d/%s\n",
+        instance_id.value,
+        config.y.threshold_8bit,
+        config.y.strength_8bit,
+        cnr3_response_curve_kind_text(config.y.curve),
+        config.u.threshold_8bit,
+        config.u.strength_8bit,
+        cnr3_response_curve_kind_text(config.u.curve),
+        config.v.threshold_8bit,
+        config.v.strength_8bit,
+        cnr3_response_curve_kind_text(config.v.curve)
+    );
+#else
+    (void)instance_id;
+    (void)config;
+#endif
+}
+
+Cnr3ResponseTableConfig cnr3_make_operational_default_response_table_config(
     int sample_peak
 ) noexcept {
     Cnr3ResponseTableConfig config{};
     config.sample_peak = sample_peak;
 
-    /*
-        CMS07-K.1E.2 proof/default response-table config: enough to drive
-        the proven P.11B live path; final user option parsing and full
-        default-policy surface are deferred to the post-keystone
-        instance-config/error-surface step.
-    */
-    config.y.threshold_8bit = CNR3_K1E2_PROOF_DEFAULT_THRESHOLD_8BIT;
-    config.y.strength_8bit = CNR3_K1E2_PROOF_DEFAULT_STRENGTH_8BIT;
-    config.y.curve = Cnr3ResponseCurveKind::narrow;
+    config.y.threshold_8bit = CNR3_DEFAULT_Y_THRESHOLD_8BIT;
+    config.y.strength_8bit = CNR3_DEFAULT_Y_STRENGTH_8BIT;
+    config.y.curve = Cnr3ResponseCurveKind::wide;
 
-    config.u.threshold_8bit = CNR3_K1E2_PROOF_DEFAULT_THRESHOLD_8BIT;
-    config.u.strength_8bit = CNR3_K1E2_PROOF_DEFAULT_STRENGTH_8BIT;
+    config.u.threshold_8bit = CNR3_DEFAULT_UV_THRESHOLD_8BIT;
+    config.u.strength_8bit = CNR3_DEFAULT_UV_STRENGTH_8BIT;
     config.u.curve = Cnr3ResponseCurveKind::narrow;
 
-    config.v.threshold_8bit = CNR3_K1E2_PROOF_DEFAULT_THRESHOLD_8BIT;
-    config.v.strength_8bit = CNR3_K1E2_PROOF_DEFAULT_STRENGTH_8BIT;
+    config.v.threshold_8bit = CNR3_DEFAULT_UV_THRESHOLD_8BIT;
+    config.v.strength_8bit = CNR3_DEFAULT_UV_STRENGTH_8BIT;
     config.v.curve = Cnr3ResponseCurveKind::narrow;
 
     return config;
@@ -429,7 +469,9 @@ Cnr3Status cnr3_initialise_k1e2_live_pixel_config(
 
     const int sample_peak = (1 << data.bits_per_sample) - 1;
     const Cnr3ResponseTableConfig table_config =
-        cnr3_make_k1e2_proof_default_response_table_config(sample_peak);
+        cnr3_make_operational_default_response_table_config(sample_peak);
+
+    cnr3_emit_response_config_to_stderr(data.config.instance_id, table_config);
 
     return build_cnr3_response_tables(table_config, data.response_tables);
 }
@@ -772,7 +814,7 @@ void VS_CC cnr3_create_filter(
         cnr3_free_filter(data, core, vsapi);
         vsapi->mapSetError(
             out,
-            "CNR3 K.1E.2 proof/default config: unsupported clip format or response-table build failure."
+            "CNR3 operational default config: unsupported clip format or response-table build failure."
         );
         return;
     }

@@ -31,9 +31,15 @@ for %%f in (fmParallelRequests) do (
         ) else (
             set "ttt=--arg cnr3_core_threads=%%t"
         )
-        set "vpy=%vs_root%\test_000_Example_576p50_TESTING_T%%t_%%f.vpy"
-        echo copy /y "%vs_root%\test_000_Example_576p50_TESTING_example_00_baseline.vpy" "!vpy!"
-        copy /y "%vs_root%\test_000_Example_576p50_TESTING_example_00_baseline.vpy" "!vpy!"
+
+        REM set "vpy=%vs_root%\test_000_Example_576p50_TESTING_T%%t_%%f.vpy"
+        REM echo copy /y "%vs_root%\test_000_Example_576p50_TESTING_example_00_baseline.vpy" "!vpy!"
+        REM copy /y "%vs_root%\test_000_Example_576p50_TESTING_example_00_baseline.vpy" "!vpy!"
+
+        set "vpy=%vs_root%\test_000_Example_576p50_TESTING_stackhorizontal_T%%t_%%f.vpy"
+        echo copy /y "%vs_root%\test_000_Example_576p50_TESTING_example_00_baseline_stackhorizontal.vpy" "!vpy!"
+        copy /y "%vs_root%\test_000_Example_576p50_TESTING_example_00_baseline_stackhorizontal.vpy" "!vpy!"
+
         REM
         set "log=%top_root%\run_log_T%%t_%%f.txt"
         set "findstr_log=%top_root%\run_log_T%%t_%%f_FINDSTR.txt"
@@ -42,11 +48,16 @@ for %%f in (fmParallelRequests) do (
         set "y4m=%top_root%\test_000_Example_576p50_RESULT_T%%t_%%f.y4m"
         REM 
         echo.
+        REM echo ---------------------------------------------------------------------------------------------------------------------
         REM echo call :vspipe_only "!ttt!" "!vpy!" "!log!" "!findstr_log!" "!mp4!" "!y4m!" "!findstr_cmd!"
         REM call :vspipe_only "!ttt!" "!vpy!" "!log!" "!findstr_log!" "!mp4!" "!y4m!" "!findstr_cmd!"
+        REM echo ---------------------------------------------------------------------------------------------------------------------
         REM
         echo.
+        echo ---------------------------------------------------------------------------------------------------------------------
+        echo call :vspipe_encode "!ttt!" "!vpy!" "!log!" "!findstr_log!" "!mp4!" "!y4m!" "!findstr_cmd!"
         call :vspipe_encode "!ttt!" "!vpy!" "!log!" "!findstr_log!" "!mp4!" "!y4m!" "!findstr_cmd!"
+        echo ---------------------------------------------------------------------------------------------------------------------
         echo.
     )
 )
@@ -178,11 +189,14 @@ echo [vpy] *** Threads set: %vo_ttt%  2>>"%vo_log%" 1>&2
 echo [vpy] **************************************************************** 2>>"%vo_log%" 1>&2
 echo ========================================== 2>>"%vo_log%" 1>&2
 echo. 2>>"%vo_log%" 1>&2
-echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %vo_ttt% --container y4m "%vo_vpy%" - *pipe* "C:\SOFTWARE\Vapoursynth-x64\ffmpeg.exe" -hide_banner -v info -nostats -f yuv4mpegpipe -i pipe: -probesize 100M -analyzeduration 100M -fps_mode passthrough -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -movflags +faststart+write_colr -an -y "%vo_mp4%" 2>>"%vo_log%" 1>&2
+ECHO ====================================================================================================================================================================================================================================================================================================
+REM echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %vo_ttt% --container y4m "%vo_vpy%" - *pipe* "C:\SOFTWARE\Vapoursynth-x64\ffmpeg.exe" -hide_banner -v info -nostats -f yuv4mpegpipe -i pipe: -probesize 100M -analyzeduration 100M -fps_mode passthrough -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -movflags +faststart+write_colr -an -y "%vo_mp4%" 2>>"%vo_log%" 1>&2
+echo "D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %vo_ttt% --container y4m "%vo_vpy%" - *pipe* "C:\SOFTWARE\Vapoursynth-x64\ffmpeg.exe" -hide_banner -v info -stats -f yuv4mpegpipe -i pipe: -probesize 100M -analyzeduration 100M -fps_mode passthrough -c:v libx264 -crf 16 -preset slow -movflags +faststart+write_colr -an -y "%vo_mp4%" 2>>"%vo_log%" 1>&2
 @echo on
 pause
-"D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %vo_ttt% --container y4m "%vo_vpy%" - 2>>"%vo_log%" | "C:\SOFTWARE\Vapoursynth-x64\ffmpeg.exe" -hide_banner -v info -nostats -f yuv4mpegpipe -i pipe: -probesize 100M -analyzeduration 100M -fps_mode passthrough -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -movflags +faststart+write_colr -an -y "%vo_mp4%" 2>>"%vo_log_enc%" 1>&2
+"D:\TEST\Vapoursynth_x64_R76\lib\site-packages\vapoursynth\vspipe.exe" %vo_ttt% --container y4m "%vo_vpy%" - 2>>"%vo_log%" | "C:\SOFTWARE\Vapoursynth-x64\ffmpeg.exe" -hide_banner -v info -stats -f yuv4mpegpipe -i pipe: -probesize 100M -analyzeduration 100M -fps_mode passthrough -c:v libx264 -crf 16 -preset slow -movflags +faststart+write_colr -an -y "%vo_mp4%" 2>>"%vo_log_enc%" 1>&2
 pause
+ECHO ====================================================================================================================================================================================================================================================================================================
 @echo off
 echo. 2>>"%vo_log%" 1>&2
 echo. 2>>"%vo_log%" 1>&2

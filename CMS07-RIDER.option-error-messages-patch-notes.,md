@@ -1,0 +1,44 @@
+CMS07-RIDER.option-error-messages
+
+Baseline:
+- CMS07-FEATURE.cnr2-descriptive-option-parser, committed and pushed.
+
+Changed files:
+- src/cnr3_build_config.h
+- src/vapoursynth-Cnr3.cpp
+
+Scope:
+- User-visible invalid-option message text only.
+- Adds received-value echo for int range, float range, curve value, and bool value errors.
+- Adds "incorrect value type, expected <expectation>" for typed getter failures.
+- Builds expectation text once per option kind and reuses it for type and value/range paths.
+- Adds bounded/sanitised curve data echo with max 32 bytes copied into a fixed local buffer.
+- Bumps marker to CMS07-RIDER.option-error-messages.
+
+Out of scope:
+- No change to accepted/rejected input sets.
+- No change to defaults.
+- No change to resolved config construction.
+- No change to response_config emission.
+- No response-table, threshold-zero, scene math, pixel, cache, PlanRetry, or filter-mode changes.
+
+Expected proof gate:
+1. Debug build PASS.
+2. Release build PASS.
+3. Canonical 4-way selftest count unchanged.
+4. Range/value invalid-option tests:
+   - y_threshold=256 -> got 256
+   - scene_threshold=101.0 -> got 101 or 101.0
+   - y_curve="wobbly" -> got "wobbly"
+   - scene_chroma=2 -> got 2
+5. Type-error invalid-option tests:
+   - y_threshold="bad" -> incorrect value type, expected integer range
+   - scene_threshold="bad" -> incorrect value type, expected float range
+   - y_curve=123 -> incorrect value type, expected wide/narrow
+   - scene_chroma="bad" -> incorrect value type, expected 0 or 1
+6. Long curve string test:
+   - safely truncated/sanitised
+   - one clean line
+   - no overflow/crash
+7. Valid spot-check still succeeds.
+8. R-PROCESS-19 no-args byte-identical output against committed parser build.

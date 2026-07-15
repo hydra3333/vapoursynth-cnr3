@@ -88,7 +88,14 @@
     suffixed so selftests and logs keep the phase marker at the start while also
     identifying the selected mode.
 */
-#define CNR3_EDIT_VERSION_LITERAL "CMS07-FEATURE.half-cache-profile-and-retry-rename-fmParallelRequests-Half-noCNR3_ENABLE_PLAN_RETRY_BIAS"
+/*
+    CMS07-OPTIONPARSER provenance note:
+    the prior commit (CMS07-FIX.operational-response-defaults) shipped without
+    its marker bump. Its logs show the earlier snapshot marker while containing
+    the operational-defaults fix; the response_config line is the tell. Marker
+    provenance is corrected as of this commit.
+*/
+#define CNR3_EDIT_VERSION_LITERAL "CMS07-FEATURE.cnr2-descriptive-option-parser"
 
 inline constexpr const char* CNR3_EDIT_VERSION =
 CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;

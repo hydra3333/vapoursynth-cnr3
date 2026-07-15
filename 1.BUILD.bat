@@ -18,6 +18,13 @@ echo.
 echo dir /b /s "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*"
 dir /b /s "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*"
 echo.
+
+echo mkdir "D:\TEST\DLL_fmParallelRequests\"
+mkdir "D:\TEST\DLL_fmParallelRequests\"
+echo copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" "D:\TEST\DLL_fmParallelRequests\"
+copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" "D:\TEST\DLL_fmParallelRequests\"
+echo.
+
 pause
 REM ----------------------------------------------------------------------------------------
 goto :eof

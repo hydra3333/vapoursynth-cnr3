@@ -950,6 +950,7 @@ void cnr3_emit_response_config_to_stderr(
         scene_threshold_text,
         cnr3_bool_text(scene_chroma)
     );
+    std::fflush(stderr);
 #else
     (void)instance_id;
     (void)config;
@@ -1364,6 +1365,7 @@ void VS_CC cnr3_create_filter(
         data->config.instance_id.value,
         CNR3_EDIT_VERSION
     );
+    std::fflush(stderr);
 
     std::fprintf(
         stderr,
@@ -1371,6 +1373,7 @@ void VS_CC cnr3_create_filter(
         data->config.instance_id.value,
         CNR3_SELECTED_FILTER_MODE_TEXT
     );
+    std::fflush(stderr);
 #endif
 
     const Cnr3Status pixel_config_status = cnr3_initialise_k1e2_live_pixel_config(

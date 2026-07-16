@@ -29,7 +29,7 @@ echo copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\R
 copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" ??
 echo.
 
-set "build_type=Debug"
+REM set "build_type=Debug"
 set "build_type=Release"
 set "top_root=D:\TEST"
 set "vs_root=%top_root%\Vapoursynth_x64_R76"

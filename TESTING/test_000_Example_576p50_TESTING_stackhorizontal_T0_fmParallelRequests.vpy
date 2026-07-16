@@ -8,12 +8,56 @@ import vapoursynth as vs
 
 core = vs.core
 
+#****************************************************************************************
+# =================================================================================
+# VPY / VSPIPE TEST ARGUMENTS
+# ----------------------------------------------------------------------------
+# vspipe --arg key=value injects string globals into this script.
+#
+# Example:
+#   vspipe --arg cnr3_core_threads=8 ...
+#
+# Important distinction:
+#   core.num_threads controls VapourSynth core worker threads.
+#   vspipe -r controls concurrent output frame requests, not worker threads.
+#
+# Therefore:
+#   1. Use cnr3_core_threads to model smaller worker-thread pools.
+# =================================================================================
+
+def _cnr3_get_arg_str(name: str, default: str) -> str:
+    value = globals().get(name, default)
+    if value is None:
+        return default
+    return str(value).strip()
+
+def _cnr3_get_arg_int(name: str, default: int, *, minimum: Optional[int] = None) -> int:
+    raw = _cnr3_get_arg_str(name, str(default))
+    try:
+        value = int(raw, 10)
+    except ValueError as exc:
+        raise ValueError(f"{name}: expected integer, got {raw!r}") from exc
+
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name}: expected >= {minimum}, got {value}")
+
+    return value
+
+CNR3_VPY_CORE_THREADS = _cnr3_get_arg_int("cnr3_core_threads", 0, minimum=0)
+
+# If cnr3_core_threads is set to a positive integer, apply it to core.num_threads.
+if CNR3_VPY_CORE_THREADS > 0:
+    core.num_threads = CNR3_VPY_CORE_THREADS
+    sys.stderr.write(f"--- [vpy] RESET core.num_threads = {core.num_threads}\n")
+    sys.stderr.flush()
+
+#****************************************************************************************
+
 # --- Source selection: uncomment ONE ---
 #source_filename = r"D:\TEST\000_Example_576i.mp4"     # interlaced  (LATER second pass)
 #source_filename = r"D:\TEST\000_Example_576p25.mp4"   # progressive (PRIMARY recovery-test clip)
 #source_filename = r"D:\TEST\000_Example_576p50.mp4"   # progressive (PRIMARY recovery-test clip)
 source_filename = r"D:\TEST\alwyn_VTS_01_1.VOB_edit.mpg" #interlaced BFF
-
 
 clip = core.bs.VideoSource(source_filename)
 
@@ -243,6 +287,77 @@ def assemble_jump_segments(
     final_clip = core.std.Splice(segments)
     return final_clip, final_clip.num_frames
 
+def assemble_jump_segments_pair(
+    input_base_clip: vs.VideoNode,
+    output_base_clip: vs.VideoNode,
+    jump_to_frames: List[int],
+    segment_length: int,
+    shuffle_in_zones: bool,
+    zone_size: int,
+) -> Tuple[vs.VideoNode, vs.VideoNode, int]:
+    """Build matching input/output clips from the same segment cuts and the
+    same optional in-zone request order. Returns (input_clip, output_clip,
+    total_frame_count), suitable for side-by-side visual comparison.
+    """
+    if segment_length <= 0:
+        raise ValueError(f"assemble_jump_segments_pair: segment_length must be > 0. Got {segment_length}.")
+    if shuffle_in_zones and zone_size < 1:
+        raise ValueError(f"assemble_jump_segments_pair: zone_size must be >= 1. Got {zone_size}.")
+    if input_base_clip.num_frames != output_base_clip.num_frames:
+        raise ValueError(
+            "assemble_jump_segments_pair: input and output base clips must have the same frame count "
+            f"({input_base_clip.num_frames} vs {output_base_clip.num_frames})."
+        )
+    if not jump_to_frames:
+        jump_to_frames = [0]
+
+    input_segments = []
+    output_segments = []
+
+    for start in jump_to_frames:
+        if start < 0 or start >= output_base_clip.num_frames:
+            raise ValueError(
+                f"assemble_jump_segments_pair: jump frame {start} out of bounds "
+                f"for clip ({output_base_clip.num_frames} frames)."
+            )
+
+        end_pos = min(start + segment_length, output_base_clip.num_frames)
+        seg_len = end_pos - start
+        if seg_len <= 0:
+            continue
+
+        pattern = list(range(seg_len))
+        if shuffle_in_zones:
+            pattern = []
+            num_zones = seg_len // zone_size
+
+            for z in range(num_zones):
+                base_idx = z * zone_size
+                zone_indices = list(range(zone_size))
+                random.shuffle(zone_indices)
+                for i in zone_indices:
+                    pattern.append(base_idx + i)
+
+            for idx in range(num_zones * zone_size, seg_len):
+                pattern.append(idx)
+
+        input_seg = input_base_clip[start:end_pos]
+        output_seg = output_base_clip[start:end_pos]
+
+        input_segments.append(core.std.SelectEvery(input_seg, cycle=seg_len, offsets=pattern))
+        output_segments.append(core.std.SelectEvery(output_seg, cycle=seg_len, offsets=pattern))
+
+    input_final = core.std.Splice(input_segments)
+    output_final = core.std.Splice(output_segments)
+
+    if input_final.num_frames != output_final.num_frames:
+        raise ValueError(
+            "assemble_jump_segments_pair: internal mismatch after splice "
+            f"({input_final.num_frames} vs {output_final.num_frames})."
+        )
+
+    return input_final, output_final, output_final.num_frames
+
 # --------------------------------------------------------------------------------------------------------------
 # MAIN: detect scan type, apply CNR3 (per field stream if interlaced), reweave.
 # Progressive -> ONE CNR3 instance (clean recovery behaviour; PRIMARY test path).
@@ -252,14 +367,19 @@ def assemble_jump_segments(
 tag, first, second = split_into_fields(clip)
 # Depending on the return tag, process the video as PROGRESSIVE or as INTERLACED
 if tag == "P":  # PROGRESSIVE source
-    clip_denoised_base = core.cnr3.CNR3(first)
+    clip_input_base = first
+    #clip_denoised_base = core.cnr3.CNR3(first)
+    clip_denoised_base  = core.cnr3.CNR3(first,  y_threshold=12, y_strength=100, u_threshold=23, u_strength=200, v_threshold=34, v_strength=210, y_curve="narrow", u_curve="wide", v_curve="wide", scene_threshold=5.5, scene_chroma=True)
 else:           # INTERLACED source
-    first_denoised  = core.cnr3.CNR3(first)
-    second_denoised = core.cnr3.CNR3(second)
+    #first_denoised  = core.cnr3.CNR3(first)
+    #second_denoised = core.cnr3.CNR3(second)
+    first_denoised  = core.cnr3.CNR3(first,  y_threshold=12, y_strength=100, u_threshold=23, u_strength=200, v_threshold=34, v_strength=210, y_curve="narrow", u_curve="wide", v_curve="wide", scene_threshold=5.5, scene_chroma=True)
+    second_denoised = core.cnr3.CNR3(second, y_threshold=12, y_strength=100, u_threshold=23, u_strength=200, v_threshold=34, v_strength=210, y_curve="narrow", u_curve="wide", v_curve="wide", scene_threshold=5.5, scene_chroma=True)
+    clip_input_base = reweave_fields(tag, first, second)
     clip_denoised_base = reweave_fields(tag, first_denoised, second_denoised)
 
 # ==============================================================================
-# TEST SCENARIOS — uncomment exactly ONE. Each returns (clip, TEST_CLIP_LENGTH).
+# TEST SCENARIOS — uncomment exactly ONE. Each paired scenario returns (clip_input_selected, clip_denoised, TEST_CLIP_LENGTH).
 #
 #   Recovery bounds these are sized against:
 #     BACK_RADIUS = 50         search reach / floor = N - 50
@@ -284,12 +404,12 @@ else:           # INTERLACED source
 # *** SCENARIO S1 — in-order, 10 frames.
 #   Proves: every predecessor is output[N-1] present; recovery never fires.
 #   Dev-trace watch: all in-order; NO recovery; NO floor flag.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=10,  shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=10,  shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO S2 — in-order, 120 frames (lays down checkpoints at the 10-frame cadence, the hot-zone tracks the wavefront).
 #   Dev-trace watch: (1) in-order throughout; checkpoints recorded; NO floor flag.
 #                    (2) the hot-zone travelling along in about the right place tracking with the wavefront
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=120, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=120, shuffle_in_zones=False, zone_size=1)
 
 # ---------- OUT-OF-ORDER ARRIVAL WITHIN A ZONE (short recovery; sequence, not concurrency) ----------
 # *** SCENARIO S3 — in-zone shuffle, 120 frames, zone 5.
@@ -297,7 +417,7 @@ else:           # INTERLACED source
 #           The hot-zone travelling along in about the right place tracking with the bubbling "average" wavefront.
 #   Dev-trace watch: (1) short EXACT recoveries inside the bound; NO floor flag.
 #                    (2) the hot-zone travelling along tracking with the wavefront
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=120, shuffle_in_zones=True,  zone_size=5)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=120, shuffle_in_zones=True,  zone_size=5)
 
 # ---------- SMALL IN-BOUND JUMP (exact recovery; DELIBERATELY small — see note) ----------
 # *** SCENARIO S4 — process 0..29, then jump to 45 (the gap 30..44 is 15 frames, INSIDE BACK_RADIUS=50).
@@ -306,7 +426,7 @@ else:           # INTERLACED source
 #   The realistic large jumps are S5..S8.
 #   Proves: output[44] absent -> search finds anchor at 29 within the bound -> exact fill 30..44 -> 45.
 #   Dev-trace watch: recovery entered, start point ~29 (within bound), holes walked; NO floor flag.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 45], segment_length=30, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 45], segment_length=30, shuffle_in_zones=False, zone_size=1)
 
 # ---------- HOT-ZONE MOVE THEN FAR JUMP (the bound; floor reset is NOT from frame 0) ----------
 # *** SCENARIO S5 — sweep 0..59, then jump far to 2000.  (segment 60 = bound + a small margin)
@@ -314,7 +434,7 @@ else:           # INTERLACED source
 #           FRESH-START at 1950 (NOT frame 0), then walk forward to 2000.
 #   Dev-trace watch: recovery entered, search reaches floor, floor fresh-start ~1950,
 #           FLOOR-APPROXIMATION FLAG SET; reconstruction bounded to ~50 frames.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 2000], segment_length=60, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 2000], segment_length=60, shuffle_in_zones=False, zone_size=1)
 
 # ---------- DEEP COLD SEEK (clip-length independence) ----------
 # *** SCENARIO S6 — jump straight to 5000 from cold.  (segment 60, same as S5, for a clean comparison)
@@ -322,7 +442,7 @@ else:           # INTERLACED source
 #           reconstructed regardless of the ~5,500-frame clip length.
 #   Dev-trace watch: floor fresh-start ~4950, FLAG SET, bounded cost; SAME reconstruction
 #           span as S5 despite the far larger frame number (compare S5 vs S6 = length-independence).
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[5000], segment_length=60, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[5000], segment_length=60, shuffle_in_zones=False, zone_size=1)
 
 # ---------- REPEATED REALISTIC JUMPING (your original values; each jump independently bounded) ----------
 # *** SCENARIO S7 — four segments at [0, 3000, 1000, 2000], 200 frames each, sequential.
@@ -330,57 +450,107 @@ else:           # INTERLACED source
 #           regions; per-jump cost stays bounded (no growth with jump count).
 #   Dev-trace watch: a bounded recovery at each bounce; floor flag where a region is cold,
 #           exact where an anchor survives; per-jump cost bounded each time.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=False, zone_size=8)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=False, zone_size=8)
 
 # *** SCENARIO S8 — as S7 but with in-zone shuffle (the hardest sequential case under -r 1).
 #   Proves: combined jumping + out-of-order arrival within each segment.
 #   Dev-trace watch: bounded recovery per bounce AND correct predecessor handling for the
 #           in-zone shuffle; no unbounded growth; floor flag only where genuinely cold.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=True,  zone_size=8)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 3000, 1000, 2000], segment_length=200, shuffle_in_zones=True,  zone_size=8)
 
 # *** SCENARIO S9 — cache-overflow + REVISIT thrash: distinct regions beyond hot-zone cap, then RETURN to pruned regions.
 #   Purpose: force pruning between jumps (D-SUM-10 ring/prune) AND revisit evicted regions so they must RECOMPUTE
 #   (D-SUM-13 recalculation/thrash). Best run under CNR3_SCAFFOLD_TINYCACHE_FOR_DIAGS_ONLY (ceiling 100).
 #   6 distinct forward regions (> MAX_HOT_ZONES) then revisit 0/1000/2000 after they've been pruned. -r 1.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 500, 1000, 1500, 2000, 2500, 0, 1000, 2000], segment_length=150, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 500, 1000, 1500, 2000, 2500, 0, 1000, 2000], segment_length=150, shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO S9b — as S9 but with in-zone shuffle (prune/thrash + arrival-disorder recovery, hardest combined case).
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 500, 1000, 1500, 2000, 2500, 0, 1000, 2000], segment_length=150, shuffle_in_zones=True,  zone_size=8)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 500, 1000, 1500, 2000, 2500, 0, 1000, 2000], segment_length=150, shuffle_in_zones=True,  zone_size=8)
 
 # *** SCENARIO S9c — over-prune probe: single contiguous 250-frame run, in-zone shuffle, NO jumps.
 #   Under TINY-100 (ceiling 100, back_radius 15) a shuffle span well inside back_radius should yield
 #   ~zero frames_evicted_then_re_requested. Any non-zero => something pruned inside the protected window.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=250, shuffle_in_zones=True, zone_size=5)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=250, shuffle_in_zones=True, zone_size=5)
 
 # *** SCENARIO S9d — disjoint jumps, no revisit, no overlap: isolates whether evict-then-re-request
 #   is purely an artifact of RE-REQUESTING an evicted range. Each 250 segment is a fresh region,
 #   spaced > segment_length apart so ranges (and their rebuild-lookback) never intersect; no target repeats.
 #   Prediction: frames_evicted_then_re_requested == 0 (only cold-forward eviction, nothing ever asked twice).
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 1000, 2000, 3000, 1500, 500], segment_length=250, shuffle_in_zones=True, zone_size=5)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 1000, 2000, 3000, 1500, 500], segment_length=250, shuffle_in_zones=True, zone_size=5)
 
 # *** SCENARIO S9e — recency positive control: revisit a JUST-evicted region so eviction_gap <= Z.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 5], segment_length=120, shuffle_in_zones=False, zone_size=1)
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 95], segment_length=100, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 5], segment_length=120, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 95], segment_length=100, shuffle_in_zones=False, zone_size=1)
 
 # S9e attempt 1: minimal overflow, immediate revisit
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments( clip_denoised_base, jump_to_frames=[0, 0], segment_length=108, shuffle_in_zones=False, zone_size=1 )
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 0], segment_length=108, shuffle_in_zones=False, zone_size=1 )
 
 # S9e attempt 2: minimal overflow, near-start revisit
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 4], segment_length=108, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 4], segment_length=108, shuffle_in_zones=False, zone_size=1)
 
 # S9e attempt 3: slightly larger overflow, still close revisit
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 4],segment_length=112,shuffle_in_zones=False,zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 4],segment_length=112,shuffle_in_zones=False,zone_size=1)
 
 # S9e attempt 3: slightly larger overflow, still close revisit
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 4],segment_length=112,shuffle_in_zones=False,zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 4],segment_length=112,shuffle_in_zones=False,zone_size=1)
 
 # S9e attempt 4: controlled just-evicted revisit
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=112,shuffle_in_zones=False,zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 8],segment_length=112,shuffle_in_zones=False,zone_size=1)
 
 # *** SCENARIO S9e — recency positive control: revisit a JUST-evicted region.
 #   Under TINY-100, this lands evict-then-refetch events in the recovery-local population.
 #   Expect frames_recently_evicted_then_re_requested > 0. -r 1.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base,jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)    ####
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 8],segment_length=108,shuffle_in_zones=False,zone_size=1)
+
+# ===============================================================================================
+# ===============================================================================================
+# ===============================================================================================
+# =============================== LINEAR PRODUCTION-CASE (L1..L4) ===============================
+# The 99% real use case: vspipe -> ffmpeg linear playthrough of a whole clip, NO jumps.
+# This is "bubbling linear" -- a single contiguous forward sweep of the ENTIRE source.
+# Run these under the NORMAL profile (TINY-100 OFF); a clip longer than the NORMAL ceiling (1000)
+# will evict naturally as the wavefront advances, which is exactly the production behaviour to watch.
+#
+# segment_length = SOURCE_FRAME_COUNT  -> the whole clip (there is no "ALL" keyword; pass the count).
+# jump_to_frames = [0]                 -> start at 0, one contiguous segment, no jumps.
+#
+# The L1<->L2 and (with -r 1 removed) the L*-noR pairs isolate the two variables independently:
+#   L1  vs L2   : arrival ORDER (clean vs shuffle8) at fixed single-thread -r 1.
+#   L1  vs L1noR: THREADING (single vs multi) at fixed clean order.
+# Read D-SUM-01 out_of_order/backward/forward as the disorder signal; D-SUM-12 recovery_rate as the
+# cache-miss consequence; D-SUM-10 recent_rechurn + [DSUM10-GAP-HISTO] as the eviction-quality signal;
+# D-SUM-13 recalculated_frame_count as the "did disorder force real recompute" signal; and the
+# [DSUM-HEALTH] block for the at-a-glance ratios.
+
+# ***
+# ***
+# *** SCENARIO example_00 — LINEAR, 3000 frames clip, in-order, NO shuffle. 
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=3000, shuffle_in_zones=False, zone_size=1)    ####
+# ***
+# ***
+# ***
+
+# *** SCENARIO example_01 — LINEAR, 200 frames clip, in-order, NO shuffle.  Used with or without '-r 1' and with fmunordered or fmparallel
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=200, shuffle_in_zones=False, zone_size=1)    ####
+
+# *** SCENARIO L1 — LINEAR, whole clip, in-order, NO shuffle.  The clean 99% baseline.
+#   Prediction (-r 1): recovery ~0%, out_of_order 0, recent_rechurn 0, recalc 0, cache_hit ~99%.
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=SOURCE_FRAME_COUNT, shuffle_in_zones=False, zone_size=1)    ####
+
+# *** SCENARIO L2 — LINEAR, whole clip, in-zone shuffle size 8.  Arrival-disorder stand-in.
+#   Prediction (-r 1): out_of_order > 0, small recovery bump, recent_rechurn likely still 0
+#   (an 8-frame shuffle stays within BACK_RADIUS=50 so predecessors remain resident), recalc likely 0.
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=SOURCE_FRAME_COUNT, shuffle_in_zones=True,  zone_size=8)    ####
+
+# *** SCENARIO L1noR / L2noR — SAME two lines as L1 / L2, but run the .bat with rrr= EMPTY (remove -r 1).
+#   This is the ONLY way to see genuine multi-thread "bubbling" (out-of-order EXECUTION across threads).
+#   Use the L1 line for L1noR (clean order + threads) and the L2 line for L2noR (disorder + threads).
+#   Prediction: L1noR is the key run -- if the cache/hot-zone handles the production case, recovery stays
+#   low; if threads outrun the predecessor chain, recovery/recent_rechurn/recalc appear. That gap is the
+#   first real A1 question. (No separate scenario line needed; just toggle rrr in the .bat.)
+# ===============================================================================================
+# ===============================================================================================
+# ===============================================================================================
 
 # ------------------------------- BOUNDARY / STRESS (B1..B7) ---------------------------------
 # These poke the EDGES of the bound / clamp / hot-zone cap. The dev-trace reveals
@@ -391,35 +561,35 @@ else:           # INTERLACED source
 #   Probes: floor = max(0, 40-50) clamps to 0, so the floor IS frame 0 -> a genuine
 #           FRAME-0 fresh-start fires. This is the "frame 0 only reached when N<B" case.
 #   Dev-trace watch: recovery entered, floor=0, frame-0 fresh-start, flag SET; fill 1..39 then 40.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[40], segment_length=15, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[40], segment_length=15, shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO B2 — bound straddle (a PAIR: run each, compare). Warm 0..9, then one far jump.
 #   B2a target 58: nearest real output (9) is at gap 49 -> INSIDE the bound (floor=8) -> EXACT recovery.
 #   B2b target 61: nearest real output (9) is at gap 52 -> OUTSIDE the bound (floor=11) -> FLOOR reset.
 #   Proves: the bound crossover sits at ~50 (49 finds the anchor; 52 does not). They differ only by 3.
 #   Dev-trace watch: B2a -> anchor=9, NO floor flag.  B2b -> floor=11, anchor=FLOOR, flag SET.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 58], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B2a (inside)
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 61], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B2b (outside)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 58], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B2a (inside)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 61], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B2b (outside)
 
 # *** SCENARIO B3 — backward re-request: process 0..100, then a segment starting back at 50.
 #   Probes: frame 50 was already produced AND is a checkpoint (multiple of 10) -> CACHE-HIT
 #           direct return on the backward request; following frames (51..) may be evicted
 #           non-checkpoints -> short recoveries. Tests the cache-hit path + backward seeks.
 #   Dev-trace watch: at the jump, frame 50 = CACHE-HIT (present); mixed present / short-recovery after.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 50], segment_length=101, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 50], segment_length=101, shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO B4 — heavy out-of-order: in-zone shuffle with a WIDE zone (20) over 100 frames.
 #   Probes: deep reordering within a 20-frame window -> many predecessors absent at request
 #           time -> frequent short recoveries, all within the warm region (no floor reset).
 #   Dev-trace watch: frequent EXACT in-zone recoveries; NO floor flag; no unbounded growth.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=100, shuffle_in_zones=True, zone_size=20)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=100, shuffle_in_zones=True, zone_size=20)
 
 # *** SCENARIO B5 — hot-zone cap / churn: 7 distinct jump regions (MAX_HOT_ZONES is 5).
 #   Probes: more distinct active regions than hot zones -> hot-zone EVICTION must occur; each
 #           jump still bounds its own recovery. Tests the hot-zone cap and eviction behaviour.
 #   Dev-trace watch: a bounded recovery at each of the 7 jumps; hot-zone count caps at 5 with
 #           evictions; floor flag where a region is cold; per-jump cost stays bounded.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0, 500, 100, 800, 200, 1200, 300], segment_length=30, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0, 500, 100, 800, 200, 1200, 300], segment_length=30, shuffle_in_zones=False, zone_size=1)
 
 # ---------- END-OF-CLIP (EOF) — forward-looking calcs (hot-zone forward radius, prune) at the edge ----------
 # The hot-zone FORWARD radius (~10) and the prune calc reason about frames AHEAD of the
@@ -437,7 +607,7 @@ else:           # INTERLACED source
 #           out-of-range frames.
 #   Dev-trace watch: in-order to the last frame; forward hot-zone span CLAMPED to the last frame
 #           (no window into frames > last); prune handles the boundary; NO floor flag.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[SOURCE_FRAME_COUNT - 30], segment_length=60, shuffle_in_zones=False, zone_size=1)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[SOURCE_FRAME_COUNT - 30], segment_length=60, shuffle_in_zones=False, zone_size=1)
 
 # *** SCENARIO B7 — cold JUMP to the last frame (recovery AND the forward edge, simultaneously).
 #   Two variants — run each:
@@ -449,15 +619,20 @@ else:           # INTERLACED source
 #           both at the clip edge at once.
 #   Dev-trace watch: recovery entered (floor reset, flag SET — cold jump); forward span CLAMPED
 #           to the last frame; no index past EOF; bounded cost.
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[SOURCE_FRAME_COUNT - 1], segment_length=5,  shuffle_in_zones=False, zone_size=1)   # B7a (last frame exactly)
-#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[SOURCE_FRAME_COUNT - 5], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B7b (few frames at the edge)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[SOURCE_FRAME_COUNT - 1], segment_length=5,  shuffle_in_zones=False, zone_size=1)   # B7a (last frame exactly)
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[SOURCE_FRAME_COUNT - 5], segment_length=10, shuffle_in_zones=False, zone_size=1)   # B7b (few frames at the edge)
 
 # ==============================================================================
 
-clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=957, shuffle_in_zones=False, zone_size=1)    ####
+clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=957, shuffle_in_zones=False, zone_size=1)    ####
 
-# Output the selected scenario clip (TEST_CLIP_LENGTH frames).
-clip_denoised.set_output()
+#clip_compare = clip_input_selected
+#clip_compare = clip_denoised
+
+# Output input and CNR3 output side-by-side for visual comparison (TEST_CLIP_LENGTH frames).
+clip_compare = core.std.StackHorizontal([clip_input_selected, clip_denoised])
+
+clip_compare.set_output()
 
 # Print info to stderr
 sys.stderr.write(f"\n--- [vpy] Vapoursynth Information ---\n")

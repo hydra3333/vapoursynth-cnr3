@@ -448,7 +448,7 @@ else:           # INTERLACED source
 # ***
 # ***
 # *** SCENARIO example_00 — LINEAR, 3000 frames clip, in-order, NO shuffle. 
-clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=3000, shuffle_in_zones=False, zone_size=1)    ####
+#clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments(clip_denoised_base, jump_to_frames=[0], segment_length=3000, shuffle_in_zones=False, zone_size=1)    ####
 # ***
 # ***
 # ***

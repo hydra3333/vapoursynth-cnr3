@@ -25,6 +25,20 @@ echo copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\R
 copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" "D:\TEST\DLL_fmParallelRequests\"
 echo.
 
+echo copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*"  ??
+copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" ??
+echo.
+
+set "build_type=Debug"
+set "build_type=Release"
+set "top_root=D:\TEST"
+set "vs_root=%top_root%\Vapoursynth_x64_R76"
+echo copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.dll "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
+copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.dll "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
+echo copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.pdb "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
+copy /y E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%build_type%\cnr3.pdb "%vs_root%\Lib\site-packages\vapoursynth\plugins\"
+echo.
+
 pause
 REM ----------------------------------------------------------------------------------------
 goto :eof
@@ -48,7 +62,7 @@ if %EL% NEQ 0 (
     echo  ERRORS detected when building %~1 projects in solution %~3
     echo.
     pause
-    exit
+    exit /b %EL%
 )
 REM echo dir /b /s "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%~1\cnr3.*"
 REM dir /b /s "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\%~1\cnr3.*"

@@ -1,0 +1,288 @@
+diff --git a/src/cnr3_build_config.h b/src/cnr3_build_config.h
+index f2186e0..14e39a0 100644
+--- a/src/cnr3_build_config.h
++++ b/src/cnr3_build_config.h
+@@ -95,7 +95,7 @@
+     the operational-defaults fix; the response_config line is the tell. Marker
+     provenance is corrected as of this commit.
+ */
+-#define CNR3_EDIT_VERSION_LITERAL "CMS07-FEATURE.cnr2-descriptive-option-parser"
++#define CNR3_EDIT_VERSION_LITERAL "CMS07-RIDER.option-error-messages"
+ 
+ inline constexpr const char* CNR3_EDIT_VERSION =
+ CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;
+diff --git a/src/vapoursynth-Cnr3.cpp b/src/vapoursynth-Cnr3.cpp
+index 935e754..802bb81 100644
+--- a/src/vapoursynth-Cnr3.cpp
++++ b/src/vapoursynth-Cnr3.cpp
+@@ -153,6 +153,7 @@
+ #include "VapourSynth4.h"
+ #include "VSHelper4.h"
+ 
++#include <charconv>
+ #include <cmath>
+ #include <cstdint>
+ #include <cstdio>
+@@ -492,6 +493,131 @@ void cnr3_set_option_error(
+     cnr3_set_create_error(out, vsapi, message);
+ }
+ 
++void cnr3_format_int_option_expectation(
++    char* buffer,
++    std::size_t buffer_size,
++    int minimum_value,
++    int maximum_value,
++    const char* expectation_override
++) noexcept {
++    if (buffer == nullptr || buffer_size == 0U) {
++        return;
++    }
++
++    if (expectation_override != nullptr) {
++        std::snprintf(buffer, buffer_size, "%s", expectation_override);
++        return;
++    }
++
++    std::snprintf(
++        buffer,
++        buffer_size,
++        "expected an integer in the range %d..%d inclusive.",
++        minimum_value,
++        maximum_value
++    );
++}
++
++void cnr3_format_float_option_expectation(
++    char* buffer,
++    std::size_t buffer_size,
++    double minimum_value,
++    double maximum_value
++) noexcept {
++    if (buffer == nullptr || buffer_size == 0U) {
++        return;
++    }
++
++    std::snprintf(
++        buffer,
++        buffer_size,
++        "expected a finite float in the range %.1f..%.1f inclusive.",
++        minimum_value,
++        maximum_value
++    );
++}
++
++void cnr3_format_curve_option_expectation(
++    char* buffer,
++    std::size_t buffer_size
++) noexcept {
++    if (buffer == nullptr || buffer_size == 0U) {
++        return;
++    }
++
++    std::snprintf(buffer, buffer_size, "expected exactly \"wide\" or \"narrow\".");
++}
++
++void cnr3_format_option_float_echo(
++    double value,
++    char* buffer,
++    std::size_t buffer_size
++) noexcept {
++    if (buffer == nullptr || buffer_size == 0U) {
++        return;
++    }
++
++    buffer[0] = '\0';
++
++    if (std::isnan(value)) {
++        std::snprintf(buffer, buffer_size, "nan");
++        return;
++    }
++
++    if (!std::isfinite(value)) {
++        std::snprintf(buffer, buffer_size, "%s", std::signbit(value) ? "-inf" : "inf");
++        return;
++    }
++
++    char* const end = buffer + buffer_size - 1U;
++    const auto result = std::to_chars(buffer, end, value);
++
++    if (result.ec != std::errc{}) {
++        std::snprintf(buffer, buffer_size, "<format-error>");
++        return;
++    }
++
++    *result.ptr = '\0';
++}
++
++void cnr3_format_curve_option_echo(
++    const char* value,
++    int value_size,
++    char* buffer,
++    std::size_t buffer_size
++) noexcept {
++    if (buffer == nullptr || buffer_size == 0U) {
++        return;
++    }
++
++    buffer[0] = '\0';
++
++    if (value == nullptr || value_size <= 0) {
++        std::snprintf(buffer, buffer_size, "%s", value == nullptr ? "<null>" : "");
++        return;
++    }
++
++    constexpr int maximum_echo_bytes = 32;
++    const int echo_length = value_size < maximum_echo_bytes ? value_size : maximum_echo_bytes;
++    const bool truncated = value_size > maximum_echo_bytes;
++    std::size_t output_length = 0U;
++
++    for (int index = 0; index < echo_length && output_length + 1U < buffer_size; ++index) {
++        const unsigned char byte = static_cast<unsigned char>(value[index]);
++        buffer[output_length++] = byte >= 0x20U && byte <= 0x7eU
++            ? static_cast<char>(byte)
++            : '?';
++    }
++
++    if (truncated && output_length + 3U < buffer_size) {
++        buffer[output_length++] = '.';
++        buffer[output_length++] = '.';
++        buffer[output_length++] = '.';
++    }
++
++    buffer[output_length] = '\0';
++}
++
+ bool cnr3_option_present_once(
+     const VSMap* in,
+     VSMap* out,
+@@ -529,7 +655,8 @@ bool cnr3_parse_optional_int_option(
+     const char* option_name,
+     int minimum_value,
+     int maximum_value,
+-    int& resolved_value
++    int& resolved_value,
++    const char* expectation_override = nullptr
+ ) noexcept {
+     bool present = false;
+ 
+@@ -541,11 +668,22 @@ bool cnr3_parse_optional_int_option(
+         return true;
+     }
+ 
++    char expectation[96]{};
++    cnr3_format_int_option_expectation(
++        expectation,
++        sizeof(expectation),
++        minimum_value,
++        maximum_value,
++        expectation_override
++    );
++
+     int error = peSuccess;
+     const std::int64_t value = vsapi->mapGetInt(in, option_name, 0, &error);
+ 
+     if (error != peSuccess) {
+-        cnr3_set_option_error(out, vsapi, option_name, "expected an integer value.");
++        char detail[128]{};
++        std::snprintf(detail, sizeof(detail), "incorrect value type, %.96s", expectation);
++        cnr3_set_option_error(out, vsapi, option_name, detail);
+         return false;
+     }
+ 
+@@ -554,9 +692,9 @@ bool cnr3_parse_optional_int_option(
+         std::snprintf(
+             detail,
+             sizeof(detail),
+-            "expected an integer in the range %d..%d inclusive.",
+-            minimum_value,
+-            maximum_value
++            "got %lld, %.96s",
++            static_cast<long long>(value),
++            expectation
+         );
+         cnr3_set_option_error(out, vsapi, option_name, detail);
+         return false;
+@@ -582,7 +720,8 @@ bool cnr3_parse_optional_bool_option(
+         option_name,
+         0,
+         1,
+-        integer_value
++        integer_value,
++        "expected 0 or 1."
+     )) {
+         return false;
+     }
+@@ -610,23 +749,30 @@ bool cnr3_parse_optional_float_option(
+         return true;
+     }
+ 
++    char expectation[96]{};
++    cnr3_format_float_option_expectation(
++        expectation,
++        sizeof(expectation),
++        minimum_value,
++        maximum_value
++    );
++
+     int error = peSuccess;
+     const double value = vsapi->mapGetFloat(in, option_name, 0, &error);
+ 
+     if (error != peSuccess) {
+-        cnr3_set_option_error(out, vsapi, option_name, "expected a float value.");
++        char detail[128]{};
++        std::snprintf(detail, sizeof(detail), "incorrect value type, %.96s", expectation);
++        cnr3_set_option_error(out, vsapi, option_name, detail);
+         return false;
+     }
+ 
+     if (!std::isfinite(value) || value < minimum_value || value > maximum_value) {
++        char value_text[64]{};
++        cnr3_format_option_float_echo(value, value_text, sizeof(value_text));
++
+         char detail[128]{};
+-        std::snprintf(
+-            detail,
+-            sizeof(detail),
+-            "expected a finite float in the range %.1f..%.1f inclusive.",
+-            minimum_value,
+-            maximum_value
+-        );
++        std::snprintf(detail, sizeof(detail), "got %.32s, %.80s", value_text, expectation);
+         cnr3_set_option_error(out, vsapi, option_name, detail);
+         return false;
+     }
+@@ -677,6 +823,9 @@ bool cnr3_parse_optional_curve_option(
+         return true;
+     }
+ 
++    char expectation[96]{};
++    cnr3_format_curve_option_expectation(expectation, sizeof(expectation));
++
+     int data_error = peSuccess;
+     const char* value = vsapi->mapGetData(in, option_name, 0, &data_error);
+ 
+@@ -684,7 +833,9 @@ bool cnr3_parse_optional_curve_option(
+     const int value_size = vsapi->mapGetDataSize(in, option_name, 0, &size_error);
+ 
+     if (data_error != peSuccess || size_error != peSuccess || value == nullptr) {
+-        cnr3_set_option_error(out, vsapi, option_name, "expected string value \"wide\" or \"narrow\".");
++        char detail[128]{};
++        std::snprintf(detail, sizeof(detail), "incorrect value type, %.96s", expectation);
++        cnr3_set_option_error(out, vsapi, option_name, detail);
+         return false;
+     }
+ 
+@@ -698,7 +849,12 @@ bool cnr3_parse_optional_curve_option(
+         return true;
+     }
+ 
+-    cnr3_set_option_error(out, vsapi, option_name, "expected exactly \"wide\" or \"narrow\".");
++    char value_text[36]{};
++    cnr3_format_curve_option_echo(value, value_size, value_text, sizeof(value_text));
++
++    char detail[128]{};
++    std::snprintf(detail, sizeof(detail), "got \"%.35s\", %.80s", value_text, expectation);
++    cnr3_set_option_error(out, vsapi, option_name, detail);
+     return false;
+ }
+ 

@@ -9,7 +9,7 @@ set "plugin_dir=%vs_root%\Lib\site-packages\vapoursynth\plugins"
 set "vspipe=%vs_root%\lib\site-packages\vapoursynth\vspipe.exe"
 
 REM Pre-built DLL source folders
-set "dll_before=%top_root%\DLL_fmParallel_CNR3_EXPERIMENT_PLAN_RETRY_BIAS"
+set "dll_before=%top_root%\DLL_BEFORE_interim"
 set "dll_after=%top_root%\DLL_fc3"
 
 REM The vpy must have the diagS8 scenario uncommented

@@ -56,7 +56,8 @@ if CNR3_VPY_CORE_THREADS > 0:
 # --- Source selection: uncomment ONE ---
 #source_filename = r"D:\TEST\000_Example_576i.mp4"     # interlaced  (LATER second pass)
 #source_filename = r"D:\TEST\000_Example_576p25.mp4"   # progressive (PRIMARY recovery-test clip)
-source_filename = r"D:\TEST\000_Example_576p50.mp4"   # progressive (PRIMARY recovery-test clip)
+#source_filename = r"D:\TEST\000_Example_576p50.mp4"   # progressive (PRIMARY recovery-test clip)
+source_filename = r"D:\TEST\alwyn_VTS_01_1.VOB_edit.mpg" #interlaced BFF
 
 clip = core.bs.VideoSource(source_filename)
 
@@ -521,7 +522,7 @@ else:           # INTERLACED source
 # ***
 # ***
 # *** SCENARIO example_00 — LINEAR, 3000 frames clip, in-order, NO shuffle. 
-clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=3000, shuffle_in_zones=False, zone_size=1)    ####
+#clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=3000, shuffle_in_zones=False, zone_size=1)    ####
 # ***
 # ***
 # ***
@@ -620,8 +621,14 @@ clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pa
 
 # ==============================================================================
 
+clip_input_selected, clip_denoised, TEST_CLIP_LENGTH = assemble_jump_segments_pair(clip_input_base, clip_denoised_base, jump_to_frames=[0], segment_length=957, shuffle_in_zones=False, zone_size=1)    ####
+
+#clip_compare = clip_input_selected
+#clip_compare = clip_denoised
+
 # Output input and CNR3 output side-by-side for visual comparison (TEST_CLIP_LENGTH frames).
 clip_compare = core.std.StackHorizontal([clip_input_selected, clip_denoised])
+
 clip_compare.set_output()
 
 # Print info to stderr

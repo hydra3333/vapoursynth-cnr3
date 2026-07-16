@@ -95,7 +95,7 @@
     the operational-defaults fix; the response_config line is the tell. Marker
     provenance is corrected as of this commit.
 */
-#define CNR3_EDIT_VERSION_LITERAL "CMS07-FEATURE.cnr2-descriptive-option-parser"
+#define CNR3_EDIT_VERSION_LITERAL "CMS07-RIDER.option-error-messages"
 
 inline constexpr const char* CNR3_EDIT_VERSION =
 CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;

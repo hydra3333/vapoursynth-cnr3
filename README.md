@@ -152,7 +152,7 @@ the calling pattern is below.
 - TFF vs BFF may be unknowable from the input file    
 
 If you have a source like that then you **must manually separatefields and re-weave them yourself**
-rather than use the function in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
+rather than use the functions in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
 so for such material it can silently take the flag Progressive for Interlaced footage. 
 You can determine the truth by inspection (bob the clip and step fields) and handle
 it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
@@ -242,7 +242,7 @@ captures).
 - TFF vs BFF may be unknowable from the input file    
 
 If you have a source like that then you **must manually separatefields and re-weave them yourself**
-rather than use the function in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
+rather than use the functions in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
 so for such material it can silently take the flag Progressive for Interlaced footage. 
 You can determine the truth by inspection (bob the clip and step fields) and handle
 it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,

@@ -145,7 +145,7 @@ den = core.cnr3.CNR3(clip, u_threshold=60, v_threshold=60)
 
 CNR3 filters frames; interlaced material must be processed PER FIELD, then re-woven, or the two
 fields' different time instants will be blended together and cause combing/ghosting in the
-chroma. Use the two helper functions in **Appendix A** (proven against real BFF VOB captures);
+chroma. Use the two helper functions in **Appendix A** (proven against real BFF VHS captures);
 the calling pattern is below.
 
 **WARNING — metadata-poor input videos:**     
@@ -280,8 +280,8 @@ pixels did not.
 
 ## Appendix A — Interlaced input .vpy helper functions
 
-These are the exact helpers used by the CNR3 test harnesses (validated against real BFF VOB
-captures). 
+These helper functions were used in the CNR3 re-development test harnesses (validated against real
+BFF VHS captures). 
 
 **WARNING — metadata-poor input videos:**     
 **Many** container/codec combinations (notably `.avi`) carry **NO reliable interlacing metadata**
@@ -296,7 +296,7 @@ it manually — call `SeparateFields`/`reweave_fields` yourself with the field o
 rather than trusting autodetection.
 
 NOTE: these are the exact helpers used by the CNR3 test harnesses (validated against real BFF
-VOB captures), with ONE line added for the README: the `SetFieldBased` call at the end of
+VHS captures), with ONE line added for the README: the `SetFieldBased` call at the end of
 `reweave_fields`, restoring the interlaced flag that `SeparateFields` clears, so downstream
 filters/encoders see correct metadata.
 

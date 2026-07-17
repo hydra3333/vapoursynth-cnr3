@@ -30,7 +30,7 @@ deal correctly with out-of-order frame requests.
 This is [a port/upgrade of the AviSynth plugin vsCnr2](https://github.com/Asd-g/AviSynth-vsCnr2),
 itself [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2).
 Defaults and 8-bit behaviour match cnr2 (although outputs are not bit exact since CNR3 uses
-slightly more accurage arithetic). The CNR3 parameter names are new but equivalent to those
+slightly more accurate arithmetic). The CNR3 parameter names are new but equivalent to those
 in CNR2 (see the [name equivalence table](#cnr2--cnr3-name-equivalence) for migration).
 
 This project is distributed under the GNU GENERAL PUBLIC LICENSE Version 2 or later
@@ -163,20 +163,20 @@ import vapoursynth as vs
 core = vs.core
 # ... paste the Appendix A helpers here (split_into_fields, reweave_fields) ...
 
-# this input video has well-defied Progressive/Interlaced metadata,
+# this input video must have well-defined Progressive/Interlaced metadata,
 # or this will fail without manual intervention (see below).
 clip = core.bs.VideoSource(r"capture_interlaced_PAL.mpg")   
 
 # try to detect Progressive/Interlaced etc and separate fields
-# this will FAIL if the input has insufficiuent metadata  - see WARNING below
-# in which caee you MUST  manully
+# this will FAIL if the input has insufficient metadata  - see WARNING below
+# in which case you MUST manually
 #   - identify Progressive or Interlaced and if interlaced whether TFF or BFF
 #   - if Interlaced, separatefields into first and second
-#   = if progressive, set set into first
-#   set the tag as of one of "P", "TFF" or "BFF"
+#   - if progressive, set first to the clip and second to None
+#   - set the tag as one of "P", "TFF" or "BFF"
 tag, first, second = split_into_fields(clip)     # tag "P", "TFF" or "BFF" + field streams
 
-# process strictly depending in what was detected (or perhaps manually set tag/first/second yourself) 
+# process strictly depending on what was detected (or perhaps manually set tag/first/second yourself) 
 # tag = strictly one of "P", "TFF" or "BFF"
 # first = first field as a video clip
 # second = second field  as a video clip
@@ -225,7 +225,7 @@ End-to-end with x264 (CRF18, PAL SD): ~274 fps, 5.5x realtime — the filter is 
 ### **The CNR3 internal cache
 
 Because frame requests may arrive from vapoursynth out of order (and concurrently), CNR3 keeps
-an internal cache of recent *filtered* output frames. The cache has several simplistic mechanisms
+an internal cache of recent *filtered* output frames. The cache has several simple mechanisms
 to manage itself and deliver "past *filtered* output frame(s)" for the compute sequence.
 
 Two main use-cases are apparent:
@@ -235,7 +235,7 @@ Two main use-cases are apparent:
 It is estimated that for VHS/VHS-C analogue capture files, use-case (1) is 99.9% of CNR3 use.
 
 **The wavefront (the normal case).** A linear transcode requests frames 0, 1, 2, ... in order
-opr clore enough to it under mode fmParallelRequests. 
+(or close enough to it under mode fmParallelRequests).
 The cache simply holds the most recent filtered frames, and each new frame finds its predecessor
 (N-1) immediately: zero recomputation, zero overhead. This serves the overwhelming majority of
 real use (encodes) — everything below exists for the exceptions.
@@ -248,8 +248,8 @@ recomputation for a hard memory guarantee.
 **Checkpoints (bounding the cost of a cold request).** The recursion means frame N depends on
 filtered N-1, which depends on N-2, and so on back to the last scene change. A request far from
 anything cached would naively force recomputation from frame 0. Instead, CNR3 designates every
-~10th frame a checkpoint: a legal restart point for the recursion. Checkpopints are pruned from
-the cache less frequently than non-checkping frames and so benefit a backward-search. A cold
+~10th frame a checkpoint: a legal restart point for the recursion. Checkpoints are pruned from
+the cache less frequently than non-checkpoint frames and so benefit a backward search. A cold
 request walks back at most to the nearest checkpoint, never to the start of the clip — recovery
 cost is bounded by the checkpoint spacing, not the clip length.
 
@@ -293,8 +293,10 @@ You can determine the truth by inspection (bob the clip and step fields) and han
 it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
 rather than trusting autodetection.
 
-
-NOTE
+NOTE: these are the exact helpers used by the CNR3 test harnesses (validated against real BFF
+VOB captures), with ONE line added for the README: the `SetFieldBased` call at the end of
+`reweave_fields`, restoring the interlaced flag that `SeparateFields` clears, so downstream
+filters/encoders see correct metadata.
 
 ```python
 from typing import Optional, Tuple
@@ -372,3 +374,4 @@ def reweave_fields(
 - dubhater — the original VapourSynth Cnr2.
 - Asd-g — the AviSynth vsCnr2 port this project consulted for reference semantics.
 - The original Cnr2 concept by Marc FD.
+- Iterative re-development by ClaudeAI (designer/scoper/reviewer/advisor) and ChatGPT (coder/scope-reviewer/advisor)

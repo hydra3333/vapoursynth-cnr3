@@ -2,8 +2,12 @@
 
 #if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #include "cnr3_diagnostics.h"
 

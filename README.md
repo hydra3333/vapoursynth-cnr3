@@ -278,7 +278,7 @@ bottom line for correctness: output is
 **tested as byte-identical across all filter modes and thread counts** — scheduling changes,
 pixels did not.
 
-## Appendix A — field-splitting helpers (proven)
+## Appendix A — Interlaced input .vpy helper functions
 
 These are the exact helpers used by the CNR3 test harnesses (validated against real BFF VOB
 captures). 

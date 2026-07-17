@@ -1,4 +1,60 @@
+<h1 align="center">
+Smart_Stay_Awake
+
+![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
+![License](https://img.shields.io/badge/license-AGPL--3.0-green)
+![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)
+![Language](https://img.shields.io/badge/language-C%23-239120)
+![.NET 10 LTS](https://img.shields.io/badge/.NET-10.0_LTS-512BD4)
+![Status](https://img.shields.io/badge/status-Initial%20Release-green)
+</h1>
+
+<!--
+![Status](https://img.shields.io/badge/status-stable-green)
+![Status](https://img.shields.io/badge/status-Initial%20Release-green)
+![Status](https://img.shields.io/badge/status-Under%20Development-orange)
+
+Common Statuses
+![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
+![Status: Beta](https://img.shields.io/badge/status-beta-blue)
+![Status: Experimental](https://img.shields.io/badge/status-experimental-orange)
+![Status: Deprecated](https://img.shields.io/badge/status-deprecated-red)
+![Status: Inactive](https://img.shields.io/badge/status-inactive-lightgrey)
+![Status](https://img.shields.io/badge/status-Under%20Development-orange) 
+
+![License](https://img.shields.io/badge/license-AGPL--3.0-green)
+![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)
+
+
+Common status labels 
+active, maintained, stable
+alpha, beta, experimental
+deprecated, legacy, archived, inactive
+
+Typical named colors
+Greens: brightgreen, green, yellowgreen
+Yellows/Oranges: yellow, orange
+Reds: red, crimson, firebrick
+Blues/Purples: blue, navy, blueviolet
+Neutrals: lightgrey, grey/gray, black
+
+Semantic: 
+success (brightgreen), informational (blue), critical (red), inactive (lightgrey), important (orange) 
+
+How to craft your own
+https://img.shields.io/badge/<LABEL>-<MESSAGE>-<COLOR>
+Replace <LABEL>, <MESSAGE>, and <COLOR> with whatever text and named color you like. (Spaces become %20)
+-->
+
+
+
 ## Description
+
+
+Cnr2 is a temporal denoiser designed to denoise only the chroma.
+
+According to the original author, this filter is suited for stationary rainbows or noisy analog captures.
+
 
 vapoursynth-cnr3 is an experimental VapourSynth API4 chroma denoiser derived from the
 Cnr2 family of filters.
@@ -33,7 +89,7 @@ and appears to be more recently updated version.
 
 - Vapoursynth R76+ with python 3.14+ (possibly portable versions).
 
-- Microsoft VisualC++ Redistributable Package 2026.
+- Microsoft VisualC++ Redistributable Package 2026+.
 
 ### Usage:
 

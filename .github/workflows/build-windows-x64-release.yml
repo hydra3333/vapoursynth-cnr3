@@ -152,9 +152,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vapoursynth-cnr3-windows-x64
-          path: |
-            vapoursynth-cnr3-windows-x64.zip
-            build/cnr3.pdb
+          path: vapoursynth-cnr3-windows-x64.zip
+
+      # Do not upload symbols (for now)
+      #- name: Upload debug symbols (separate artifact)
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: cnr3-pdb
+      #    path: build/cnr3.pdb
 
       - name: Attach zip to the Release (release trigger only)
         if: github.event_name == 'release'

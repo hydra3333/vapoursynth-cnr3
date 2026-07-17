@@ -7,140 +7,289 @@ CNR3
 ![Status: Experimental](https://img.shields.io/badge/status-Under%20Development-ffcc00)
 </h1>
 
-<!--
-![Status](https://img.shields.io/badge/status-stable-green)
-![Status](https://img.shields.io/badge/status-Initial%20Release-green)
-![Status](https://img.shields.io/badge/status-Under%20Development-orange)
-
-Common Statuses
-![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
-![Status: Beta](https://img.shields.io/badge/status-beta-blue)
-![Status: Experimental](https://img.shields.io/badge/status-experimental-orange)
-![Status: Deprecated](https://img.shields.io/badge/status-deprecated-red)
-![Status: Inactive](https://img.shields.io/badge/status-inactive-lightgrey)
-![Status](https://img.shields.io/badge/status-Under%20Development-orange) 
-![Status](https://img.shields.io/badge/status-Initial%20Release-green)
-
-
-![License](https://img.shields.io/badge/license-GPL--2.0-blue)
-![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-
-
-Common status labels 
-active, maintained, stable
-alpha, beta, experimental
-deprecated, legacy, archived, inactive
-
-Typical named colors
-Greens: brightgreen, green, yellowgreen
-Yellows/Oranges: yellow, orange
-Reds: red, crimson, firebrick
-Blues/Purples: blue, navy, blueviolet
-Neutrals: lightgrey, grey/gray, black
-
-Semantic: 
-success (brightgreen), informational (blue), critical (red), inactive (lightgrey), important (orange) 
-
-How to craft your own
-https://img.shields.io/badge/<LABEL>-<MESSAGE>-<COLOR>
-Replace <LABEL>, <MESSAGE>, and <COLOR> with whatever text and named color you like. (Spaces become %20)
--->
-
-
 ## Description
 
 Targetted for use on noisy VHS/VHS-C analogue capture files, CNR3 is a temporal denoiser
-designed to denoise only the chroma, and is derived from the Cnr2 family of filters.
+designed to denoise only the chroma (colour), and is derived from the Cnr2 family of filters.
+According to the original author, this style of filter is suited for stationary rainbows and
+noisy analog captures.
 
-According to the original author, this filter is suited for stationary rainbows or noisy analog captures.
+For each pixel, CNR3 asks how much that location really changed since the previous *filtered*
+frame. Where the change looks like noise rather than real motion or a scene cut, it gently pulls
+the current colour toward the previous already-cleaned colour. Brightness (luma) is never
+filtered — it passes through untouched and is used only as a guard for the colour decision.
 
-The venerable old CNR2 relied on the older VapourSynth APIv3 which has been phased out,
-and it additionally depended on a mode yielding SERIAL (in-number-order) arrival of frame requests which is
-strongly recommended against using under VapourSynth R76+.  CNR2 implemented recursive temporal model,
-where each output frame depends on the previous (filtered) output frame to be used for chroma blending instead
-of the previous source frame.
+The venerable old CNR2 relied on VapourSynth APIv3, which has been phased out, and additionally
+depended on a serial (in-number-order) frame delivery mode that is strongly recommended against
+under VapourSynth R76+. Like CNR2, CNR3 implements a recursive temporal model — each output
+frame depends on the previous *filtered* output frame, not the previous source frame — which is
+inherently serial. CNR3 therefore uses the supported APIv4 and the supported `fmParallelRequests`
+mode, and implements an internal output-frame cache (with checkpointing and bounded recovery) to
+deal correctly with out-of-order frame requests.
 
-Hence CNR3 uses VapourSynth supported APIv4 and supported mode fmParallelRequests, and implements
-a small output-frame cache to deal with out of order frame requests.
+This is [a port/upgrade of the AviSynth plugin vsCnr2](https://github.com/Asd-g/AviSynth-vsCnr2),
+itself [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2).
+Defaults and 8-bit behaviour match cnr2; the user option names are new (see the
+[name equivalence table](#cnr2--cnr3-name-equivalence) for migration).
 
-This project is distributed under the License GNU GENERAL PUBLIC LICENSE Version 2 or later (GPL-2.0-or-later).
-
-This is [a port/upgrade of the avisynth plugin vsCnr2](https://github.com/Asd-g/AviSynth-vsCnr2) which is
-itself be [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2),
-and appears to be more recently updated version of CNR2.
+This project is distributed under the GNU GENERAL PUBLIC LICENSE Version 2 or later
+(GPL-2.0-or-later).
 
 ## Requirements
 
-- Vapoursynth R76+ with python 3.14+ (possibly portable versions).
-- Microsoft VisualC++ Redistributable Package 2026+.
+- VapourSynth R76+ with Python 3.14+ (portable versions work).
+- Microsoft Visual C++ Redistributable 2026+ (x64).
 
 ## Usage
 
-### Usage with  with Progressive input material
+```
+cnr3.CNR3(vnode clip[, int y_threshold=35, int y_strength=192, string y_curve="wide",
+                      int u_threshold=47, int u_strength=255, string u_curve="narrow",
+                      int v_threshold=47, int v_strength=255, string v_curve="narrow",
+                      float scene_threshold=10.0, bint scene_chroma=False])
+```
+
+All options are optional; the defaults are the operational cnr2-equivalent values. Invalid values
+are rejected at filter creation with a one-line error stating what was received and what is
+acceptable, e.g.
 
 ```
-Cnr3 (clip input, string "mode", float "scdthr", int "ln", int "lm", int "un", int "um", int "vn", int "vm", bool "sceneChroma")
+CNR3: invalid y_threshold option: got 256, expected an integer in the range 0..255 inclusive.
+CNR3: invalid y_curve option: got "wobbly", expected exactly "wide" or "narrow".
 ```
 
-### Usage with  with Interlaced input material
+### Parameters
 
-... describe use with Interlaced material (and provide a condensed .vpy showing only the interlaced
-detection and use code and the call(s) to cnr3) and being very careful to flag that some video files (eg .avi)
-do not contain enough metadata to discern interlaced material or TFF (Top Field First) or BFF (Bottom Field First)
-and that such material must be treated manually (separating fields, weaving, etc. (unless you can upate the vpy's
-subroutines to accept parameters (defaulting to autodetect) rather than just autodetect which they now do.
+- `clip`<br>
+  A clip to process. Must be YUV 8..16-bit integer planar with chroma subsampling 420, 422,
+  440 or 444. Frame dimensions and format must be constant.
 
-### CNR3 Parameters
+- `y_threshold`, `u_threshold`, `v_threshold` (0..255; defaults 35 / 47 / 47)<br>
+  How big a frame-to-frame difference each plane is willing to treat as "just noise".
+  Differences LARGER than the threshold are treated as real content (motion, cuts) and passed
+  through untouched; smaller differences are candidates for smoothing. Raise a threshold to
+  denoise more aggressively (risking colour ghosting/smearing on moving objects); lower it to be
+  more conservative. `y_threshold` is special: **luma is never filtered** — the Y response acts
+  as a guard for the chroma decision (if brightness moved at that spot, something real happened,
+  so the colour is left alone). `threshold=0` is valid and means only exactly-identical samples
+  retain previous chroma.
 
-- input<br>
-    A clip to process.<br>
-    It must be in YUV 8..16-bit planar format with chroma subsampling 420, 422, 440 or 444.
+- `y_strength`, `u_strength`, `v_strength` (0..255; defaults 192 / 255 / 255)<br>
+  Once a difference is judged noise-like, how HARD to pull toward the previous frame's colour.
+  255 allows near-total reuse of the previous cleaned value for tiny differences; lower values
+  blend more gently. Threshold sets the reach of the response; strength sets its peak.
 
-- mode<br>
-    Mode for each plane.<br>
-    The letter `o` means wide mode, which is less sensitive to changes in the pixels, and more effective.<br>
-    The letter `x` means narrow mode, which is less effective.<br>
-    Default: "oxx".
+- `y_curve`, `u_curve`, `v_curve` ("wide" or "narrow"; defaults "wide" / "narrow" / "narrow")<br>
+  The SHAPE of the response between zero difference and the threshold. `"wide"` stays near full
+  strength for small differences and falls off sharply near the threshold — more effective
+  smoothing, slightly bolder. `"narrow"` tapers steadily from the start — gentler, more
+  cautious. The default gives luma a wide guard (small brightness flicker should not block
+  chroma cleaning) and the chroma planes narrow, conservative responses.
 
-- scdthr<br>
-    Scene change detection threshold as percentage of maximum possible change.<br>
-    Lower values make it more sensitive.<br>
-    Must be between 0.0 and 100.0.<br>
-    Default: 10.0.
+- `scene_threshold` (0.0..100.0; default 10.0)<br>
+  Scene-change detector sensitivity, as a percentage of the maximum possible whole-frame change.
+  When a frame differs from the previous one by more than this, CNR3 declares a scene change and
+  RESETS — the new frame passes through unfiltered and smoothing restarts from it. Lower = more
+  sensitive (more resets, safer on rapid cutting); higher = fewer resets (better continuity,
+  riskier across missed cuts).
 
-- ln, un, vn<br>
-    Sensitivity to movement in the Y, U, and V planes, respectively.<br>
-    Higher values will denoise more, at the risk of introducing ghosting in the chroma.<br>
-    Must be between 0 and 255.<br>
-    Default: ln = 35; un = vn = 47.
+- `scene_chroma` (True/False; default False)<br>
+  Whether colour changes count toward scene-change detection, or brightness only (the default,
+  matching cnr2). Leave False for typical footage. Set True for material with colour-only
+  transitions (stage lighting shifts, flashing lights, chroma-heavy cuts): it prevents smoothing
+  across a cut that brightness alone cannot see — the cause of rare colour-washing on such
+  content.
 
-- lm, um, vm<br>
-    Strength of the denoising.<br>
-    Higher values will denoise harder.<br>
-    Must be between 0 and 255.<br>
-    Default: lm = 192; um = vm = 255.
+### cnr2 -> CNR3 name equivalence
 
-- sceneChroma<br>
-    If True, the chroma is considered in the scene change detection.<br>
-    Default: False.
+CNR3 uses descriptive option names. The cnr2/vsCnr2 names are not accepted; migrate once using
+this table. Defaults are identical to cnr2.
 
-### Examples of use
+| cnr2 | CNR3 | default | range |
+|---|---|---|---|
+| `ln` | `y_threshold` | 35 | 0..255 |
+| `lm` | `y_strength` | 192 | 0..255 |
+| `un` | `u_threshold` | 47 | 0..255 |
+| `um` | `u_strength` | 255 | 0..255 |
+| `vn` | `v_threshold` | 47 | 0..255 |
+| `vm` | `v_strength` | 255 | 0..255 |
+| `mode` ("oxx") | `y_curve`/`u_curve`/`v_curve` | "wide"/"narrow"/"narrow" | "wide" or "narrow" |
+| `scdthr` | `scene_threshold` | 10.0 | 0.0..100.0 |
+| `sceneChroma` | `scene_chroma` | False | bool |
 
-... insert 2 examples of use with progressive material here
+(cnr2's `mode` used `'x'` for narrow and treated any other character as wide; CNR3 validates the
+curve strings strictly.)
 
-... insert 2 examples of use with intelraced material and the vpy code above mentioned above (one auto-detect, one manually-specifying)
+### Usage with progressive input material
 
-## Technical Info for Nerds
+```python
+import vapoursynth as vs
+core = vs.core
 
-... briefly describe the algorithm and why SERIAL is needed
+clip = core.bs.VideoSource(r"capture_progressive.avi")     # any source filter
+clip = core.cnr3.CNR3(clip)                                # defaults: cnr2-equivalent
+clip.set_output()
+```
 
-... briefly describe vapoursynth modes and why we chose fmParallelRequests (tested cache reliability and performance compared to other modes)
+Stronger chroma cleaning for a very noisy capture (raise chroma thresholds carefully — too high
+causes colour ghosting on movement):
 
-... briefly describe
+```python
+den = core.cnr3.CNR3(clip, u_threshold=60, v_threshold=60)
+```
 
-... relatively briefly describe the cache and its mechanisms and how they operate together, eg at least each of 
-cache and size , rolling wavefront for normal (non-jumping) transcodes in 99% of use cases,
-checkpoints, hot zones (aimed at jumping scenarios), prunes, pins, bias delay method and reason for it ...
+### Usage with interlaced input material
 
-... describe tested FPS performance with PAL SD (with debug ON) for the chosen Release mechanisms (fmParallelRequest, bias OFF etc).
+CNR3 filters frames; interlaced material must be processed PER FIELD, then re-woven, or the two
+fields' different time instants will be blended together and cause combing/ghosting in the
+chroma. Use the two helper functions in **Appendix A** (proven against real BFF VOB captures);
+the calling pattern is then just:
 
+```python
+import vapoursynth as vs
+core = vs.core
+# ... paste the Appendix A helpers here (split_into_fields, reweave_fields) ...
+
+clip = core.bs.VideoSource(r"capture_interlaced_PAL.avi")
+
+tag, first, second = split_into_fields(clip)     # "P", "TFF" or "BFF" + field streams
+if tag == "P":                                   # progressive: one CNR3 instance
+    den = core.cnr3.CNR3(first)
+else:                                            # interlaced: one instance PER field stream
+    first_d  = core.cnr3.CNR3(first)
+    second_d = core.cnr3.CNR3(second)
+    den = reweave_fields(tag, first_d, second_d)
+
+den.set_output()
+```
+
+Each field stream gets its OWN CNR3 instance (the recursion must follow each field's own
+timeline); startup provenance lines therefore appear once per instance (`CNR3[1]`, `CNR3[2]`) —
+this is normal.
+
+**WARNING — metadata-poor sources:** many container/codec combinations (notably `.avi`) carry NO
+reliable interlacing metadata: `_FieldBased` may be absent (reads as progressive) or wrong, and
+TFF vs BFF may be unknowable from the file. `split_into_fields` autodetects from `_FieldBased`,
+so for such material it can silently take the progressive path on interlaced footage. If your
+source is like this, determine the truth by inspection (bob the clip and step fields) and handle
+it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
+rather than trusting autodetection.
+
+## Errors
+
+Every rejected option produces a single-line creation error naming the option, what was
+received, and what is acceptable. Type mismatches for int/float options may instead be rejected
+by VapourSynth's own Python layer before CNR3 runs — also a clean, hard error.
+
+## Technical info for nerds
+
+**Why serial.** CNR3's cardinal rule is `output[N] = f(source[N], output[N-1])` — a recursive
+IIR along the timeline, with scene changes resetting the chain. That recursion is inherently
+serial: you cannot compute frame N without the *filtered* N-1. VapourSynth R76+, however, may
+request frames out of order and concurrently.
+
+**Modes, and why fmParallelRequests.** All three API4 filter modes were implemented and
+measured on a 3000-frame PAL SD workload (24 threads, Release, internal diagnostics ON):
+
+| mode | fps | wasted recomputes | notes |
+|---|---|---|---|
+| fmUnordered | 95 | 0 | clean but serialises everything |
+| **fmParallelRequests** | **337** | **~0 (1 duplicate)** | overlaps requests/planning, serialises compute — **shipped** |
+| fmParallel | 126 | 78% overcompute | overlapped compute races the recursion; a reservation-table fix is designed but parked |
+
+End-to-end with x264 (CRF18, PAL SD): ~274 fps, 5.5x realtime — the filter is not the bottleneck.
+
+**The cache.** Because requests arrive out of order, CNR3 keeps an internal cache of recent
+*filtered* output frames with: a bounded size (ceiling ~500 frames at SD with an eviction
+pruner); a rolling wavefront that serves normal linear transcodes (99% of use) with zero
+recomputation; periodic **checkpoints** (~every 10 frames) so that a request far from the
+wavefront can restart the recursion from the nearest checkpoint rather than frame 0; **hot
+zones** protecting regions around recent activity (aimed at seeking/jumping scenarios such as
+scrubbing editors); **pins** guaranteeing frames a computation depends on cannot be evicted
+mid-use; and bounded **recovery** (walk back to the nearest cached predecessor or checkpoint,
+recompute forward). Measured on the shipped configuration: recently-evicted-then-re-requested
+= 0 (the cache never thrashes on linear or shuffled SD workloads), and output is byte-identical
+across all modes and thread counts — scheduling changes, pixels do not.
+
+
+## Appendix A — field-splitting helpers (proven)
+
+These are the exact helpers used by the CNR3 test harnesses (validated against real BFF VOB
+captures). One line has been ADDED for the README relative to the harness version: the
+`SetFieldBased` call at the end of `reweave_fields`, restoring the interlaced flag that
+`SeparateFields` clears (so downstream filters/encoders see correct metadata).
+
+```python
+from typing import Optional, Tuple
+import vapoursynth as vs
+core = vs.core
+
+SplitResult = Tuple[str, vs.VideoNode, Optional[vs.VideoNode]]
+
+def split_into_fields(clip: vs.VideoNode) -> SplitResult:
+    """
+    Inspect a clip's field order and separate it into same-parity field streams.
+    Returns a 3-tuple (scan_tag, first, second):
+        scan_tag: "P" = progressive, "TFF" / "BFF" = interlaced field order
+        first:    progressive: the original clip; interlaced: the temporally-first fields
+        second:   progressive: None;              interlaced: the temporally-second fields
+    Process first and second independently, then pass all three values to
+    reweave_fields().  "first"/"second" are positions in the separated stream,
+    not top/bottom; reweave_fields() reconstructs the correct order from scan_tag,
+    so the caller never tracks tff explicitly.
+    SeparateFields output ordering:
+        TFF: [T0, B0, T1, B1, ...]   BFF: [B0, T0, B1, T1, ...]
+    """
+    frame0 = clip.get_frame(0)
+    field_based = int(frame0.props.get("_FieldBased", 0))   # 0=P, 1=BFF, 2=TFF
+    if field_based == 0:
+        return ("P", clip, None)
+    tff = (field_based == 2)
+    separated = core.std.SeparateFields(clip, tff=tff)
+    first  = core.std.SelectEvery(separated, cycle=2, offsets=[0])
+    second = core.std.SelectEvery(separated, cycle=2, offsets=[1])
+    return ("TFF" if tff else "BFF", first, second)
+
+def reweave_fields(
+    scan_tag: str,
+    first: vs.VideoNode,
+    second: Optional[vs.VideoNode],
+) -> vs.VideoNode:
+    """
+    Reweave two processed field streams from split_into_fields back into a
+    full-height interlaced clip, or return the processed progressive clip
+    directly ("P").
+    """
+    if scan_tag == "P":
+        return first
+    if second is None:
+        raise ValueError(
+            "reweave_fields: second field stream is None but scan_tag is not 'P'. "
+            "Pass the second field stream returned by split_into_fields()."
+        )
+    if scan_tag not in ("TFF", "BFF"):
+        raise ValueError(
+            f"reweave_fields: unrecognised scan_tag {scan_tag!r}. "
+            "Expected 'P', 'TFF', or 'BFF'."
+        )
+    tff = (scan_tag == "TFF")
+    # Interleave restores the original SeparateFields ordering:
+    #   TFF: [T0, B0, T1, B1, ...]   BFF: [B0, T0, B1, T1, ...]
+    reinterleaved = core.std.Interleave([first, second])
+    # DoubleWeave produces pairs: even index = clean same-parity weave (keep),
+    # odd index = dirty adjacent-parity weave (discard).
+    rewoven = core.std.DoubleWeave(reinterleaved, tff=tff)
+    woven = core.std.SelectEvery(rewoven, cycle=2, offsets=[0])
+    # ADDED FOR README: SeparateFields cleared _FieldBased; restore it so the
+    # output carries correct interlacing metadata (1=BFF, 2=TFF).
+    return core.std.SetFieldBased(woven, 2 if tff else 1)
+```
+
+(`core.std.Weave` does not exist in R76 — re-weaving is the DoubleWeave + SelectEvery pattern
+above.)
+
+## Credits
+
+- dubhater — the original VapourSynth Cnr2.
+- Asd-g — the AviSynth vsCnr2 port this project consulted for reference semantics.
+- The original Cnr2 concept by Marc FD.

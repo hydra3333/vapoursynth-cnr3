@@ -1,11 +1,11 @@
 <h1 align="center">
-CNR3    
+CNR3
+
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
 ![License](https://img.shields.io/badge/license-GPL--2.0-blue)
 ![Language](https://img.shields.io/badge/language-C%2B%2B-00599C?logo=c%2B%2B&logoColor=white)
 ![Status: Experimental](https://img.shields.io/badge/status-Under%20Development-ffcc00)
 </h1>    
-**(100% AI re-developed)**
 
 ## Description
 
@@ -32,6 +32,8 @@ itself [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vap
 Defaults and 8-bit behaviour match cnr2 (although outputs are not bit exact since CNR3 uses
 slightly more accurate arithmetic). The CNR3 parameter names are new but equivalent to those
 in CNR2 (see the [name equivalence table](#cnr2--cnr3-name-equivalence) for migration).
+
+CNR3 is 100% AI re-developed.
 
 This project is distributed under the GNU GENERAL PUBLIC LICENSE Version 2 or later
 (GPL-2.0-or-later).

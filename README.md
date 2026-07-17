@@ -4,7 +4,7 @@ CNR3
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
 ![License](https://img.shields.io/badge/license-GPL--2.0-blue)
 ![Language](https://img.shields.io/badge/language-C%2B%2B-00599C?logo=c%2B%2B&logoColor=white)
-![Status: Experimental](https://img.shields.io/badge/status-experimental-orange)
+![Status: Experimental](https://img.shields.io/badge/status-Under%20Development-yellow)
 </h1>
 
 <!--

@@ -47,57 +47,50 @@ Replace <LABEL>, <MESSAGE>, and <COLOR> with whatever text and named color you l
 -->
 
 
-
 ## Description
 
-
-Cnr2 is a temporal denoiser designed to denoise only the chroma.
+Targetted for use on noisy VHS/VHS-C analogue capture files, CNR3 is a temporal denoiser
+designed to denoise only the chroma, and is derived from the Cnr2 family of filters.
 
 According to the original author, this filter is suited for stationary rainbows or noisy analog captures.
 
+The venerable old CNR2 relied on the older VapourSynth APIv3 which has been phased out,
+and it additionally depended on a mode yielding SERIAL (in-number-order) arrival of frame requests which is
+strongly recommended against using under VapourSynth R76+.  CNR2 implemented recursive temporal model,
+where each output frame depends on the previous (filtered) output frame to be used for chroma blending instead
+of the previous source frame.
 
-vapoursynth-cnr3 is an experimental VapourSynth API4 chroma denoiser derived from the
-Cnr2 family of filters.
+Hence CNR3 uses VapourSynth supported APIv4 and supported mode fmParallelRequests, and implements
+a small output-frame cache to deal with out of order frame requests.
 
-It is specifically targetted at vapoursynth scripts for "fire and forget"
-chroma cleanup and conversion of noisy VHS/VHS-C analogue capture files.
-According to the original author, this filter is suited for stationary rainbows or noisy analog captures.
-
-Due to the way it works, vapoursynth-cnr3 is forced to run in a single thread.
-Cnr3 will also bottleneck the entire script, preventing it from using all the available CPU cores
-and crushing frame random access speed. For serial VHS denoising conversions "fire and forget"
-this may not be an issue.
-
-A possible way to work around the serial issue is splitting the video into
-chunks at scene changes, and filtering them in parallel with two or three
-instances of vspipe. Or not.
-
-The initial implementation intentionally preserves the recursive 
-temporal model, where each output frame depends on the previous filtered output
-frame rather than the previous frame itself. This is expected to be force serial
-and that issue is accepted as a quality-first design choice for a VHS/VHS-C 
-analogue chroma cleanup and conversion.
-
-This project is distributed under the GNU Affero General Public License v3.0 or later,
-being compatible with GPL-2.0-or-later.
+This project is distributed under the License GNU GENERAL PUBLIC LICENSE Version 2 or later (GPL-2.0-or-later).
 
 This is [a port/upgrade of the avisynth plugin vsCnr2](https://github.com/Asd-g/AviSynth-vsCnr2) which is
 itself be [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2),
-and appears to be more recently updated version.
+and appears to be more recently updated version of CNR2.
 
-### Requirements:
+## Requirements
 
 - Vapoursynth R76+ with python 3.14+ (possibly portable versions).
-
 - Microsoft VisualC++ Redistributable Package 2026+.
 
-### Usage:
+## Usage
+
+### Usage with  with Progressive input material
 
 ```
 Cnr3 (clip input, string "mode", float "scdthr", int "ln", int "lm", int "un", int "um", int "vn", int "vm", bool "sceneChroma")
 ```
 
-### Parameters:
+### Usage with  with Interlaced input material
+
+... describe use with Interlaced material (and provide a condensed .vpy showing only the interlaced
+detection and use code and the call(s) to cnr3) and being very careful to flag that some video files (eg .avi)
+do not contain enough metadata to discern interlaced material or TFF (Top Field First) or BFF (Bottom Field First)
+and that such material must be treated manually (separating fields, weaving, etc. (unless you can upate the vpy's
+subroutines to accept parameters (defaulting to autodetect) rather than just autodetect which they now do.
+
+### CNR3 Parameters
 
 - input<br>
     A clip to process.<br>
@@ -130,3 +123,24 @@ Cnr3 (clip input, string "mode", float "scdthr", int "ln", int "lm", int "un", i
 - sceneChroma<br>
     If True, the chroma is considered in the scene change detection.<br>
     Default: False.
+
+### Examples of use
+
+... insert 2 examples of use with progressive material here
+
+... insert 2 examples of use with intelraced material and the vpy code above mentioned above (one auto-detect, one manually-specifying)
+
+## Technical Info for Nerds
+
+... briefly describe the algorithm and why SERIAL is needed
+
+... briefly describe vapoursynth modes and why we chose fmParallelRequests (tested cache reliability and performance compared to other modes)
+
+... briefly describe
+
+... relatively briefly describe the cache and its mechanisms and how they operate together, eg at least each of 
+cache and size , rolling wavefront for normal (non-jumping) transcodes in 99% of use cases,
+checkpoints, hot zones (aimed at jumping scenarios), prunes, pins, bias delay method and reason for it ...
+
+... describe tested FPS performance with PAL SD (with debug ON) for the chosen Release mechanisms (fmParallelRequest, bias OFF etc).
+

@@ -1,9 +1,8 @@
 <h1 align="center">
-Smart_Stay_Awake
+CNR3
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
-![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)
+![License](https://img.shields.io/badge/license-GPL--2.0-blue)
 ![Language](https://img.shields.io/badge/language-C%23-239120)
 ![.NET 10 LTS](https://img.shields.io/badge/.NET-10.0_LTS-512BD4)
 ![Status](https://img.shields.io/badge/status-Initial%20Release-green)
@@ -22,8 +21,8 @@ Common Statuses
 ![Status: Inactive](https://img.shields.io/badge/status-inactive-lightgrey)
 ![Status](https://img.shields.io/badge/status-Under%20Development-orange) 
 
+![License](https://img.shields.io/badge/license-GPL--2.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)
 
 
 Common status labels 

@@ -151,9 +151,23 @@ import vapoursynth as vs
 core = vs.core
 # ... paste the Appendix A helpers here (split_into_fields, reweave_fields) ...
 
-clip = core.bs.VideoSource(r"capture_interlaced_PAL.avi")
+# this input video has well-defied Progressive/Interlaced metadata,
+# or this will fail without manual intervention (see below).
+clip = core.bs.VideoSource(r"capture_interlaced_PAL.mpg")   
 
-tag, first, second = split_into_fields(clip)     # "P", "TFF" or "BFF" + field streams
+# try to detect Progressive/Interlaced etc and separate fields
+# this will FAIL if the input has insufficiuent metadata  - see WARNING below
+# in which caee you MUST  manully
+#   - identify Progressive or Interlaced and if interlaced whether TFF or BFF
+#   - if Interlaced, separatefields into first and second
+#   = if progressive, set set into first
+#   set the tag as of one of "P", "TFF" or "BFF"
+tag, first, second = split_into_fields(clip)     # tag "P", "TFF" or "BFF" + field streams
+
+# process strictly depending in what was detected (or perhaps manually set tag/first/second yourself) 
+# tag = strictly one of "P", "TFF" or "BFF"
+# first = first field as a video clip
+# second = second field  as a video clip
 if tag == "P":                                   # progressive: one CNR3 instance
     den = core.cnr3.CNR3(first)
 else:                                            # interlaced: one instance PER field stream
@@ -168,11 +182,15 @@ Each field stream gets its OWN CNR3 instance (the recursion must follow each fie
 timeline); startup provenance lines therefore appear once per instance (`CNR3[1]`, `CNR3[2]`) —
 this is normal.
 
-**WARNING — metadata-poor sources:** many container/codec combinations (notably `.avi`) carry NO
-reliable interlacing metadata: `_FieldBased` may be absent (reads as progressive) or wrong, and
-TFF vs BFF may be unknowable from the file. `split_into_fields` autodetects from `_FieldBased`,
-so for such material it can silently take the progressive path on interlaced footage. If your
-source is like this, determine the truth by inspection (bob the clip and step fields) and handle
+**WARNING — metadata-poor input videos:**     
+**Many** container/codec combinations (notably `.avi`) carry **NO reliable interlacing metadata**
+- `_FieldBased` may be absent (or read as progressive) or plain wrong    
+- TFF vs BFF may be unknowable from the input file    
+
+If you have a source like that then you **must manually separatefields and re-weave them yourself**
+rather than use the function in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
+so for such material it can silently take the flag Progressive for Interlaced footage. 
+You can determine the truth by inspection (bob the clip and step fields) and handle
 it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
 rather than trusting autodetection.
 
@@ -216,9 +234,22 @@ across all modes and thread counts — scheduling changes, pixels do not.
 ## Appendix A — field-splitting helpers (proven)
 
 These are the exact helpers used by the CNR3 test harnesses (validated against real BFF VOB
-captures). One line has been ADDED for the README relative to the harness version: the
-`SetFieldBased` call at the end of `reweave_fields`, restoring the interlaced flag that
-`SeparateFields` clears (so downstream filters/encoders see correct metadata).
+captures). 
+
+**WARNING — metadata-poor input videos:**     
+**Many** container/codec combinations (notably `.avi`) carry **NO reliable interlacing metadata**
+- `_FieldBased` may be absent (or read as progressive) or plain wrong    
+- TFF vs BFF may be unknowable from the input file    
+
+If you have a source like that then you **must manually separatefields and re-weave them yourself**
+rather than use the function in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
+so for such material it can silently take the flag Progressive for Interlaced footage. 
+You can determine the truth by inspection (bob the clip and step fields) and handle
+it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
+rather than trusting autodetection.
+
+
+NOTE
 
 ```python
 from typing import Optional, Tuple
@@ -286,8 +317,10 @@ def reweave_fields(
     return core.std.SetFieldBased(woven, 2 if tff else 1)
 ```
 
-(`core.std.Weave` does not exist in R76 — re-weaving is the DoubleWeave + SelectEvery pattern
-above.)
+(`core.std.Weave` does not exist in R76 — re-weaving is the DoubleWeave + SelectEvery pattern above.)
+
+
+
 
 ## Credits
 

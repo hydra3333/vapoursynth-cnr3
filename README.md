@@ -29,8 +29,9 @@ deal correctly with out-of-order frame requests.
 
 This is [a port/upgrade of the AviSynth plugin vsCnr2](https://github.com/Asd-g/AviSynth-vsCnr2),
 itself [ported from the VapourSynth plugin Cnr2](https://github.com/dubhater/vapoursynth-cnr2).
-Defaults and 8-bit behaviour match cnr2; the user option names are new (see the
-[name equivalence table](#cnr2--cnr3-name-equivalence) for migration).
+Defaults and 8-bit behaviour match cnr2 (although outputs are not bit exact since CNR3 uses
+slightly more accurage arithetic). The CNR3 parameter names are new but equivalent to those
+in CNR2 (see the [name equivalence table](#cnr2--cnr3-name-equivalence) for migration).
 
 This project is distributed under the GNU GENERAL PUBLIC LICENSE Version 2 or later
 (GPL-2.0-or-later).

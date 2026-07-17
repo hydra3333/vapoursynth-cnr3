@@ -109,7 +109,7 @@ CNR3_EDIT_VERSION_LITERAL CNR3_SELECTED_FILTER_MODE_TEXT_SUFFIX;
     requests, or output frames.
     ---------------------------------------------------------------------------
 */
-#define CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE 1
+//#define CNR3_EMIT_PLUGIN_STARTUP_PROVENANCE 1
 
 /*
     CNR3_CACHE_PROFILE_HALF -- optional HALF-500 cache profile.
@@ -207,7 +207,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
     predecessor-present path is wired, so source[N] cannot survive as a
     fallback output path.
 */
-#define CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF 1
+//#define CNR3_KEYSTONE_LIVE_GETFRAME_FRAME0_PROOF 1
 
 /*
     Temporary CMS07-K.1E.3 live getFrame refusal boundary.
@@ -218,7 +218,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
     N == 1 and N == 2 predecessor-present compute branches are permanent
     branch-(c) logic and are not scaffold-marked.
 */
-#define SCAFFOLD_CMS07_K1E3_REFUSE_AFTER_FRAME2_BEFORE_RECOVERY 1
+//#define SCAFFOLD_CMS07_K1E3_REFUSE_AFTER_FRAME2_BEFORE_RECOVERY 1
 
 /*
     Temporary proof scaffold convention.
@@ -272,7 +272,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
 //  Human interpretation: Out-of-order arrivals are INFO under intentional stress, WARN if
 //                        sequential order was expected, and not failures by themselves;
 //                        impossible accounting is failure evidence.
-#define CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER 1
+//#define CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM01_REQUEST_ORDER)
 #   define CNR3_DIAG_PRINT_DSUM01_REQUEST_ORDER 1
 #endif
@@ -298,7 +298,7 @@ inline constexpr double CNR3_P11C_DEFAULT_SCDTHR = 10.0;
 //  Human interpretation: process_private_usage is usually the best leak-suspicion indicator;
 //                        working_set and system metrics are interpretive; persistent
 //                        post-cleanup elevation matters more than normal in-run growth.
-#define CNR3_DIAG_COMPUTE_DSUM02_MEMORY 1
+//#define CNR3_DIAG_COMPUTE_DSUM02_MEMORY 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM02_MEMORY)
 #   define CNR3_DIAG_PRINT_DSUM02_MEMORY 1
 #endif
@@ -324,7 +324,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Deep search is not automatically bad; repeated deep search may
 //                        indicate retention, prune, or workload pressure; denominator
 //                        mismatches or bounded-start honesty failures are serious.
-#define CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH 1
+//#define CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM03_RECOVERY_SEARCH)
 #   define CNR3_DIAG_PRINT_DSUM03_RECOVERY_SEARCH 1
 #endif
@@ -349,7 +349,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //                     pin_list_discharges, pin_list_balance, ownership_errors.
 //  Human interpretation: pin_balance and lookup_ref_balance must be zero after drain;
 //                        acquired == released + transferred is the lookup-ref invariant.
-#define CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE 1
+//#define CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM04_OWNERSHIP_BALANCE)
 #   define CNR3_DIAG_PRINT_DSUM04_OWNERSHIP_BALANCE 1
 #endif
@@ -375,7 +375,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Non-zero cached count before cleanup may be normal; non-zero pins
 //                        after drain, integrity errors, validation failures, ref balance
 //                        errors, or clear failures are correctness failures.
-#define CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY 1
+//#define CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM05_CACHE_INTEGRITY)
 #   define CNR3_DIAG_PRINT_DSUM05_CACHE_INTEGRITY 1
 #endif
@@ -401,7 +401,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Retrieved and released counts should balance; retrieve without
 //                        same-activation request is a lifecycle violation; partial acquire
 //                        failure must be inspected even when cleanup is clean.
-#define CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE 1
+//#define CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM06_SOURCE_FRAME_LIFECYCLE)
 #   define CNR3_DIAG_PRINT_DSUM06_SOURCE_FRAME_LIFECYCLE 1
 #endif
@@ -427,7 +427,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Duplicate computed/discarded outputs may be normal under stress;
 //                        clean ownership is the key question: no leak, no double-free,
 //                        no ambiguous owner, and documented balance equation.
-#define CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE 1
+//#define CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM07_TEMP_OUTPUT_LIFECYCLE)
 #   define CNR3_DIAG_PRINT_DSUM07_TEMP_OUTPUT_LIFECYCLE 1
 #endif
@@ -451,7 +451,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Duplicate counts are not automatically bad; duplicates with clean
 //                        ownership are INFO/WARN by test intent, but overwrite, leak,
 //                        ref imbalance, or genuine store errors are failures.
-#define CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE 1
+//#define CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM08_CACHE_STORE)
 #   define CNR3_DIAG_PRINT_DSUM08_CACHE_STORE 1
 #endif
@@ -476,7 +476,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Decision and transfer are separate and both must be accounted;
 //                        yes-without-transfer needs cleanup/error accounting, and
 //                        lookup_ref_balance must remain zero.
-#define CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER 1
+//#define CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM09_RETURN_TRANSFER)
 #   define CNR3_DIAG_PRINT_DSUM09_RETURN_TRANSFER 1
 #endif
@@ -501,7 +501,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Pinned/checkpoint/in-zone rejection counts usually mean protections
 //                        are active; any protected-frame eviction is FAIL; K-limit hits
 //                        show prune pressure.
-#define CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION 1
+//#define CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM10_PRUNE_EVICTION)
 #   define CNR3_DIAG_PRINT_DSUM10_PRUNE_EVICTION 1
 
@@ -543,7 +543,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Hot zones are prune-policy hints only; active liveness is proven
 //                        by pins, not zones; unbounded growth, no expiry, or corrupted
 //                        ranges indicate policy problems.
-#define CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE 1
+//#define CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM11_HOT_ZONE)
 #   define CNR3_DIAG_PRINT_DSUM11_HOT_ZONE 1
 #endif
@@ -570,7 +570,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Plan create/destroy must balance; holes identified and filled should
 //                        match for successful plans; source requests must be for genuine holes,
 //                        not a blanket backward source window.
-#define CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN 1
+//#define CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM12_RECOVERY_PLAN)
 #   define CNR3_DIAG_PRINT_DSUM12_RECOVERY_PLAN 1
 #endif
@@ -595,7 +595,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Some recalculation may be expected under out-of-order stress;
 //                        recalculation with clean ownership is not failure by itself;
 //                        deep/repeated recalculation may indicate retention/prune problems.
-#define CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION 1
+//#define CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM13_RECALCULATION)
 #   define CNR3_DIAG_PRINT_DSUM13_RECALCULATION 1
 #endif
@@ -627,7 +627,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: Scene-change detection is a pixel-layer observation; source-copy
 //                        reset is algorithmic; checkpoint promotion is cache/store consequence;
 //                        eligible reset without required promotion is a serious issue.
-#define CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET 1
+//#define CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM14_SCENE_RESET)
 #   define CNR3_DIAG_PRINT_DSUM14_SCENE_RESET 1
 #endif
@@ -649,7 +649,7 @@ inline constexpr int CNR3_MEMORY_DIAG_FRAME_INTERVAL = 1000;
 //  Human interpretation: This is a per-frame trace, not an aggregate summary. It is
 //                        observe-only and must compile out completely when the master
 //                        compute gate is disabled.
-#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
+//#define CNR3_DIAG_COMPUTE_DSUM_PLANTRACE 1
 #if defined(CNR3_DIAG_COMPUTE_DSUM_PLANTRACE)
 #   define CNR3_DIAG_PRINT_DSUM_PLANTRACE 1
 #endif

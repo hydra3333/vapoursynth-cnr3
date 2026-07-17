@@ -127,7 +127,7 @@ curve strings strictly.)
 import vapoursynth as vs
 core = vs.core
 
-clip = core.bs.VideoSource(r"capture_progressive.avi")     # any source filter
+clip = core.bs.VideoSource(r"capture_progressive.mpg")     # any source filter
 clip = core.cnr3.CNR3(clip)                                # defaults: cnr2-equivalent
 clip.set_output()
 ```
@@ -144,7 +144,19 @@ den = core.cnr3.CNR3(clip, u_threshold=60, v_threshold=60)
 CNR3 filters frames; interlaced material must be processed PER FIELD, then re-woven, or the two
 fields' different time instants will be blended together and cause combing/ghosting in the
 chroma. Use the two helper functions in **Appendix A** (proven against real BFF VOB captures);
-the calling pattern is then just:
+the calling pattern is below.
+
+**WARNING — metadata-poor input videos:**     
+**Many** container/codec combinations (notably `.avi`) carry **NO reliable interlacing metadata**
+- `_FieldBased` may be absent (or read as progressive) or plain wrong    
+- TFF vs BFF may be unknowable from the input file    
+
+If you have a source like that then you **must manually separatefields and re-weave them yourself**
+rather than use the function in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
+so for such material it can silently take the flag Progressive for Interlaced footage. 
+You can determine the truth by inspection (bob the clip and step fields) and handle
+it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
+rather than trusting autodetection.
 
 ```python
 import vapoursynth as vs
@@ -181,18 +193,6 @@ den.set_output()
 Each field stream gets its OWN CNR3 instance (the recursion must follow each field's own
 timeline); startup provenance lines therefore appear once per instance (`CNR3[1]`, `CNR3[2]`) —
 this is normal.
-
-**WARNING — metadata-poor input videos:**     
-**Many** container/codec combinations (notably `.avi`) carry **NO reliable interlacing metadata**
-- `_FieldBased` may be absent (or read as progressive) or plain wrong    
-- TFF vs BFF may be unknowable from the input file    
-
-If you have a source like that then you **must manually separatefields and re-weave them yourself**
-rather than use the function in Appendix A.  Function `split_into_fields` attempts to autodetect `_FieldBased`,
-so for such material it can silently take the flag Progressive for Interlaced footage. 
-You can determine the truth by inspection (bob the clip and step fields) and handle
-it manually — call `SeparateFields`/`reweave_fields` yourself with the field order you verified,
-rather than trusting autodetection.
 
 ## Errors
 

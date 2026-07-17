@@ -20,7 +20,7 @@ the current colour toward the previous already-cleaned colour. Brightness (luma)
 filtered — it passes through untouched and is used only as a guard for the colour decision.
 
 The venerable old CNR2 relied on VapourSynth APIv3, which has been phased out, and additionally
-depended on a serial (in-number-order) frame delivery mode that is strongly recommended against
+depended on a serial (in-number-order) output frame request mode which is strongly recommended against
 under VapourSynth R76+. Like CNR2, CNR3 implements a recursive temporal model — each output
 frame depends on the previous *filtered* output frame, not the previous source frame — which is
 inherently serial. CNR3 therefore uses the supported APIv4 and the supported `fmParallelRequests`

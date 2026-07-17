@@ -202,12 +202,16 @@ by VapourSynth's own Python layer before CNR3 runs — also a clean, hard error.
 
 ## Technical info for nerds
 
-**Why serial.** CNR3's cardinal rule is `output[N] = f(source[N], output[N-1])` — a recursive
+### **Why serial.**    
+
+CNR3's cardinal rule is `output[N] = f(source[N], output[N-1])` — a recursive
 IIR along the timeline, with scene changes resetting the chain. That recursion is inherently
 serial: you cannot compute frame N without the *filtered* N-1. VapourSynth R76+, however, may
 request frames out of order and concurrently.
 
-**Modes, and why fmParallelRequests.** All three API4 filter modes were implemented and
+### **Modes, and why fmParallelRequests.**    
+
+All three API4 filter modes were implemented and
 measured on a 3000-frame PAL SD workload (24 threads, Release, internal diagnostics ON):
 
 | mode | fps | wasted recomputes | notes |
@@ -218,18 +222,59 @@ measured on a 3000-frame PAL SD workload (24 threads, Release, internal diagnost
 
 End-to-end with x264 (CRF18, PAL SD): ~274 fps, 5.5x realtime — the filter is not the bottleneck.
 
-**The cache.** Because requests arrive out of order, CNR3 keeps an internal cache of recent
-*filtered* output frames with: a bounded size (ceiling ~500 frames at SD with an eviction
-pruner); a rolling wavefront that serves normal linear transcodes (99% of use) with zero
-recomputation; periodic **checkpoints** (~every 10 frames) so that a request far from the
-wavefront can restart the recursion from the nearest checkpoint rather than frame 0; **hot
-zones** protecting regions around recent activity (aimed at seeking/jumping scenarios such as
-scrubbing editors); **pins** guaranteeing frames a computation depends on cannot be evicted
-mid-use; and bounded **recovery** (walk back to the nearest cached predecessor or checkpoint,
-recompute forward). Measured on the shipped configuration: recently-evicted-then-re-requested
-= 0 (the cache never thrashes on linear or shuffled SD workloads), and output is byte-identical
-across all modes and thread counts — scheduling changes, pixels do not.
+### **The CNR3 internal cache
 
+Because frame requests may arrive from vapoursynth out of order (and concurrently), CNR3 keeps
+an internal cache of recent *filtered* output frames. The cache has several simplistic mechanisms
+to manage itself and deliver "past *filtered* output frame(s)" for the compute sequence.
+
+Two main use-cases are apparent:
+(1) an end-to-end "linear progression" arising from a transcode (eg vspipe to ffmpeg)
+(2) viewing or editing, jumping from point to point
+
+It is estimated that for VHS/VHS-C analogue capture files, use-case (1) is 99.9% of CNR3 use.
+
+**The wavefront (the normal case).** A linear transcode requests frames 0, 1, 2, ... in order
+opr clore enough to it under mode fmParallelRequests. 
+The cache simply holds the most recent filtered frames, and each new frame finds its predecessor
+(N-1) immediately: zero recomputation, zero overhead. This serves the overwhelming majority of
+real use (encodes) — everything below exists for the exceptions.
+
+**Bounded size + eviction.** The cache cannot grow forever, so it has a ceiling (~500 frames at
+SD) and a pruner that evicts the least useful frames as new ones arrive. Eviction is safe
+because anything evicted can be recomputed (see recovery) — the bound trades a little potential
+recomputation for a hard memory guarantee.
+
+**Checkpoints (bounding the cost of a cold request).** The recursion means frame N depends on
+filtered N-1, which depends on N-2, and so on back to the last scene change. A request far from
+anything cached would naively force recomputation from frame 0. Instead, CNR3 designates every
+~10th frame a checkpoint: a legal restart point for the recursion. Checkpopints are pruned from
+the cache less frequently than non-checkping frames and so benefit a backward-search. A cold
+request walks back at most to the nearest checkpoint, never to the start of the clip — recovery
+cost is bounded by the checkpoint spacing, not the clip length.
+
+**Recovery (filling a hole).** When a requested frame's predecessor is not cached, CNR3 walks
+back to the nearest cached predecessor or checkpoint (bounded, per above), then recomputes
+forward from there to the requested frame, caching as it goes. Recovery is the general fallback
+that makes every other bound safe.
+
+**Hot zones (protecting where you are working).** Seeking and scrubbing (jumping around in an
+editor) create activity clusters far from the wavefront. Regions around recent activity are
+marked hot and protected from eviction, so scrubbing back and forth over the same section does
+not repeatedly evict and recompute it.
+
+**Pins (correctness under concurrency).** While a computation is using a cached frame as its
+predecessor, that frame is pinned: the pruner cannot evict it mid-use, no matter what. Pins are
+the hard correctness guarantee that the memory bound can never compromise an in-flight
+computation.
+
+**Measured results (shipped configuration, PAL SD workloads).** The tell-tale counter
+`recently-evicted-then-re-requested` — "did we throw away something we immediately needed
+again?" — reads **0** on both linear and shuffled request patterns: the cache does not thrash,
+and halving its ceiling (1000 -> 500) changed neither that counter nor throughput. And the
+bottom line for correctness: output is
+**tested as byte-identical across all filter modes and thread counts** — scheduling changes,
+pixels did not.
 
 ## Appendix A — field-splitting helpers (proven)
 

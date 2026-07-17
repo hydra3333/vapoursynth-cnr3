@@ -1,162 +1,147 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-#include <vector>
 
-#include "VapourSynth4.h"
-#include "VSHelper4.h"
+#include "cnr3_build_config.h"
 
-#include "cnr3_cache.h"
+/*
+    CNR3 common shared definitions.
 
-// -----------------------------------------------------------------------------
-// Small shared mechanical helpers
-// -----------------------------------------------------------------------------
+    CMS07-B.2.1 keeps this header deliberately small.
 
-inline int cnr3_clamp_int(
+    This header may contain:
+        - tiny shared mechanical types;
+        - shared status/result codes;
+        - tiny constexpr helpers that are genuinely cross-module.
+
+    This header must not contain:
+        - VapourSynth headers;
+        - old strict streaming cache state;
+        - CMS06 output cache-manager state;
+        - old proof-phase fields;
+        - pixel-processing tables;
+        - memory diagnostics accumulators;
+        - monolithic per-instance runtime state.
+
+    Per-instance user/configuration state belongs in cnr3_instance_config.*.
+    Cache ownership, pins, slots, checkpoints, hot zones, prune, and recovery
+    state belong in cnr3_cache_core.*.
+    Diagnostics accumulation/printing belongs in the diagnostics modules.
+*/
+
+/*
+    A CNR3 instance ID is a diagnostic/logging aid only.
+
+    It helps distinguish simultaneous filter instances in stderr diagnostics.
+    It does not identify global shared state and must not be used to share cache
+    or runtime state between instances.
+*/
+struct Cnr3InstanceId {
+    int value = 0;
+};
+
+[[nodiscard]] constexpr bool cnr3_instance_id_is_valid(
+    Cnr3InstanceId instance_id
+) noexcept {
+    return instance_id.value > 0;
+}
+
+/*
+    Shared frame-number constants/helpers.
+
+    VapourSynth frame numbers are non-negative. CNR3 uses -1 only as a local
+    sentinel for "no frame" / "not yet set"; it must never be passed as a real
+    source or output frame request.
+*/
+inline constexpr int CNR3_INVALID_FRAME_NUMBER = -1;
+
+[[nodiscard]] constexpr bool cnr3_frame_number_is_valid(
+    int frame_number
+) noexcept {
+    return frame_number >= 0;
+}
+
+/*
+    Small shared integer clamp helper.
+
+    Keep this here only because clamp-like bounds checks are needed by multiple
+    layers. Do not grow this header into a general algorithm or pixel-processing
+    utility header.
+*/
+[[nodiscard]] constexpr int cnr3_clamp_int(
     int value,
     int low,
     int high
-) {
-    if (value < low) {
-        return low;
-    }
-
-    if (value > high) {
-        return high;
-    }
-
-    return value;
+) noexcept {
+    return (value < low) ? low : ((value > high) ? high : value);
 }
 
-// -----------------------------------------------------------------------------
-// CNR3 per-instance data
-//
-// A Cnr3Data object is created per VapourSynth CNR3 filter instance. This header
-// shares the type definition across translation units; it does not create shared
-// runtime state between instances.
-// -----------------------------------------------------------------------------
+/*
+    Cross-module status codes.
 
-struct Cnr3Data {
-    VSNode *node = nullptr;
-    const VSVideoInfo *vi = nullptr;
+    These are intentionally generic. They describe mechanical success/failure
+    classes that may be shared by cache, diagnostics, configuration, and future
+    integration code.
 
-    // Human-readable ID used to distinguish simultaneous CNR3 filter instances.
-    int instance_id = 0;
+    Detailed human error messages remain at the call site that has enough
+    context to explain the failure. VapourSynth-facing errors are still mapped
+    later through mapSetError() during create/configuration and setFilterError()
+    during frame processing.
+*/
+enum class Cnr3Status : std::uint8_t {
+    ok = 0,
 
-    std::string mode = "oxx";
+    invalid_argument,
+    unsupported_format,
+    allocation_failed,
 
-    /*
-        Public threshold parameters are always interpreted in 8-bit Cnr2/vscnr2-compatible units. 
-        For clips above 8-bit depth, CNR3 scales these values internally to the actual sample depth.
-    */
-    int ln = 35;
-    int lm = 192;
-    int un = 47;
-    int um = 255;
-    int vn = 47;
-    int vm = 255;
+    not_found,
+    duplicate,
+    capacity_exceeded,
 
-    int bits_per_sample = 8;
-    int sample_peak = 255;
+    invariant_violation,
+    lifecycle_violation,
+    ownership_violation,
 
-    int ln_scaled = 35;
-    int lm_scaled = 192;
-    int un_scaled = 47;
-    int um_scaled = 255;
-    int vn_scaled = 47;
-    int vm_scaled = 255;
-
-    /*
-        Lookup tables used by the Cnr2/vscnr2-style weighting logic.
-
-        The public parameters are 8-bit-domain values. These tables are built
-        after those values have been scaled to the actual integer bit depth.
-
-        Important mode semantics:
-            'x' does not mean disabled.
-            'o' does not mean enabled.
-
-            'x' = narrow response curve.
-                  More sensitive to current-vs-previous differences.
-                  Blending will be reduced sooner as differences increase.
-                  This is safer but less aggressive.
-
-            'o' = wide response curve.
-                  Less sensitive to current-vs-previous differences.
-                  Blending remains allowed across a wider difference range.
-                  This gives stronger chroma stabilisation but has more risk
-                  of chroma lag, smearing, or ghosting around real motion.
-
-        Why the historical default mode="oxx" can still make sense:
-            Y uses the wider response, so luma structure does not block chroma
-            stabilisation too eagerly.
-
-            U and V use narrower responses, so actual chroma changes are
-            treated more conservatively.
-
-            This can give useful chroma shimmer reduction while reducing the
-            risk of dragging old chroma into genuinely changed areas.
-
-        Table index:
-            signed sample difference plus table_offset.
-
-            Example:
-                signed_diff = current_sample - previous_sample
-                table_index = signed_diff + table_offset
-
-        Table value:
-            0..sample_peak weighting value.
-
-        This matches the shape needed by the real vscnr2-style blend, where
-        Y and chroma table values are multiplied together before blending
-        previous filtered chroma with current source chroma.
-    */
-    int table_offset = 256;
-    int table_size = 513;
-
-    std::vector<int> table_y;
-    std::vector<int> table_u;
-    std::vector<int> table_v;
-
-    double scdthr = 10.0;
-
-    bool scene_chroma = false;
-
-    /*
-        vscnr2-style scene-change threshold.
-
-        This is calculated once in cnr3_create() from:
-            scdthr
-            frame width/height
-            bit depth
-            chroma subsampling
-            scene_chroma
-
-        During frame processing, accumulated frame difference greater than this
-        threshold causes CNR3 to output the current source frame unchanged for
-        that frame, matching the vscnr2 scene-change behaviour as closely as
-        practical in the current API4 structure.
-    */
-    int64_t scene_change_threshold = 0;
-
-    /*
-        blend=true enables the first real vscnr2-style recursive chroma blend.
-        blend=false keeps the current pass-through chroma output while still
-                    running the diagnostic read/table paths.
-
-        The option will remain for future maintenance/testing, and release behaviour
-        will default to Cnr2-style blending enabled.
-    */
-    bool blend = true;
-
-    /*
-        Frame ordering and recursive-state manager.
-
-        Currently this implements only strict streaming Policy A.
-        The struct shape deliberately leaves room for the future cache manager.
-    */
-    Cnr3CacheManager cache;
-
-    bool debug = false;
+    vapoursynth_error,
+    not_implemented
 };
+
+[[nodiscard]] constexpr const char* cnr3_status_name(
+    Cnr3Status status
+) noexcept {
+    switch (status) {
+    case Cnr3Status::ok:
+        return "ok";
+    case Cnr3Status::invalid_argument:
+        return "invalid_argument";
+    case Cnr3Status::unsupported_format:
+        return "unsupported_format";
+    case Cnr3Status::allocation_failed:
+        return "allocation_failed";
+    case Cnr3Status::not_found:
+        return "not_found";
+    case Cnr3Status::duplicate:
+        return "duplicate";
+    case Cnr3Status::capacity_exceeded:
+        return "capacity_exceeded";
+    case Cnr3Status::invariant_violation:
+        return "invariant_violation";
+    case Cnr3Status::lifecycle_violation:
+        return "lifecycle_violation";
+    case Cnr3Status::ownership_violation:
+        return "ownership_violation";
+    case Cnr3Status::vapoursynth_error:
+        return "vapoursynth_error";
+    case Cnr3Status::not_implemented:
+        return "not_implemented";
+    }
+
+    return "unknown";
+}
+
+[[nodiscard]] constexpr bool cnr3_status_is_ok(
+    Cnr3Status status
+) noexcept {
+    return status == Cnr3Status::ok;
+}

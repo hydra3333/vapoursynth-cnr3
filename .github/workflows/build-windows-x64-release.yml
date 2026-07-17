@@ -1,0 +1,165 @@
+name: Build and Release Windows x64 DLL
+
+# Triggers: manual run from the Actions tab, or creation of a GitHub Release.
+# On a Release trigger the zip is also attached to the Release itself.
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+permissions:
+  contents: write   # needed to attach assets to the Release
+
+jobs:
+  build-windows-x64:
+    name: Build cnr3.dll (Release x64, VS2026)
+    # windows-latest = Windows Server 2025 + Visual Studio 2026 (v145) since the
+    # June 2026 image migration. Free for public repos.
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure MSVC x64 environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Show toolchain versions
+        shell: cmd
+        run: |
+          where cl
+          cl 2>&1 | findstr /i "version"
+
+      - name: Verify vendored VapourSynth headers present
+        shell: pwsh
+        run: |
+          $h = "third_party/vapoursynth/include/VapourSynth4.h"
+          if (-not (Test-Path $h)) { Write-Error "Vendored header missing: $h"; exit 1 }
+          # Show the API version macros for the log (provenance)
+          Select-String -Path $h -Pattern "VAPOURSYNTH_API_MAJOR|VAPOURSYNTH_API_MINOR" | ForEach-Object { $_.Line }
+          Write-Host "NOTE: building against vendored headers (API4, default 4.0 profile)."
+
+      - name: Check for legacy VapourSynth API usage
+        shell: pwsh
+        run: |
+          $patterns = @(
+            '#include\s+[<"]VapourSynth\.h[>"]',
+            '#include\s+[<"]VSHelper\.h[>"]',
+            'VSNodeRef','VSFrameRef','VSFuncRef',
+            'cloneFrameRef','cloneFrame\(','freeFrameRef','createFilter\('
+          )
+          $files = Get-ChildItem -Path src -Recurse -Include *.c,*.cc,*.cpp,*.h,*.hpp
+          foreach ($p in $patterns) {
+            $m = $files | Select-String -Pattern $p
+            if ($m) {
+              Write-Error "Legacy VapourSynth API pattern found: $p"
+              $m | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber): $($_.Line)" }
+              exit 1
+            }
+          }
+          Write-Host "No legacy VapourSynth API usage found."
+
+      - name: Show embedded provenance marker (CNR3_EDIT_VERSION)
+        shell: pwsh
+        run: |
+          $m = Select-String -Path "src/cnr3_build_config.h" -Pattern 'CNR3_EDIT_VERSION_LITERAL\s+"'
+          if (-not $m) { Write-Error "CNR3_EDIT_VERSION_LITERAL not found"; exit 1 }
+          $m.Line.Trim()
+          # capture for later steps
+          $marker = ($m.Line -replace '.*"(.*)".*','$1')
+          "CNR3_MARKER=$marker" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build cnr3.dll (mirrors vcxproj Release|x64 exactly - see flag map)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          # Source list: every src/*.cpp EXCEPT the selftest exe's main().
+          # (Mirrors the vcxproj ClCompile items; wildcard keeps it in sync forever.)
+          $sources = Get-ChildItem src -Filter *.cpp |
+                     Where-Object Name -ne 'cnr3_cache_core_selftest_main.cpp' |
+                     ForEach-Object { $_.FullName }
+          Write-Host "Compiling:"; $sources | ForEach-Object { Write-Host "  $_" }
+
+          # ---- FLAG MAP (cl flag  <-  vcxproj Release|x64 setting) ----
+          #  /O2 /Ot        <- Optimization=MaxSpeed, FavorSizeOrSpeed=Speed
+          #  /Ob2           <- InlineFunctionExpansion=AnySuitable
+          #  /Oi            <- IntrinsicFunctions=true
+          #  /GL            <- WholeProgramOptimization=true
+          #  /arch:AVX2     <- EnableEnhancedInstructionSet=AdvancedVectorExtensions2
+          #  /GS /sdl       <- SDLCheck=true (security kept in Release by decision)
+          #  /fp:precise    <- explicit by decision (do NOT change to /fp:fast)
+          #  /Gy /Zc:inline <- function-level linking + drop unreferenced inlines
+          #  /std:c++20 /permissive- <- LanguageStandard, ConformanceMode
+          #  /EHsc /MD /MP  <- C++ exceptions, dynamic CRT, parallel compile
+          #  /W3            <- WarningLevel=Level3
+          #  /Zi /Fd        <- DebugInformationFormat=ProgramDatabase (PDB kept)
+          #  defines        <- NDEBUG;CNR3_EXPORTS;_WINDOWS;_USRDLL;NOMINMAX + Unicode (NOMINMAX also set in vcxproj)
+          #  link /LTCG     <- LinkTimeCodeGeneration
+          #  link /OPT:REF  <- discard unreferenced functions (pairs with /Gy)
+          #  link /OPT:NOICF<- EnableCOMDATFolding=false (deliberate: speed over size)
+          #  link /DEBUG    <- GenerateDebugInformation=true
+          cl /nologo /W3 /EHsc /MD /MP `
+             /std:c++20 /permissive- `
+             /O2 /Ot /Ob2 /Oi /GL /arch:AVX2 `
+             /GS /sdl /fp:precise /Gy /Zc:inline `
+             /Zi /Fdbuild\cnr3.pdb `
+             /DNDEBUG /DCNR3_EXPORTS /D_WINDOWS /D_USRDLL /DUNICODE /D_UNICODE /DNOMINMAX `
+             /I third_party\vapoursynth\include `
+             /Fobuild\ `
+             $sources `
+             /LD /Febuild\cnr3.dll `
+             /link /LTCG /OPT:REF /OPT:NOICF /DEBUG /PDB:build\cnr3.pdb
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify DLL (machine, exports, hash)
+        shell: cmd
+        run: |
+          echo === DLL machine / characteristics ===
+          dumpbin /headers build\cnr3.dll | findstr /i "machine DLL"
+          echo.
+          echo === Exports (must include VapourSynthPluginInit2) ===
+          dumpbin /exports build\cnr3.dll
+          dumpbin /exports build\cnr3.dll | findstr /i "VapourSynthPluginInit2" >nul || (echo MISSING PLUGIN ENTRY POINT & exit /b 1)
+          echo.
+          echo === SHA256 ===
+          certutil -hashfile build\cnr3.dll SHA256
+
+      - name: Assemble release zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build/cnr3.dll dist/
+          Copy-Item README.md dist/README_CNR3.md
+          $hash = (Get-FileHash build/cnr3.dll -Algorithm SHA256).Hash
+          "$hash  cnr3.dll" | Out-File dist/SHA256SUMS.txt -Encoding ascii
+          # provenance file: marker + commit + toolchain
+          @(
+            "marker:  $env:CNR3_MARKER"
+            "commit:  $env:GITHUB_SHA"
+            "ref:     $env:GITHUB_REF"
+            "built:   $(Get-Date -AsUTC -Format o) (UTC)"
+            "runner:  windows-latest (WS2025 + VS2026)"
+            "sha256:  $hash"
+          ) | Out-File dist/BUILD_INFO.txt -Encoding ascii
+          Get-Content dist/BUILD_INFO.txt
+          $zip = "vapoursynth-cnr3-windows-x64.zip"
+          Compress-Archive -Path dist/* -DestinationPath $zip -Force
+          "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload workflow artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vapoursynth-cnr3-windows-x64
+          path: |
+            vapoursynth-cnr3-windows-x64.zip
+            build/cnr3.pdb
+
+      - name: Attach zip to the Release (release trigger only)
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" "$env:ZIP_NAME" --clobber

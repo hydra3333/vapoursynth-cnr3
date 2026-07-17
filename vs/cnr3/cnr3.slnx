@@ -1,7 +1,7 @@
 <Solution>
   <Configurations>
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
   <Project Path="cnr3.vcxproj" Id="c127294b-e66d-4272-8ba0-e4eb4ba169d6" />
+  <Project Path="cnr3_cache_core_selftest.vcxproj" Id="b5dcad45-31bb-48c8-81a3-52d3b6e6b451" />
 </Solution>

@@ -69,11 +69,24 @@ CNR3 is 100% AI re-developed.
 This project is distributed under the GNU GENERAL PUBLIC LICENSE Version 2 or later
 (GPL-2.0-or-later).
 
+### Important Note 
+A new better CNR4, inspired by CNR2, has been developed [here](https://github.com/adworacz/zsmooth#cnr4)
+which uses a different algorithm to CNR2, however is said to yield a much better result.
+
+> While Cnr4 is inspired by Cnr2, it provides several key improvements over the original:
+> - Multithreading friendly (the original Cnr2 was limited to serial processing).
+> - Roughly 2x faster single-threaded and 10x faster multithreaded.
+> - Better denoising quality due to the use of past and future frames. Cnr2 only used past frames.
+> - Significantly reduced ghosting.
+> - Adjustable temporal radius.
+> - Configurable temporal handling and weighting modes.
+
 ## Requirements
 
 - VapourSynth R76+ with Python 3.14+ (portable versions work).
 - Microsoft Visual C++ Redistributable 2026+ (x64).
 - a PC with AVX2 instructions. Google: "AVX2 has been a mainstream CPU feature for about 13 years. Estimated 85% to 90% of modern PCs currently in use have AVX2 support."
+
 
 ## Usage
 

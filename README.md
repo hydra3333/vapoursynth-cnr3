@@ -4,8 +4,39 @@ CNR3
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)
 ![License](https://img.shields.io/badge/license-GPL--2.0-blue)
 ![Language](https://img.shields.io/badge/language-C%2B%2B-00599C?logo=c%2B%2B&logoColor=white)
-![Status: Experimental](https://img.shields.io/badge/status-Under%20Development-ffcc00)
+![Status: Released](https://img.shields.io/badge/status-Released-brightgreen)
 </h1>    
+
+<!--
+Common Statuses
+![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
+![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
+![Status: Beta](https://img.shields.io/badge/status-beta-blue)
+![Status: Experimental](https://img.shields.io/badge/status-experimental-orange)
+![Status: Deprecated](https://img.shields.io/badge/status-deprecated-red)
+![Status: Inactive](https://img.shields.io/badge/status-inactive-lightgrey)
+![Status](https://img.shields.io/badge/status-Under%20Development-orange) 
+
+Common status labels
+active, maintained, stable
+alpha, beta, experimental
+deprecated, legacy, archived, inactive
+
+Typical named colors
+Greens: brightgreen, green, yellowgreen
+Yellows/Oranges: yellow, orange
+Reds: red, crimson, firebrick
+Blues/Purples: blue, navy, blueviolet
+Neutrals: lightgrey, grey/gray, black
+
+Semantic: 
+success (brightgreen), informational (blue), critical (red), inactive (lightgrey), important (orange) 
+
+How to craft your own
+https://img.shields.io/badge/<LABEL>-<MESSAGE>-<COLOR>
+Replace <LABEL>, <MESSAGE>, and <COLOR> with whatever text and named color you like. (Spaces become %20)
+-->
+
 
 ## Description
 

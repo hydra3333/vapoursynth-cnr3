@@ -256,7 +256,7 @@ measured on a 3000-frame PAL SD workload (24 threads, Release, internal diagnost
 
 End-to-end with x264 (CRF18, PAL SD): ~274 fps, 5.5x realtime — the filter is not the bottleneck.
 
-### **The CNR3 internal cache
+### **The CNR3 internal cache**
 
 Because frame requests may arrive from vapoursynth out of order (and concurrently), CNR3 keeps
 an internal cache of recent *filtered* output frames. The cache has several simple mechanisms

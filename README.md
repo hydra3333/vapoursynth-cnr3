@@ -42,6 +42,7 @@ This project is distributed under the GNU GENERAL PUBLIC LICENSE Version 2 or la
 
 - VapourSynth R76+ with Python 3.14+ (portable versions work).
 - Microsoft Visual C++ Redistributable 2026+ (x64).
+- a PC with AVX2 instructions. Google: "AVX2 has been a mainstream CPU feature for about 13 years. Estimated 85% to 90% of modern PCs currently in use have AVX2 support."
 
 ## Usage
 

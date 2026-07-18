@@ -225,8 +225,7 @@ den.set_output()
 ```
 
 Each field stream gets its OWN CNR3 instance (the recursion must follow each field's own
-timeline); startup provenance lines therefore appear once per instance (`CNR3[1]`, `CNR3[2]`) —
-this is normal.
+timeline).
 
 ## Errors
 

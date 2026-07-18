@@ -27,10 +27,6 @@ echo copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\R
 copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" "D:\TEST\DLL_fmParallelRequests\"
 echo.
 
-echo copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*"  ??
-copy /y "E:\SOFTWARE-Win11\MULTIMEDIA\vapoursynth-cnr3\github\vs\cnr3\x64\Release\cnr3.*" ??
-echo.
-
 REM set "build_type=Debug"
 set "build_type=Release"
 set "top_root=D:\TEST"

@@ -1,7 +1,19 @@
-name: Build and Release Windows x64 DLL
+name: Build and Release Windows x64 DLL with a pypi Wheel
 
-# Triggers: manual run from the Actions tab, or creation of a GitHub Release.
-# On a Release trigger the zip is also attached to the Release itself.
+# CRITICAL NOTES:
+#   1. Release Tag MUST STRICTLY be of the form:   v1.01
+#      of this yml will fail.
+#
+#   2. Installable directly from github latest release via:
+#      "%py_exe%" -m pip install --disable-pip-version-check --no-cache-dir --upgrade --upgrade-strategy eager ^
+#           --no-warn-script-location --check-build-dependencies --verbose  --no-build-isolation ^
+#           "vapoursynth-cnr3 @ https://github.com/hydra3333/vapoursynth-cnr3/releases/latest/download/vapoursynth_cnr3-latest-py3-none-win_amd64.whl"
+#
+# Triggers: 
+#   1. Manual run from the Actions tab
+#   or
+#   2. Creation of a GitHub Release.
+#      On a Release trigger, the zip AND the pip-installable wheels are attached to the Release itself.
 on:
   workflow_dispatch:
   release:
@@ -25,6 +37,19 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      - name: Derive package version for a pypi wheel
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'release') {
+            # tag like v1.01 -> 1.01  (PEP 440 wants a numeric-ish version)
+            $ver = "${{ github.event.release.tag_name }}" -replace '^v',''
+          } else {
+            # manual dispatch: no release tag -> local dev version
+            $ver = "0.0.0+localbuild"
+          }
+          Write-Host "Package version: $ver"
+          "PKG_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Show toolchain versions
         shell: cmd
@@ -148,11 +173,97 @@ jobs:
           Compress-Archive -Path dist/* -DestinationPath $zip -Force
           "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Upload workflow artifact (always)
+      - name: Build pip-installable plugin wheel
+        shell: pwsh
+        run: |
+          # A VapourSynth plugin wheel needs no build backend: it is a structured
+          # zip that places the already-built DLL at
+          #   site-packages/vapoursynth/plugins/cnr3/cnr3.dll
+          # which is exactly where VapourSynth's recursive autoload scans.
+          # Layout mirrors the official vapoursynth-vszip wheel.
+          $ver = $env:PKG_VERSION
+          $root = "wheelroot"
+          if (Test-Path $root) { Remove-Item -Recurse -Force $root }
+          $pkgdir = "$root/vapoursynth/plugins/cnr3"
+          $info   = "$root/vapoursynth_cnr3-$ver.dist-info"
+          New-Item -ItemType Directory -Force $pkgdir | Out-Null
+          New-Item -ItemType Directory -Force $info   | Out-Null
+          Copy-Item build/cnr3.dll "$pkgdir/cnr3.dll"
+
+          # ---- METADATA ----
+          $metadata = @(
+            "Metadata-Version: 2.1"
+            "Name: vapoursynth-cnr3"
+            "Version: $ver"
+            "Summary: CNR3 - recursive temporal chroma stabiliser (VapourSynth API4 plugin)"
+            "Home-page: https://github.com/hydra3333/vapoursynth-cnr3"
+            "License: MIT"
+            "Requires-Python: >=3.12"
+            "Classifier: Environment :: Plugins"
+            "Classifier: Operating System :: Microsoft :: Windows"
+          ) -join "`n"
+          [IO.File]::WriteAllText((Join-Path $info "METADATA"), $metadata + "`n")
+
+          # ---- WHEEL (platform wheel: compiled DLL, Windows x64) ----
+          $wheelmeta = @(
+            "Wheel-Version: 1.0"
+            "Generator: cnr3-ci"
+            "Root-Is-Purelib: false"
+            "Tag: py3-none-win_amd64"
+          ) -join "`n"
+          [IO.File]::WriteAllText((Join-Path $info "WHEEL"), $wheelmeta + "`n")
+
+          # ---- RECORD (sha256 + size per file, per the wheel spec) ----
+          $sha = [Security.Cryptography.SHA256]::Create()
+          $recordLines = @()
+          foreach ($rel in @("vapoursynth/plugins/cnr3/cnr3.dll",
+                             "vapoursynth_cnr3-$ver.dist-info/METADATA",
+                             "vapoursynth_cnr3-$ver.dist-info/WHEEL")) {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path $root $rel))
+            $digest = $sha.ComputeHash($bytes)
+            $b64 = [Convert]::ToBase64String($digest).TrimEnd('=').Replace('+','-').Replace('/','_')
+            $recordLines += "$rel,sha256=$b64,$($bytes.Length)"
+          }
+          $recordLines += "vapoursynth_cnr3-$ver.dist-info/RECORD,,"
+          [IO.File]::WriteAllText((Join-Path $info "RECORD"), ($recordLines -join "`n") + "`n")
+
+          # ---- zip into a .whl (wheels are just zips; name encodes the tag) ----
+          $whl = "vapoursynth_cnr3-$ver-py3-none-win_amd64.whl"
+          if (Test-Path $whl) { Remove-Item $whl }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path $root), (Join-Path (Get-Location) $whl))
+          Write-Host "Built wheel: $whl"
+          "WHEEL_NAME=$whl" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          # Stable-named copy so a fixed 'releases/latest/download/...' URL always
+          # resolves to the newest wheel. pip reads the real version from the
+          # wheel METADATA (not the filename), so --upgrade still detects changes.
+          $stable = "vapoursynth_cnr3-latest-py3-none-win_amd64.whl"
+          Copy-Item $whl $stable -Force
+          Write-Host "Stable-named copy: $stable"
+          "WHEEL_STABLE=$stable" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Verify wheel structure
+        shell: pwsh
+        run: |
+          $whl = $env:WHEEL_NAME
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $whl))
+          Write-Host "=== wheel contents ==="
+          $zip.Entries | ForEach-Object { Write-Host ("  {0,8}  {1}" -f $_.Length, $_.FullName) }
+          $hasDll = $zip.Entries | Where-Object FullName -eq 'vapoursynth/plugins/cnr3/cnr3.dll'
+          $zip.Dispose()
+          if (-not $hasDll) { Write-Error "wheel missing plugin DLL at expected path"; exit 1 }
+          Write-Host "Wheel structure OK."
+
+      - name: Upload workflow artifacts (always)
         uses: actions/upload-artifact@v4
         with:
           name: vapoursynth-cnr3-windows-x64
-          path: vapoursynth-cnr3-windows-x64.zip
+          path: |
+            vapoursynth-cnr3-windows-x64.zip
+            vapoursynth_cnr3-*-py3-none-win_amd64.whl
+            vapoursynth_cnr3-latest-py3-none-win_amd64.whl
 
       # Do not upload symbols (for now)
       #- name: Upload debug symbols (separate artifact)
@@ -161,10 +272,11 @@ jobs:
       #    name: cnr3-pdb
       #    path: build/cnr3.pdb
 
-      - name: Attach zip to the Release (release trigger only)
+      - name: Attach assets to the Release (release trigger only)
         if: github.event_name == 'release'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" "$env:ZIP_NAME" --clobber
+          gh release upload "${{ github.event.release.tag_name }}" `
+             "$env:ZIP_NAME" "$env:WHEEL_NAME" "$env:WHEEL_STABLE" --clobber

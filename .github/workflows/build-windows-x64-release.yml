@@ -1,19 +1,8 @@
-name: Build and Release Windows x64 DLL with a pypi Wheel
+name: Build and Release Windows x64 DLL
 
-# CRITICAL NOTES:
-#   1. Release Tag MUST STRICTLY be of the form:   v1.01
-#      of this yml will fail.
-#
-#   2. Installable directly from github latest release via:
-#      "%py_exe%" -m pip install --disable-pip-version-check --no-cache-dir --upgrade --upgrade-strategy eager ^
-#           --no-warn-script-location --check-build-dependencies --verbose  --no-build-isolation ^
-#           "vapoursynth-cnr3 @ https://github.com/hydra3333/vapoursynth-cnr3/releases/latest/download/vapoursynth_cnr3-latest-py3-none-win_amd64.whl"
-#
-# Triggers: 
-#   1. Manual run from the Actions tab
-#   or
-#   2. Creation of a GitHub Release.
-#      On a Release trigger, the zip AND the pip-installable wheels are attached to the Release itself.
+# Triggers: manual run from the Actions tab, or creation of a GitHub Release.
+# On a Release trigger the zip AND the pip-installable wheel are attached to
+# the Release itself.
 on:
   workflow_dispatch:
   release:
@@ -38,7 +27,7 @@ jobs:
         with:
           arch: x64
 
-      - name: Derive package version for a pypi wheel
+      - name: Derive package version
         shell: pwsh
         run: |
           if ($env:GITHUB_EVENT_NAME -eq 'release') {
@@ -234,14 +223,11 @@ jobs:
           [IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path $root), (Join-Path (Get-Location) $whl))
           Write-Host "Built wheel: $whl"
           "WHEEL_NAME=$whl" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-          # Stable-named copy so a fixed 'releases/latest/download/...' URL always
-          # resolves to the newest wheel. pip reads the real version from the
-          # wheel METADATA (not the filename), so --upgrade still detects changes.
-          $stable = "vapoursynth_cnr3-latest-py3-none-win_amd64.whl"
-          Copy-Item $whl $stable -Force
-          Write-Host "Stable-named copy: $stable"
-          "WHEEL_STABLE=$stable" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # NOTE: no stable-named 'latest' wheel copy. pip validates the wheel
+          # FILENAME as PEP 440 ('latest' is not a version) and also rejects
+          # filename/METADATA version mismatches, so a fixed-name wheel cannot
+          # work. Always-latest installs are done by resolving the tag via the
+          # GitHub API (releases/latest) and constructing the versioned URL.
 
       - name: Verify wheel structure
         shell: pwsh
@@ -263,7 +249,6 @@ jobs:
           path: |
             vapoursynth-cnr3-windows-x64.zip
             vapoursynth_cnr3-*-py3-none-win_amd64.whl
-            vapoursynth_cnr3-latest-py3-none-win_amd64.whl
 
       # Do not upload symbols (for now)
       #- name: Upload debug symbols (separate artifact)
@@ -279,4 +264,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" `
-             "$env:ZIP_NAME" "$env:WHEEL_NAME" "$env:WHEEL_STABLE" --clobber
+             "$env:ZIP_NAME" "$env:WHEEL_NAME" --clobber

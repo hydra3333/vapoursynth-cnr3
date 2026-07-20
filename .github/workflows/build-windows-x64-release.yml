@@ -179,6 +179,13 @@ jobs:
           New-Item -ItemType Directory -Force $info   | Out-Null
           Copy-Item build/cnr3.dll "$pkgdir/cnr3.dll"
 
+          # Ship docs + provenance inside the wheel too (not just the zip).
+          # .dist-info is the spec's home for package metadata/extra files.
+          Copy-Item README.md "$info/CNR3_README.md"
+          # Reuse the provenance + checksum files assembled for the zip.
+          Copy-Item dist/CNR3_BUILD_INFO.txt "$info/CNR3_BUILD_INFO.txt"
+          Copy-Item dist/SHA256SUMS.txt      "$info/SHA256SUMS.txt"
+
           # ---- METADATA ----
           $metadata = @(
             "Metadata-Version: 2.1"
@@ -206,6 +213,9 @@ jobs:
           $sha = [Security.Cryptography.SHA256]::Create()
           $recordLines = @()
           foreach ($rel in @("vapoursynth/plugins/cnr3/cnr3.dll",
+                             "vapoursynth_cnr3-$ver.dist-info/CNR3_README.md",
+                             "vapoursynth_cnr3-$ver.dist-info/CNR3_BUILD_INFO.txt",
+                             "vapoursynth_cnr3-$ver.dist-info/SHA256SUMS.txt",
                              "vapoursynth_cnr3-$ver.dist-info/METADATA",
                              "vapoursynth_cnr3-$ver.dist-info/WHEEL")) {
             $bytes = [IO.File]::ReadAllBytes((Join-Path $root $rel))

@@ -87,6 +87,22 @@ which uses a different algorithm to CNR2, however is said to yield a much better
 - Microsoft Visual C++ Redistributable 2026+ (x64).
 - a PC with AVX2 instructions. Google: "AVX2 has been a mainstream CPU feature for about 13 years. Estimated 85% to 90% of modern PCs currently in use have AVX2 support."
 
+## Installation
+
+To (re)install the latest release of CNR3, pop this into a bat (if using portable vapoursynth, it has to go into the portable vapoursynth root folder)
+
+```
+@echo on
+for /f "delims=" %%v in ('powershell -NoProfile -c "(Invoke-RestMethod https://api.github.com/repos/hydra3333/vapoursynth-cnr3/releases/latest).tag_name -replace '^v',''"') do set "CNR3_VER=%%v"
+set "CNR3_WHEEL_URL=https://github.com/hydra3333/vapoursynth-cnr3/releases/download/v%CNR3_VER%/vapoursynth_cnr3-%CNR3_VER%-py3-none-win_amd64.whl"
+set CNR3_
+python -m pip uninstall vapoursynth-cnr3 -y
+python -m pip install --disable-pip-version-check --no-cache-dir --upgrade --check-build-dependencies --upgrade-strategy eager --no-warn-script-location --verbose  --no-build-isolation "vapoursynth-cnr3 @ %CNR3_WHEEL_URL%"
+pause
+goto :eof
+```
+
+and run it.
 
 ## Usage
 

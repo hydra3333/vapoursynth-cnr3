@@ -182,8 +182,10 @@ jobs:
           # Ship docs + provenance inside the wheel too (not just the zip).
           # .dist-info is the spec's home for package metadata/extra files.
           Copy-Item README.md "$info/CNR3_README.md"
+          Copy-Item README.md "$pkgdir/CNR3_README.md"
           # Reuse the provenance + checksum files assembled for the zip.
           Copy-Item dist/CNR3_BUILD_INFO.txt "$info/CNR3_BUILD_INFO.txt"
+          Copy-Item dist/CNR3_BUILD_INFO.txt "$pkgdir/CNR3_BUILD_INFO.txt"
           Copy-Item dist/SHA256SUMS.txt      "$info/SHA256SUMS.txt"
 
           # ---- METADATA ----
